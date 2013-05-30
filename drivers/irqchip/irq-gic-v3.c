@@ -51,8 +51,8 @@ struct gic_chip_data {
 
 static struct gic_chip_data gic_data __read_mostly;
 
-#define gic_data_rdist()		(this_cpu_ptr(gic_data.rdist.rdist))
-#define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
+#define gic_data_rdist()		(this_cpu_ptr(gic_data.rdist))
+#define gic_data_rdist_rd_base()	(*gic_data_rdist())
 #define gic_data_rdist_sgi_base()	(gic_data_rdist_rd_base() + SZ_64K)
 
 #define DEFAULT_PMR_VALUE	0xf0
