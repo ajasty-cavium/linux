@@ -375,7 +375,7 @@ static bool handle_mmio_misc(struct kvm_vcpu *vcpu,
 
 	case 4:			/* GICD_TYPER */
 		reg  = (atomic_read(&vcpu->kvm->online_vcpus) - 1) << 5;
-		reg |= (VGIC_NR_IRQS >> 5) - 1;
+		reg |= (vcpu->kvm->arch.vgic.nr_irqs >> 5) - 1;
 		vgic_reg_access(mmio, &reg, word_offset,
 				ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 		break;
@@ -1154,13 +1154,14 @@ static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu)
 static bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	struct vgic_lr vlr;
 	int lr;
 
 	/* Sanitize the input... */
 	BUG_ON(sgi_source_id & ~7);
 	BUG_ON(sgi_source_id && irq >= VGIC_NR_SGIS);
-	BUG_ON(irq >= VGIC_NR_IRQS);
+	BUG_ON(irq >= dist->nr_irqs);
 
 	kvm_debug("Queue IRQ%d\n", irq);
 
@@ -1368,7 +1369,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 		vlr = vgic_get_lr(vcpu, lr);
 
-		BUG_ON(vlr.irq >= VGIC_NR_IRQS);
+		BUG_ON(vlr.irq >= dist->nr_irqs);
 		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
 	}
 
@@ -1582,7 +1583,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	if (vcpu->vcpu_id >= dist->nr_cpus)
 		return -EBUSY;
 
-	for (i = 0; i < VGIC_NR_IRQS; i++) {
+	for (i = 0; i < dist->nr_irqs; i++) {
 		if (i < VGIC_NR_PPIS)
 			vgic_bitmap_set_irq_val(&dist->irq_enabled,
 						vcpu->vcpu_id, i, 1);
@@ -1758,7 +1759,7 @@ int kvm_vgic_init(struct kvm *kvm)
 		goto out;
 	}
 
-	for (i = VGIC_NR_PRIVATE_IRQS; i < VGIC_NR_IRQS; i += 4)
+	for (i = VGIC_NR_PRIVATE_IRQS; i < kvm->arch.vgic.nr_irqs; i += 4)
 		vgic_set_target_reg(kvm, 0, i);
 
 out:
@@ -2186,7 +2187,7 @@ static void vgic_destroy(struct kvm_device *dev)
 
 static int vgic_create(struct kvm_device *dev, u32 type)
 {
-	return kvm_vgic_create(dev->kvm, KVM_MAX_CPUS, VGIC_NR_IRQS);
+	return kvm_vgic_create(dev->kvm, KVM_MAX_VCPUS, VGIC_NR_IRQS_LEGACY);
 }
 
 struct kvm_device_ops kvm_arm_vgic_v2_ops = {
