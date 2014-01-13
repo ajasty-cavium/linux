@@ -5,6 +5,9 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <linux/of_address.h>
+#include <linux/of_pci.h>
+#include <linux/slab.h>
 
 #include "pci.h"
 
@@ -83,3 +86,18 @@ void pcibios_bus_to_resource(struct pci_bus *bus, struct resource *res,
 	res->end = region->end + offset;
 }
 EXPORT_SYMBOL(pcibios_bus_to_resource);
+
+/**
+ * Simple version of the platform specific code for filtering the list
+ * of resources obtained from the ranges declaration in DT.
+ *
+ * Platforms can override this function in order to impose stronger
+ * constraints onto the list of resources that a host bridge can use.
+ * The filtered list will then be used to create a root bus and associate
+ * it with the host bridge.
+ *
+ */
+int __weak pcibios_fixup_bridge_ranges(struct list_head *resources)
+{
+	return 0;
+}

@@ -15,6 +15,9 @@ struct device_node *of_pci_find_child_device(struct device_node *parent,
 int of_pci_get_devfn(struct device_node *np);
 int of_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u8 pin);
 int of_pci_parse_bus_range(struct device_node *node, struct resource *res);
+struct pci_host_bridge *of_create_pci_host_bridge(struct device *parent,
+					struct pci_ops *ops, void *host_data);
+
 #else
 static inline int of_irq_parse_pci(const struct pci_dev *pdev, struct of_phandle_args *out_irq)
 {
@@ -42,6 +45,13 @@ static inline int
 of_pci_parse_bus_range(struct device_node *node, struct resource *res)
 {
 	return -EINVAL;
+}
+
+static inline struct pci_host_bridge *
+of_create_pci_host_bridge(struct device *parent, struct pci_ops *ops,
+			void *host_data)
+{
+	return NULL;
 }
 #endif
 
