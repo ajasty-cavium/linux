@@ -81,6 +81,13 @@ struct vgic_lr {
 	u8	state;
 };
 
+struct vgic_vmcr {
+	u32	ctlr;
+	u32	abpr;
+	u32	bpr;
+	u32	pmr;
+};
+
 struct vgic_ops {
 	struct vgic_lr	(*get_lr)(const struct kvm_vcpu *, int);
 	void	(*set_lr)(struct kvm_vcpu *, int, struct vgic_lr);
@@ -89,6 +96,8 @@ struct vgic_ops {
 	u32	(*get_interrupt_status)(const struct kvm_vcpu *vcpu);
 	void	(*set_underflow)(struct kvm_vcpu *vcpu);
 	void	(*clear_underflow)(struct kvm_vcpu *vcpu);
+	void	(*get_vmcr)(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
+	void	(*set_vmcr)(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
 };
 
 struct vgic_dist {
