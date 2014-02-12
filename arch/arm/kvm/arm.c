@@ -307,15 +307,8 @@ int kvm_cpu_has_pending_timer(struct kvm_vcpu *vcpu)
 
 int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 {
-	int ret;
-
 	/* Force users to call KVM_ARM_VCPU_INIT */
 	vcpu->arch.target = -1;
-
-	/* Set up VGIC */
-	ret = kvm_vgic_vcpu_init(vcpu);
-	if (ret)
-		return ret;
 
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);
@@ -810,7 +803,7 @@ long kvm_arch_vm_ioctl(struct file *filp,
 	switch (ioctl) {
 	case KVM_CREATE_IRQCHIP: {
 		if (vgic_present)
-			return kvm_vgic_create(kvm, KVM_MAX_VCPUS, VGIC_NR_IRQS_LEGACY);
+			return kvm_vgic_create(kvm);
 		else
 			return -ENXIO;
 	}
