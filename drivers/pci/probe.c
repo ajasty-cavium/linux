@@ -1734,9 +1734,6 @@ struct pci_bus *pci_create_root_bus_in_domain(struct device *parent,
 	bridge->dev.parent = parent;
 	bridge->dev.release = pci_release_host_bridge_dev;
 	bridge->domain_nr = domain;
-	error = pcibios_root_bridge_prepare(bridge);
-	if (error)
-		goto err_out;
 
 	b = pci_alloc_bus();
 	if (!b) {
@@ -1757,6 +1754,10 @@ struct pci_bus *pci_create_root_bus_in_domain(struct device *parent,
 
 	bridge->bus = b;
 	dev_set_name(&bridge->dev, "pci%04x:%02x", bridge->domain_nr, bus);
+	error = pcibios_root_bridge_prepare(bridge);
+	if (error)
+		goto err_out;
+
 	error = device_register(&bridge->dev);
 	if (error) {
 		put_device(&bridge->dev);
