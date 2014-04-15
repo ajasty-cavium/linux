@@ -336,7 +336,7 @@
 		#address-cells = <0>;
 		interrupt-controller;
 		reg = <0x8010 0x00000000 0x0 0x10000>,   /* GICD */
-		      <0x8010 0x80000000 0x0 0x100000>; /* GICR */
+		      <0x8010 0x80000000 0x0 0x200000>; /* GICR */
 		interrupts = <1 9 0xf04>;
 	};
 
