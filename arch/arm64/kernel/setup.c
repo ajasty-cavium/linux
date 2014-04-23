@@ -402,10 +402,12 @@ void __init setup_arch(char **cmdline_p)
 	efi_idmap_init();
 
 	cpu_logical_map(0) = read_cpuid_mpidr() & MPIDR_HWID_BITMASK;
-	if (acpi_disabled)
+	if (acpi_disabled) {
 		unflatten_device_tree();
-
-	psci_init();
+		psci_dt_init();
+	} else {
+		psci_acpi_init();
+	}
 
 	cpu_read_bootcpu_ops();
 #ifdef CONFIG_SMP
