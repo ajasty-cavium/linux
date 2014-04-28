@@ -116,14 +116,22 @@ static void vnic_mbx_send_ack (struct vnic_pf *pf, int vf)
  */
 static void vnic_handle_mbx_intr (struct vnic_pf *pf, int vf)
 {
+	int i;
 	struct vnic_mbx *mbx;
+	uint64_t *mbx_data;
 	uint64_t reg_addr;
 	uint64_t mbx_addr;
 
-	mbx_addr = pf->reg_base + NIC_PF_VF_0_127_MAILBOX_0_7;
+	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
 	mbx_addr += (vf << VNIC_VF_NUM_SHIFT);
 
-	mbx = (struct vnic_mbx *) mbx_addr;
+	mbx_data = kzalloc(sizeof(struct vnic_mbx), GFP_KERNEL);
+	mbx = (struct vnic_mbx *) mbx_data;
+
+	for (i = 0; i < VNIC_PF_VF_MAILBOX_SIZE; i++) {
+		*mbx_data = vnic_pf_reg_read(pf, mbx_addr + (i * VNIC_PF_VF_MAILBOX_SIZE));
+		mbx_data++;
+	}
 
 	switch (mbx->msg & 0xFF) {
 	case VNIC_PF_VF_MSG_READY:
@@ -156,6 +164,7 @@ static void vnic_handle_mbx_intr (struct vnic_pf *pf, int vf)
 	}
 	
 	vnic_mbx_send_ack(pf, vf);
+	kfree(mbx_data);
 }
 
 static void vnic_channel_cfg (struct vnic_pf *pf)
@@ -179,11 +188,18 @@ static void vnic_channel_cfg (struct vnic_pf *pf)
  		 * BGX1-LMAC0-CHAN0 - VNIC CHAN128
  		 */
 		bgx = vnic / 4; 
-		chan = vnic * 16 * (bgx + 1);
-		cpi_base = vnic * (2048 / 256) * (bgx + 1);
+		if (vnic < 4) {
+		        chan = vnic * 16;
+		        cpi_base = vnic * (2048 / 256);
+		        rssi_base = vnic * (4096 / 256) * (bgx + 1);
+		} else {
+			chan = (vnic - 4) * 16 + 128;
+		        cpi_base = (vnic - 4) * (2048 / 256) + 1024;
+		        rssi_base = (vnic - 4) * (4096 / 256) + 2048;
+		}
+
 		/* CPI ALG none */
 		vnic_pf_reg_write(pf, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3), cpi_base << 48);
-		rssi_base = vnic * (4096 / 256) * (bgx + 1);
 		vnic_pf_reg_write(pf, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3), (vnic << 24) | rssi_base);
 		/* RQ's QS & RQ idx within QS */
 		vnic_pf_reg_write(pf, NIC_PF_RSSI_0_4097_RQ | (rssi_base << 3), (vnic << 3) | rq_idx);
@@ -197,6 +213,8 @@ static void vnic_channel_cfg (struct vnic_pf *pf)
 		 * VNIC2-SQ0 -> TL4(16) -> TL4A(4) -> TL3[4] -> BGX0/LMAC2/Chan0
 		 * VNIC3-SQ0 -> TL4(32) -> TL4A(6) -> TL3[6] -> BGX0/LMAC3/Chan0
 		 */
+		if (vnic >= 4)
+			goto vnic4;
 		tl4 = vnic * 8;
 		tl3 = tl4 / 4;
 		vnic_pf_reg_write(pf, NIC_PF_QSET_0_127_SQ_0_7_CFG2 | 
@@ -207,6 +225,7 @@ static void vnic_channel_cfg (struct vnic_pf *pf)
 		vnic_pf_reg_write(pf, NIC_PF_TL3_0_255_CHAN | 
 				(tl3 << 3), (bgx << 7) | (vnic << 4) | (0 << 0));
 
+vnic4:
 		if (!vnic >= 4)
 			continue;
 		/* For 4 - 7 VNICs
@@ -225,8 +244,6 @@ static void vnic_channel_cfg (struct vnic_pf *pf)
 		vnic_pf_reg_write(pf, NIC_PF_TL3_0_255_CHAN | 
 			(tl3 << 3), (bgx << 7) | ((vnic - 4) << 4) | (0 << 0));
 	}
-
-	
 }
 
 static void vnic_init_hw (struct vnic_pf *pf)
