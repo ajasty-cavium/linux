@@ -164,6 +164,10 @@ config PCI
 config ARCH_SUPPORTS_MSI
         bool
 
+config PCI_DOMAINS
+	bool
+	depends on PCI
+
 endmenu
 
 menu "Kernel Features"
