@@ -108,7 +108,8 @@ static void bgx_init_hw (struct bgx *bgx)
 	
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
-		bgx_add_dmac_addr(dmac_bcast, lmac);
+		bgx_add_dmac_addr(dmac_bcast, lmac + 
+					(bgx->bgx_id * MAX_LMAC_PER_BGX));
 	}
 }
 

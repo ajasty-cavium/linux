@@ -118,21 +118,33 @@ void vnic_check_pf_ready (struct vnic_vf *vf)
 
 static void  vnic_handle_mbx_intr (struct vnic *vnic) 
 {
-	struct vnic_mbx  *mbx;
+	int i;
 	struct vnic_vf *vf = vnic->vf;
+	struct vnic_mbx *mbx;
+	uint64_t *mbx_data;
+	uint64_t mbx_addr;
 
-	mbx = (struct vnic_mbx *) (vf->reg_base + NIC_VF_0_127_PF_MAILBOX_0_7);
+	mbx_addr = NIC_VF_0_127_PF_MAILBOX_0_7;
+
+	mbx_data = kzalloc(sizeof(struct vnic_mbx), GFP_KERNEL);
+	mbx = (struct vnic_mbx *) mbx_data;
+
+	for (i = 0; i < VNIC_PF_VF_MAILBOX_SIZE; i++) {
+		*mbx_data = vnic_vf_reg_read(vf, mbx_addr + (i * VNIC_PF_VF_MAILBOX_SIZE));
+		mbx_data++;
+	}
 
 	switch (mbx->msg & 0xFF) {
 	case VNIC_PF_VF_MSG_ACK:
 		pf_ready_to_rcv_msg = true;
 		break;
 	default:
-		dev_err(&vf->pdev->dev, "Invalid message from VF %d, msg 0x%llx\n", 
-							vf->vnic_id, mbx->msg);
+		dev_err(&vf->pdev->dev, "Invalid message from PF, msg 0x%llx\n", 
+								mbx->msg);
 		break;
 	}
 	vnic_clear_intr (vnic, VNIC_INTR_MBOX, 0);
+	kfree(mbx_data);
 }
 
 static void vnic_hw_set_mac_addr (struct vnic *vnic, struct net_device *netdev)
