@@ -37,6 +37,9 @@ CHECKFLAGS	+= -D__aarch64__
 # Default value
 head-y		:= arch/arm64/kernel/head.o
 
+# PCIe support
+drivers-$(CONFIG_PCI)       += arch/arm64/pci/
+
 # The byte offset of the kernel image in RAM from the start of RAM.
 TEXT_OFFSET := 0x00080000
 
