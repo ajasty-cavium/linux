@@ -1,0 +1,30 @@
+#
+# Cavium Virtual NIC device configuration
+#
+
+config NET_VENDOR_CAVIUM
+        tristate "Cavium ethernet drivers"
+	depends on PCI
+        ---help---
+          If you have Cavium CN88XX boards, say Y.
+
+config CN88XX_VNIC_PF
+        tristate "CN88XX VNIC Physical function driver"
+	default y
+	depends on PCI
+	select CN88XX_BGX 
+        ---help---
+          This driver supports Thunder's VNIC physical function.
+
+config CN88XX_VNIC_VF
+        tristate "CN88XX VNIC Virtual function driver"
+	depends on PCI
+        ---help---
+          This driver supports Thunder's VNIC physical function
+
+config	CN88XX_BGX
+        tristate "CN88XX Ethernet MAC interface driver(BGX)"
+	depends on PCI
+        ---help---
+          This driver supports programming and controlling of MAC
+	  interface from VNIC PF driver.
