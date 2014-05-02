@@ -55,7 +55,7 @@ void pcie_8xxx_teardown_msi_irq (struct msi_desc *msi)
 	spin_lock(&msix_free_irq_bitmask_lock);
 	index = irq / 64;
 	irq = irq % 64;
-	msix_free_irq_bitmask[index] &= (~(1 << irq));	
+	msix_free_irq_bitmask[index] &= (~(1ULL << irq));	
 	spin_unlock(&msix_free_irq_bitmask_lock);
 }
 
