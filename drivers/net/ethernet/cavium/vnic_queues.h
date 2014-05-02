@@ -129,6 +129,7 @@ struct vnic_queue_set {
 };
 
 int vnic_vf_config_data_transfer(struct vnic *vnic, struct vnic_vf *vf, bool enable);
+void vnic_qset_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool enable);
 int vnic_get_sq_desc (struct vnic_queue_set *qs, int qnum, void **desc); 
 void vnic_put_sq_desc (struct vnic_queue_set *qs, int sq_idx, int desc_cnt); 
 int vnic_sq_append_skb (struct vnic *vnic, struct sk_buff *skb);
@@ -141,4 +142,5 @@ void vnic_refill_rbdr (unsigned long data);
 void vnic_enable_intr (struct vnic *vnic, int int_type, int q_idx);
 void vnic_disable_intr (struct vnic *vnic, int int_type, int q_idx);
 void vnic_clear_intr (struct vnic *vnic, int int_type, int q_idx);
+int vnic_is_intr_enabled (struct vnic *vnic, int int_type, int q_idx);
 #endif /* VNIC_QUEUES_H */

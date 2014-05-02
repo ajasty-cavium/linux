@@ -214,7 +214,7 @@ next_rbdr:
 	/* Re-enable RBDR interrupts */
 	for (rbdr_idx = 0; rbdr_idx < qs->rbdr_cnt; rbdr_idx++) 
 		vnic_enable_intr (vnic, VNIC_INTR_RBDR, rbdr_idx);
-} 
+}
 
 int vnic_alloc_rcv_queue (struct vnic_rcv_queue *rq)
 {
@@ -329,6 +329,8 @@ void vnic_cmp_queue_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool 
 			vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_CFG, i, 0);
 			continue;	
 		}
+		/* Reset completion queue */
+		vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_CFG, i, (1ULL << 41));
 
 		/* Enable Completion queue */
 		vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_CFG, i,
@@ -365,6 +367,9 @@ void vnic_snd_queue_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool 
 			vnic_queue_reg_write(vf, NIC_QSET_0_127_SQ_0_7_CFG, i, 0);
 			continue;	
 		}
+
+		/* Reset send queue */
+		vnic_queue_reg_write(vf, NIC_QSET_0_127_SQ_0_7_CFG, i, (1ULL << 17));
 
 		sq->cq_qs = qs->vnic_id;
 		sq->cq_idx = DEFAULT_CMP_QUEUE_CNT - 1;
@@ -407,6 +412,9 @@ void vnic_rbdr_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool enabl
 			vnic_queue_reg_write(vf, NIC_QSET_0_127_RBDR_0_1_CFG, i, 0);
 			continue;	
 		}
+
+		/* Reset RBDR */
+		vnic_queue_reg_write(vf, NIC_QSET_0_127_RBDR_0_1_CFG, i, (1ULL << 43));
 
 		/* Enable RBDR  & set queue size */
 		/* Buffer size should be in multiples of 128 bytes */
@@ -543,19 +551,14 @@ int vnic_vf_config_data_transfer(struct vnic *vnic, struct vnic_vf *vf, bool ena
 		vnic_rcv_queue_config(vf, qs, enable);
 		vnic_snd_queue_config(vf, qs, enable);
 
-		vnic_qset_config(vf, qs, enable);
 	} else {
-		vnic_free_vf_resources(vnic, vf); 
-
 		qs = vf->qs;
 		vnic_cmp_queue_config(vf, qs, disable);
 		vnic_rbdr_config(vf, qs, disable);
 		vnic_rcv_queue_config(vf, qs, disable);
 		vnic_snd_queue_config(vf, qs, disable);
-
-		vnic_qset_config(vf, qs, disable);
-		/* Free Qset */
-		kfree(qs);	
+		
+		vnic_free_vf_resources(vnic, vf); 
 	}
 
 	return 0;
@@ -963,6 +966,44 @@ void vnic_clear_intr (struct vnic *vnic, int int_type, int q_idx)
 	}
 
 	vnic_qset_reg_write(vnic->vf, NIC_VF_0_127_INT, reg_val);
+}
+
+/*
+ * Check if interrupt is enabled
+ */
+int vnic_is_intr_enabled (struct vnic *vnic, int int_type, int q_idx)
+{
+	uint64_t reg_val;
+	uint64_t mask = 0xff;
+		
+	reg_val = vnic_qset_reg_read(vnic->vf, NIC_VF_0_127_ENA_W1S);
+	
+	switch (int_type) {
+	case VNIC_INTR_TCP_TIMER:
+		mask = (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
+	break;
+	case VNIC_INTR_PKT_DROP:
+		mask = (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
+	break;
+	case VNIC_INTR_RBDR:
+		mask = ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	break;
+	case VNIC_INTR_SQ:
+		mask = ((1ULL << q_idx) << VNIC_INTR_SQ_SHIFT);
+	break;
+	case VNIC_INTR_CQ:
+		mask = ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
+	break;
+	case VNIC_INTR_MBOX:
+		mask = (1ULL << VNIC_INTR_MBOX_SHIFT);
+	break;
+	default:
+		dev_err(&vnic->pdev->dev, "Failed to check interrupt enable: \
+						unknown interrupt type\n");	
+	break;
+	}
+
+	return (reg_val & mask);
 }
 
 void vnic_write_msix_vector (uint64_t addr, uint64_t data, uint64_t mask, 

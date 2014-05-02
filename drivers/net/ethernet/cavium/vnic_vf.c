@@ -61,6 +61,7 @@ static void vnic_dump_packet (struct sk_buff *skb)
  * VF -> PF mailbox communication 
  */
 static bool pf_ready_to_rcv_msg = false;
+static bool vf_pf_msg_delivered = false;
 
 struct vnic_mbx *vnic_get_mbx (void)
 {
@@ -79,11 +80,44 @@ static void vnic_disable_mbx_intr (struct vnic *vnic)
 
 void vnic_send_msg_to_pf (struct vnic_vf *vf, struct vnic_mbx *mbx)
 {
-	int i, timeout = 5000, sleep = 20;
+	int i, timeout = 5000, sleep = 10;
 	uint64_t *msg;
 	uint64_t mbx_addr;
 
+	vf_pf_msg_delivered = false;
+	mbx->mbx_trigger_intr = 1;
+	msg = (uint64_t *)mbx;
+	mbx_addr = vf->reg_base + NIC_VF_0_127_PF_MAILBOX_0_7;
+	for (i = 0; i < VNIC_PF_VF_MAILBOX_SIZE; i++) {
+		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
+	}
+	
 	/* Wait for previous message to be acked, timeout 5sec */
+	while (!vf_pf_msg_delivered) {
+		msleep(sleep);
+		if (vf_pf_msg_delivered)
+			break;
+		else 
+			timeout -= sleep;
+		if (!timeout) {
+			dev_err(&vf->pdev->dev, 
+				"PF didn't ack mailbox msg from VF%d\n",
+								vf->vnic_id);
+			return;
+		}
+	}
+}
+
+static int vnic_check_pf_ready (struct vnic_vf *vf)
+{
+	int timeout = 5000, sleep = 20;
+	uint64_t mbx_addr = NIC_VF_0_127_PF_MAILBOX_0_7;
+
+	vnic_vf_reg_write(vf, mbx_addr, VNIC_PF_VF_MSG_READY);
+
+	mbx_addr += (VNIC_PF_VF_MAILBOX_SIZE - 1) * 8;
+	vnic_vf_reg_write(vf, mbx_addr, 1ULL);
+
 	while (!pf_ready_to_rcv_msg) {
 		msleep(sleep);
 		if (pf_ready_to_rcv_msg)
@@ -91,29 +125,13 @@ void vnic_send_msg_to_pf (struct vnic_vf *vf, struct vnic_mbx *mbx)
 		else 
 			timeout -= sleep;
 		if (!timeout) {
-			dev_err(&vf->pdev->dev, "PF not accepting mailbox msg from VF%d, \
-					previous msg is not delivered\n", vf->vnic_id);
-			return;
+			dev_err(&vf->pdev->dev, 
+				"PF didn't respond to mailbox msg from VF%d\n"
+								,vf->vnic_id);
+			return 0;
 		}
 	}
-
-	pf_ready_to_rcv_msg = false;
-	mbx->mbx_trigger_intr = 1;
-	msg = (uint64_t *)mbx;
-	mbx_addr = vf->reg_base + NIC_VF_0_127_PF_MAILBOX_0_7;
-	for (i = 0; i < VNIC_PF_VF_MAILBOX_SIZE; i++) {
-		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
-	}
-}
-
-void vnic_check_pf_ready (struct vnic_vf *vf)
-{
-	uint64_t mbx_addr = NIC_VF_0_127_PF_MAILBOX_0_7;
-
-	vnic_vf_reg_write(vf, mbx_addr, VNIC_PF_VF_MSG_READY);
-
-	mbx_addr += (VNIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	vnic_vf_reg_write(vf, mbx_addr, 1ULL);
+	return 1;
 }
 
 static void  vnic_handle_mbx_intr (struct vnic *vnic) 
@@ -136,6 +154,9 @@ static void  vnic_handle_mbx_intr (struct vnic *vnic)
 
 	switch (mbx->msg & 0xFF) {
 	case VNIC_PF_VF_MSG_ACK:
+		vf_pf_msg_delivered = true;
+		break;
+	case VNIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
 		break;
 	default:
@@ -144,7 +165,7 @@ static void  vnic_handle_mbx_intr (struct vnic *vnic)
 		break;
 	}
 	vnic_clear_intr (vnic, VNIC_INTR_MBOX, 0);
-	kfree(mbx_data);
+	kfree(mbx);
 }
 
 static void vnic_hw_set_mac_addr (struct vnic *vnic, struct net_device *netdev)
@@ -182,6 +203,8 @@ static int vnic_init_resources(struct vnic *vnic)
 			"Failed to allocate/configure VF's QSet resources, err %d\n", err);
 		return err;
 	}
+	/* Enable Qset */	
+	vnic_qset_config(vf, vf->qs, true);
 	
 	return 0;
 }
@@ -309,6 +332,8 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 	/* Get no of valid CQ entries to process */
 	cqe_count = vnic_queue_reg_read(vf, NIC_QSET_0_127_CQ_0_7_STATUS, cq_qnum);
 	cqe_count &= 0xFFFF;
+	if (!cqe_count)
+		return 0;
 
 	/* Get head of the valid CQ entries */
 	cqe_head = vnic_qset_reg_read(vf, NIC_QSET_0_127_CQ_0_7_HEAD) >> 9;
@@ -319,6 +344,10 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		/* Get the CQ descriptor */
 		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base + 
 				((cqe_head + processed_cqe) * CMP_QUEUE_DESC_SIZE));
+		if (napi && (work_done >= budget) && 
+			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
+			break;
+		} 
 		//pr_err("cq_desc->cqe_type %d\n", cq_desc->cqe_type);
 		switch (cq_desc->cqe_type) {
 		case CQE_TYPE_RX:
@@ -330,10 +359,9 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		break;
 		}
 		processed_cqe++;
-		if (napi && (work_done >= budget)) {
-			break;
-		} 
 	}
+	//pr_err("%s processed_cqe %d work_done %d budget %d\n", 
+	//		__FUNCTION__, processed_cqe, work_done, budget);
 	/* Dequeue CQE */
 	vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_DOOR,  
 					cq_qnum, processed_cqe);
@@ -389,6 +417,8 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 		for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 			if (!(cq_intr & (1 << qidx)))
 				continue;
+			if (!vnic_is_intr_enabled(vnic, VNIC_INTR_CQ, qidx))
+				continue;
 			vnic_disable_intr (vnic, VNIC_INTR_CQ, qidx);
 			cq_poll = vnic->vf->napi[qidx];
 			/* Schedule NAPI */
@@ -412,7 +442,9 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 	}
 		
 	/* Clear interrupts */
-	vnic_qset_reg_write(vnic->vf, NIC_VF_0_127_INT, intr);
+	vnic_qset_reg_write(vnic->vf, NIC_VF_0_127_INT, 
+				(cq_intr << VNIC_INTR_CQ_SHIFT) | 
+				(rbdr_intr << VNIC_INTR_RBDR_SHIFT));
 	return IRQ_HANDLED;
 }
 
@@ -478,6 +510,7 @@ static int vnic_register_misc_interrupt (struct vnic *vnic)
 	/* Register Misc interrupt */
 	ret = request_irq(vf->msix_entries[irq].vector, vnic_misc_intr_handler,
 						0, vf->irq_name[irq], vnic);
+
 	if(ret)
 		return 1;
 	vf->irq_allocated[irq] = 1;
@@ -486,7 +519,8 @@ static int vnic_register_misc_interrupt (struct vnic *vnic)
 	vnic_enable_mbx_intr(vnic);
 
 	/* Check if PF is ready to receive mailbox messages */
-	vnic_check_pf_ready(vnic->vf);
+	if (!vnic_check_pf_ready(vnic->vf))
+		return 1;
 
 	return 0;
 }
@@ -563,31 +597,44 @@ static int vnic_stop(struct net_device *netdev)
 {
 	int qidx;
         struct vnic *vnic = netdev_priv(netdev);
+	struct vnic_vf *vf = vnic->vf;
+	struct vnic_queue_set *qs = vf->qs;
 
         netif_carrier_off(netdev);
         netif_tx_disable(netdev);
 
-	/* Enable mailbox interrupt */
+	/* Disable HW Qset, to stop receiving packets */
+	vnic_qset_config(vf, qs, false);
+
+	/* disable mailbox interrupt */
 	vnic_disable_mbx_intr(vnic);
 
-	vnic_unregister_interrupts(vnic);
-	vnic_vf_config_data_transfer(vnic, vnic->vf, false);
+	/* Disable interrupts */
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
+		vnic_disable_intr (vnic, VNIC_INTR_CQ, qidx);
+	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+		vnic_disable_intr (vnic, VNIC_INTR_RBDR, qidx);
 
+	tasklet_kill(&vf->vnic_rbdr_task);
+
+	vnic_unregister_interrupts(vnic);
 #ifdef VNIC_NAPI_ENABLE
-	for (qidx = 0; qidx < vnic->vf->qs->cq_cnt; qidx++) {
-		netif_napi_del(&vnic->vf->napi[qidx]->napi);
-		kfree(vnic->vf->napi[qidx]);
-		vnic->vf->napi[qidx] = NULL;
+	for (qidx = 0; qidx < vf->qs->cq_cnt; qidx++) {
+		napi_disable(&vf->napi[qidx]->napi);
+		netif_napi_del(&vf->napi[qidx]->napi);
+		kfree(vf->napi[qidx]);
+		vf->napi[qidx] = NULL;
 	}
 #endif
+	/* Free resources */ 
+	vnic_vf_config_data_transfer(vnic, vnic->vf, false);
+
+	/* Free Qset */
+	kfree(qs);	
+
 	return 0;
 }
 
-/* 
- * TBD:
- * NAPI
- * Set MAC address  
- */
 static int vnic_open(struct net_device *netdev)
 {
 	int err, qidx;
@@ -649,6 +696,7 @@ napi_del:
 	while(qidx) {
 		qidx--;
 		cq_poll = vnic->vf->napi[qidx];
+		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
 		vnic->vf->napi[qidx] = NULL;
@@ -777,7 +825,7 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev->netdev_ops = &vnic_netdev_ops;
 
 	if ((err = register_netdev(netdev))) {
-		dev_err(dev, "Error while registering netdevice\n");
+		dev_err(dev, "Failed to register netdevice\n");
 		goto err_unmap_resources;
 	}
 
