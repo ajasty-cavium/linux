@@ -97,6 +97,18 @@ static void vnic_clear_mbx_intr (struct vnic_pf *pf, int vf)
 		vnic_pf_reg_write (pf, NIC_PF_MAILBOX_INT + (1 << 3), (1ULL << (vf - 64)));
 }
 
+static void vnic_mbx_send_ready (struct vnic_pf *pf, int vf)
+{
+	uint64_t mbx_addr;
+
+	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
+	mbx_addr += (vf << VNIC_VF_NUM_SHIFT);
+
+	vnic_pf_reg_write (pf, mbx_addr, VNIC_PF_VF_MSG_READY);
+	mbx_addr += (VNIC_PF_VF_MAILBOX_SIZE - 1) * 8;
+	/* Set 1 in last MBX reg */ 
+	vnic_pf_reg_write (pf, mbx_addr, 1ULL); 
+}
 
 static void vnic_mbx_send_ack (struct vnic_pf *pf, int vf)
 {
@@ -137,11 +149,17 @@ static void vnic_handle_mbx_intr (struct vnic_pf *pf, int vf)
 	case VNIC_PF_VF_MSG_READY:
 		//pr_err("VNIC_PF_VF_MSG_READY\n");
 		/* Nothing to do, just send an ack */
+		vnic_mbx_send_ready(pf, vf);
+		goto exit;
 		break;
 	case VNIC_PF_VF_MSG_QS_CFG:
 		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx->data.qs.num << VNIC_QS_ID_SHIFT);
 		//pr_err("%s qs_num %d qs.cfg %d\n", __FUNCTION__,mbx->data.qs.num, mbx->data.qs.cfg);
-		vnic_pf_reg_write (pf, reg_addr, mbx->data.qs.cfg); 
+		vnic_pf_reg_write (pf, reg_addr, mbx->data.qs.cfg);
+		if (!mbx->data.qs.cfg) 
+			bgx_lmac_disable(mbx->data.qs.num);
+		else 
+			bgx_lmac_enable(mbx->data.qs.num);
 		break;
 	case VNIC_PF_VF_MSG_RQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx->data.rq.qs_num << VNIC_QS_ID_SHIFT) | 
@@ -162,9 +180,9 @@ static void vnic_handle_mbx_intr (struct vnic_pf *pf, int vf)
 		dev_err(&pf->pdev->dev, "Invalid message from VF%d, msg 0x%llx\n", vf, mbx->msg);
 		break;
 	}
-	
 	vnic_mbx_send_ack(pf, vf);
-	kfree(mbx_data);
+exit:
+	kfree(mbx);
 }
 
 static void vnic_channel_cfg (struct vnic_pf *pf)
@@ -272,7 +290,7 @@ static void vnic_init_hw (struct vnic_pf *pf)
 	vnic_channel_cfg(pf);
 }
 
-static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq) 
+static irqreturn_t vnic_pf_intr_handler (int irq, void *vnic_irq) 
 {
 	int vf;
 	uint64_t intr;
@@ -286,7 +304,7 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 			vnic_handle_mbx_intr(vnic->pf, vf);
 			vnic_clear_mbx_intr(vnic->pf, vf);
 		}
-	}	
+	}
 	
 	return IRQ_HANDLED;
 }
@@ -348,7 +366,7 @@ static int vnic_register_interrupts (struct vnic *vnic)
 	/* For now skip ECC interrupts, register only Mbox interrupts */
 	for (irq = 8; irq < pf->num_vec; irq++) {
 		ret = request_irq (pf->msix_entries[irq].vector, 
-				vnic_intr_handler, 0 , "VNIC PF", vnic);
+				vnic_pf_intr_handler, 0 , "VNIC PF", vnic);
 		if (ret)
 			break;
 	}

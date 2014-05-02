@@ -63,6 +63,19 @@ static void bgx_reg_write (struct bgx *bgx, uint8_t lmac,
         writeq_relaxed(val, (void *)addr);
 }
 
+static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac) 
+{
+	uint64_t dmac = 0x00;
+	uint64_t offset, addr;
+	
+	while (bgx->lmac[lmac].dmac > 0) {
+		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) + 
+					(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
+		addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
+		writeq_relaxed(dmac, (void *)addr);
+		bgx->lmac[lmac].dmac--;	
+	}
+}
 void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac) 
 {
 	int bgx_index;
@@ -91,6 +104,43 @@ void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 	addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
 	writeq_relaxed(dmac, (void *)addr);
 	bgx->lmac[lmac].dmac++;	
+}
+
+void bgx_lmac_enable (uint64_t lmac)
+{
+	int bgx_index;
+	struct bgx *bgx;
+	//uint64_t dmac_bcast = (1ULL << 48) - 1;
+
+	bgx_index = lmac / MAX_LMAC_PER_BGX;
+	bgx = bgx_vnic[bgx_index];
+	if (!bgx) {
+		pr_err("BGX%d not yet initialized, ignoring LMAC disable\n",
+								 bgx_index);
+		return;
+	}
+	lmac = lmac % MAX_LMAC_PER_BGX;
+	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 
+			(1 << 15) | (1 << 14) | (1 << 13)); 
+	//bgx_add_dmac_addr(dmac_bcast, lmac + 
+	//			(bgx->bgx_id * MAX_LMAC_PER_BGX));
+}
+
+void bgx_lmac_disable (uint64_t lmac)
+{
+	int bgx_index;
+	struct bgx *bgx;
+
+	bgx_index = lmac / MAX_LMAC_PER_BGX;
+	bgx = bgx_vnic[bgx_index];
+	if (!bgx) {
+		pr_err("BGX%d not yet initialized, ignoring LMAC disable\n",
+								 bgx_index);
+		return;
+	}
+	lmac = lmac % MAX_LMAC_PER_BGX;
+	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00); 
+	//bgx_flush_dmac_addrs(bgx, lmac);	
 }
 
 static void bgx_init_hw (struct bgx *bgx) 

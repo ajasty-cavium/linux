@@ -20,4 +20,6 @@
 #define BGX_CMR_RX_DMACX_CAM	0x200
 
 extern void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
+extern void bgx_lmac_disable (uint64_t lmac);
+extern void bgx_lmac_enable (uint64_t lmac);
 #endif
