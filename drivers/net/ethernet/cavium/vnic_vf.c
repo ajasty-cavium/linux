@@ -343,7 +343,7 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 	while (processed_cqe < cqe_count) {	
 		/* Get the CQ descriptor */
 		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base + 
-				((cqe_head + processed_cqe) * CMP_QUEUE_DESC_SIZE));
+				(cqe_head * CMP_QUEUE_DESC_SIZE));
 		if (napi && (work_done >= budget) && 
 			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
 			break;
@@ -359,13 +359,14 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		break;
 		}
 		processed_cqe++;
+		cqe_head++;
+		cqe_head &= (cq->desc_mem.q_len - 1);
 	}
 	//pr_err("%s processed_cqe %d work_done %d budget %d\n", 
 	//		__FUNCTION__, processed_cqe, work_done, budget);
 	/* Dequeue CQE */
 	vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_DOOR,  
 					cq_qnum, processed_cqe);
-
 	return work_done;
 }
 
