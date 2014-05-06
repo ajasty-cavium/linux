@@ -434,7 +434,7 @@ void vnic_rbdr_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool enabl
 		
 		/* Set threshold value for interrupt generation */
 		vnic_queue_reg_write(vf, NIC_QSET_0_127_RBDR_0_1_THRESH, i,
-				rbdr->thresh);
+				rbdr->thresh - 1);
 
 	}
 }
