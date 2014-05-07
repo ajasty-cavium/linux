@@ -30,7 +30,8 @@
 /* NAPI enable or disable, undef this to disable */
 #define		VNIC_NAPI_ENABLE      
 
-/* Max paxket size */
+/* Min/Max packet size */
+#define		VNIC_MIN_MTU_SUPPORTED    64
 #define		VNIC_MAX_MTU_SUPPORTED    1500
 
 /* Max pkinds */
@@ -40,41 +41,46 @@
 #define		VNIC_MAX_CHANNELS	  256
 
 /* VNIC Interrupts */
-#define		VNIC_INTR_TCP_TIMER	 0
-#define 	VNIC_INTR_PKT_DROP	 1
+#define 	VNIC_INTR_CQ		 0
+#define 	VNIC_INTR_SQ		 1
 #define 	VNIC_INTR_RBDR		 2
-#define 	VNIC_INTR_SQ		 3
-#define 	VNIC_INTR_CQ		 4
+#define 	VNIC_INTR_PKT_DROP	 3
+#define 	VNIC_INTR_TCP_TIMER	 4
 #define 	VNIC_INTR_MBOX		 5
+#define 	VNIC_INTR_QS_ERR	 6
 
-#define		VNIC_INTR_TCP_TIMER_MASK (1 << 63)
-#define		VNIC_INTR_PKT_DROP_MASK  (1 << 62)
-#define		VNIC_INTR_RBDR_MASK	 (3 << 16)
-#define		VNIC_INTR_SQ_MASK	 (0xFF << 8)
-#define		VNIC_INTR_CQ_MASK	 (0xFF << 0)
-
-#define		VNIC_INTR_TCP_TIMER_SHIFT  63
-#define		VNIC_INTR_PKT_DROP_SHIFT   62
-#define		VNIC_INTR_MBOX_SHIFT	   22
-#define		VNIC_INTR_RBDR_SHIFT   	   16
-#define		VNIC_INTR_SQ_SHIFT   	   8
 #define 	VNIC_INTR_CQ_SHIFT	   0	
+#define		VNIC_INTR_SQ_SHIFT   	   8
+#define		VNIC_INTR_RBDR_SHIFT   	   16
+#define		VNIC_INTR_PKT_DROP_SHIFT   20
+#define		VNIC_INTR_TCP_TIMER_SHIFT  21
+#define		VNIC_INTR_MBOX_SHIFT	   22
+#define		VNIC_INTR_QS_ERR_SHIFT	   23
 	
+#define		VNIC_INTR_CQ_MASK	 (0xFF << VNIC_INTR_CQ_SHIFT)
+#define		VNIC_INTR_SQ_MASK	 (0xFF << VNIC_INTR_SQ_SHIFT)
+#define		VNIC_INTR_RBDR_MASK	 (0x03 << VNIC_INTR_RBDR_SHIFT)
+#define		VNIC_INTR_PKT_DROP_MASK  (1 << VNIC_INTR_PKT_DROP_SHIFT)
+#define		VNIC_INTR_TCP_TIMER_MASK (1 << VNIC_INTR_TCP_TIMER_SHIFT)
+#define		VNIC_INTR_MBOX_MASK	 (1 << VNIC_INTR_MBOX_SHIFT)
+#define		VNIC_INTR_QS_ERR_MASK	 (1 << VNIC_INTR_QS_ERR_SHIFT)
+
+/* VF MSI-X interrupts */
 #define 	VNIC_PF_MSIX_VECTORS      	10
 #define 	VNIC_VF_MSIX_VECTORS      	20
 
-#define 	VNIC_VF_CQ_INTR_START	   	0
-#define 	VNIC_VF_SQ_INTR_START	   	8
-#define 	VNIC_VF_RBDR_INTR_START		16
-#define 	VNIC_VF_MISC_INTR_START   	18
-#define 	VNIC_VF_QS_ERR_INTR_START   	19
+#define 	VNIC_VF_CQ_INTR_ID	   	0
+#define 	VNIC_VF_SQ_INTR_ID	   	8
+#define 	VNIC_VF_RBDR_INTR_ID		16
+#define 	VNIC_VF_MISC_INTR_ID	   	18
+#define 	VNIC_VF_QS_ERR_INTR_ID		19
 
-#define for_each_cq_irq(irq) for (irq = VNIC_VF_CQ_INTR_START; \
-					irq < VNIC_VF_SQ_INTR_START; irq++)
-#define for_each_sq_irq(irq) for (irq = VNIC_VF_SQ_INTR_START; \
-					irq < VNIC_VF_RBDR_INTR_START; irq++)
-#define for_each_rbdr_irq(irq) for (irq = VNIC_VF_RBDR_INTR_START; \
-					irq < VNIC_VF_MISC_INTR_START; irq++)
+#define for_each_cq_irq(irq) for (irq = VNIC_VF_CQ_INTR_ID; \
+					irq < VNIC_VF_SQ_INTR_ID; irq++)
+#define for_each_sq_irq(irq) for (irq = VNIC_VF_SQ_INTR_ID; \
+					irq < VNIC_VF_RBDR_INTR_ID; irq++)
+#define for_each_rbdr_irq(irq) for (irq = VNIC_VF_RBDR_INTR_ID; \
+					irq < VNIC_VF_MISC_INTR_ID; irq++)
 
 struct vnic_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
@@ -89,7 +95,8 @@ struct vnic_vf {
 	uint16_t           vf_mtu;
 	struct pci_dev     *pdev;
 	uint64_t           reg_base;            /* Register start address */
-	struct tasklet_struct	vnic_rbdr_task; /* Tasklet to refill RBDR */
+	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
+	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
 #ifdef VNIC_NAPI_ENABLE
 	struct vnic_cq_poll *napi[8];		/* NAPI */
 #endif
