@@ -872,23 +872,26 @@ void vnic_enable_intr (struct vnic *vnic, int int_type, int q_idx)
 	reg_val = vnic_qset_reg_read(vnic->vf, NIC_VF_0_127_ENA_W1S);
 	
 	switch (int_type) {
-	case VNIC_INTR_TCP_TIMER:
-		reg_val |= (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
-	break;
-	case VNIC_INTR_PKT_DROP:
-		reg_val |= (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
-	break;
-	case VNIC_INTR_RBDR:
-		reg_val |= ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	case VNIC_INTR_CQ:
+		reg_val |= ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
 	break;
 	case VNIC_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << VNIC_INTR_SQ_SHIFT);
 	break;
-	case VNIC_INTR_CQ:
-		reg_val |= ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
+	case VNIC_INTR_RBDR:
+		reg_val |= ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	break;
+	case VNIC_INTR_PKT_DROP:
+		reg_val |= (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
+	break;
+	case VNIC_INTR_TCP_TIMER:
+		reg_val |= (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
 	break;
 	case VNIC_INTR_MBOX:
 		reg_val |= (1ULL << VNIC_INTR_MBOX_SHIFT);
+	break;
+	case VNIC_INTR_QS_ERR:
+		reg_val |= (1ULL << VNIC_INTR_QS_ERR_SHIFT);
 	break;
 	default:
 		dev_err(&vnic->pdev->dev, "Failed to enable interrupt: unknown interrupt type\n");	
@@ -905,26 +908,27 @@ void vnic_disable_intr (struct vnic *vnic, int int_type, int q_idx)
 {
 	uint64_t reg_val = 0;
 		
-	//reg_val = vnic_qset_reg_read(vnic->vf, NIC_VF_0_127_ENA_W1C);
-	
 	switch (int_type) {
-	case VNIC_INTR_TCP_TIMER:
-		reg_val |= (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
-	break;
-	case VNIC_INTR_PKT_DROP:
-		reg_val |= (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
-	break;
-	case VNIC_INTR_RBDR:
-		reg_val |= ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	case VNIC_INTR_CQ:
+		reg_val |= ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
 	break;
 	case VNIC_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << VNIC_INTR_SQ_SHIFT);
 	break;
-	case VNIC_INTR_CQ:
-		reg_val |= ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
+	case VNIC_INTR_RBDR:
+		reg_val |= ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	break;
+	case VNIC_INTR_PKT_DROP:
+		reg_val |= (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
+	break;
+	case VNIC_INTR_TCP_TIMER:
+		reg_val |= (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
 	break;
 	case VNIC_INTR_MBOX:
 		reg_val |= (1ULL << VNIC_INTR_MBOX_SHIFT);
+	break;
+	case VNIC_INTR_QS_ERR:
+		reg_val |= (1ULL << VNIC_INTR_QS_ERR_SHIFT);
 	break;
 	default:
 		dev_err(&vnic->pdev->dev, "Failed to disable interrupt: unknown interrupt type\n");	
@@ -942,23 +946,26 @@ void vnic_clear_intr (struct vnic *vnic, int int_type, int q_idx)
 	uint64_t reg_val = 0;
 		
 	switch (int_type) {
-	case VNIC_INTR_TCP_TIMER:
-		reg_val = (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
-	break;
-	case VNIC_INTR_PKT_DROP:
-		reg_val = (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
-	break;
-	case VNIC_INTR_RBDR:
-		reg_val = ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	case VNIC_INTR_CQ:
+		reg_val = ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
 	break;
 	case VNIC_INTR_SQ:
 		reg_val = ((1ULL << q_idx) << VNIC_INTR_SQ_SHIFT);
 	break;
-	case VNIC_INTR_CQ:
-		reg_val = ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
+	case VNIC_INTR_RBDR:
+		reg_val = ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	break;
+	case VNIC_INTR_PKT_DROP:
+		reg_val = (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
+	break;
+	case VNIC_INTR_TCP_TIMER:
+		reg_val = (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
 	break;
 	case VNIC_INTR_MBOX:
 		reg_val = (1ULL << VNIC_INTR_MBOX_SHIFT);
+	break;
+	case VNIC_INTR_QS_ERR:
+		reg_val |= (1ULL << VNIC_INTR_QS_ERR_SHIFT);
 	break;
 	default:
 		dev_err(&vnic->pdev->dev, "Failed to clear interrupt: unknown interrupt type\n");	
@@ -979,23 +986,26 @@ int vnic_is_intr_enabled (struct vnic *vnic, int int_type, int q_idx)
 	reg_val = vnic_qset_reg_read(vnic->vf, NIC_VF_0_127_ENA_W1S);
 	
 	switch (int_type) {
-	case VNIC_INTR_TCP_TIMER:
-		mask = (1ULL << VNIC_INTR_TCP_TIMER_SHIFT);
-	break;
-	case VNIC_INTR_PKT_DROP:
-		mask = (1ULL << VNIC_INTR_PKT_DROP_SHIFT);
-	break;
-	case VNIC_INTR_RBDR:
-		mask = ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	case VNIC_INTR_CQ:
+		mask = ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
 	break;
 	case VNIC_INTR_SQ:
 		mask = ((1ULL << q_idx) << VNIC_INTR_SQ_SHIFT);
 	break;
-	case VNIC_INTR_CQ:
-		mask = ((1ULL << q_idx) << VNIC_INTR_CQ_SHIFT);
+	case VNIC_INTR_RBDR:
+		mask = ((1ULL << q_idx) << VNIC_INTR_RBDR_SHIFT);
+	break;
+	case VNIC_INTR_PKT_DROP:
+		mask = VNIC_INTR_PKT_DROP_MASK;
+	break;
+	case VNIC_INTR_TCP_TIMER:
+		mask = VNIC_INTR_TCP_TIMER_MASK;
 	break;
 	case VNIC_INTR_MBOX:
-		mask = (1ULL << VNIC_INTR_MBOX_SHIFT);
+		mask = VNIC_INTR_MBOX_MASK;
+	break;
+	case VNIC_INTR_QS_ERR:
+		mask = VNIC_INTR_QS_ERR_MASK;
 	break;
 	default:
 		dev_err(&vnic->pdev->dev, "Failed to check interrupt enable: \

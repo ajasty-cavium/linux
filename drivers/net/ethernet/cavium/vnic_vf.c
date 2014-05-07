@@ -391,6 +391,32 @@ static int vnic_poll (struct napi_struct *napi, int budget)
 }
 #endif
 
+/*
+ * Qset error interrupt handler
+ * As of now only 'CQ full' errors are only handled
+ */
+void vnic_handle_qs_err (unsigned long data)
+{
+	struct vnic *vnic = (struct vnic *)data;
+	struct vnic_vf *vf = vnic->vf;
+	struct vnic_queue_set *qs = vf->qs;
+	int cq_idx;
+	uint64_t cq_status, cq_ena;
+	
+	for (cq_idx = 0; cq_idx < qs->cq_cnt; cq_idx++) {
+		cq_status = vnic_queue_reg_read(vf, NIC_QSET_0_127_CQ_0_7_STATUS, cq_idx);
+		if (!(cq_status & CQ_WR_FULL))
+			continue;
+		vnic_cq_intr_handler(vnic->netdev, cq_idx, false, 0); 
+                /* Re-enable completion queue */
+		cq_ena = vnic_queue_reg_read(vf, NIC_QSET_0_127_CQ_0_7_CFG, cq_idx);
+		cq_ena |= (1ULL << 42);
+                vnic_queue_reg_write(vf, NIC_QSET_0_127_CQ_0_7_CFG, cq_idx, cq_ena);
+	}
+	/* Re-enable Qset error interrupt */
+	vnic_enable_intr (vnic, VNIC_INTR_QS_ERR, 0);
+}
+
 static irqreturn_t vnic_misc_intr_handler (int irq, void *vnic_irq) 
 {
 	struct vnic *vnic = (struct vnic *) vnic_irq;
@@ -402,7 +428,8 @@ static irqreturn_t vnic_misc_intr_handler (int irq, void *vnic_irq)
 
 static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq) 
 {
-	uint64_t qidx, intr, cq_intr, rbdr_intr;
+	uint64_t qidx, intr;
+	uint64_t cq_intr, rbdr_intr, qs_err_intr;
 	struct vnic *vnic = (struct vnic *) vnic_irq;
 	struct vnic_queue_set *qs = vnic->vf->qs;
 
@@ -410,6 +437,12 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 	//pr_err("%s intr status 0x%llx\n",__FUNCTION__, intr);
 
 	cq_intr = (intr & VNIC_INTR_CQ_MASK) >> VNIC_INTR_CQ_SHIFT;
+	qs_err_intr = intr & VNIC_INTR_QS_ERR_MASK;
+	if (qs_err_intr) {
+		/* Disable Qset err interrupt and schedule softirq */
+		vnic_disable_intr (vnic, VNIC_INTR_QS_ERR, 0);
+		tasklet_hi_schedule(&vnic->vf->qs_err_task);
+	}
 
 #ifdef  VNIC_NAPI_ENABLE 
 	{
@@ -439,13 +472,14 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 			vnic_disable_intr (vnic, VNIC_INTR_RBDR, qidx);
 
-		tasklet_schedule(&vnic->vf->vnic_rbdr_task);
+		tasklet_schedule(&vnic->vf->rbdr_task);
 	}
 		
 	/* Clear interrupts */
 	vnic_qset_reg_write(vnic->vf, NIC_VF_0_127_INT, 
 				(cq_intr << VNIC_INTR_CQ_SHIFT) | 
-				(rbdr_intr << VNIC_INTR_RBDR_SHIFT));
+				(rbdr_intr << VNIC_INTR_RBDR_SHIFT)| 
+				(qs_err_intr << VNIC_INTR_QS_ERR_SHIFT));
 	return IRQ_HANDLED;
 }
 
@@ -500,7 +534,7 @@ static void vnic_disable_msix (struct vnic *vnic)
 static int vnic_register_misc_interrupt (struct vnic *vnic)
 {
 	int  ret = 0;
-	int irq = VNIC_VF_MISC_INTR_START;
+	int irq = VNIC_VF_MISC_INTR_ID;
 	struct vnic_vf *vf = vnic->vf;
 
 	/* Enable MSI-X */
@@ -537,19 +571,26 @@ static int vnic_register_interrupts (struct vnic *vnic)
 
 	for_each_sq_irq(irq) 
 		sprintf(vf->irq_name[irq], "%s%d SQ%d", "VNIC", 
-			vf->vnic_id, irq - VNIC_VF_SQ_INTR_START);
+			vf->vnic_id, irq - VNIC_VF_SQ_INTR_ID);
 
 	for_each_rbdr_irq(irq) 
 		sprintf(vf->irq_name[irq], "%s%d RBDR%d", "VNIC", 
-			vf->vnic_id, irq - VNIC_VF_RBDR_INTR_START);
+			vf->vnic_id, irq - VNIC_VF_RBDR_INTR_ID);
 
-	/* Register interrupts */
-	for (irq = 0; irq < VNIC_VF_MISC_INTR_START; irq++) {
-		ret = request_irq (vf->msix_entries[irq].vector, 
-				vnic_intr_handler, 0 , vf->irq_name[irq], vnic);
-		if (ret)
+	/* Register all interrupts except mailbox */
+	for (irq = 0; irq < VNIC_VF_MISC_INTR_ID; irq++) {
+		if ((ret = request_irq (vf->msix_entries[irq].vector, 
+				vnic_intr_handler, 0 , vf->irq_name[irq], vnic)))
 			break;
 		vf->irq_allocated[irq] = 1;
+	}
+
+	sprintf(vf->irq_name[VNIC_VF_QS_ERR_INTR_ID], 
+				"%s%d Qset error", "VNIC", vf->vnic_id);
+	if (!ret) {
+		if (!(ret = request_irq (vf->msix_entries[VNIC_VF_QS_ERR_INTR_ID].vector, 
+				vnic_intr_handler, 0 , vf->irq_name[VNIC_VF_QS_ERR_INTR_ID], vnic)))
+			vf->irq_allocated[VNIC_VF_QS_ERR_INTR_ID] = 1;
 	}
 
 	if (ret) { 
@@ -615,8 +656,10 @@ static int vnic_stop(struct net_device *netdev)
 		vnic_disable_intr (vnic, VNIC_INTR_CQ, qidx);
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		vnic_disable_intr (vnic, VNIC_INTR_RBDR, qidx);
+	vnic_disable_intr (vnic, VNIC_INTR_QS_ERR, 0);
 
-	tasklet_kill(&vf->vnic_rbdr_task);
+	tasklet_kill(&vf->rbdr_task);
+	tasklet_kill(&vf->qs_err_task);
 
 	vnic_unregister_interrupts(vnic);
 #ifdef VNIC_NAPI_ENABLE
@@ -666,10 +709,16 @@ static int vnic_open(struct net_device *netdev)
 		vnic_enable_intr (vnic, VNIC_INTR_CQ, qidx);
 
 	/* Init RBDR tasklet and enable RBDR threshold interrupt */
-	tasklet_init(&vf->vnic_rbdr_task, vnic_refill_rbdr, (unsigned long) vnic);
+	tasklet_init(&vf->rbdr_task, vnic_refill_rbdr, (unsigned long) vnic);
 
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		vnic_enable_intr (vnic, VNIC_INTR_RBDR, qidx);
+
+	/* Init tasklet for handling Qset err interrupt */
+	tasklet_init(&vf->qs_err_task, vnic_handle_qs_err, (unsigned long) vnic);
+
+	/* Enable Qset err interrupt */
+	vnic_enable_intr (vnic, VNIC_INTR_QS_ERR, 0);
 
 	if (is_zero_ether_addr(netdev->dev_addr))
 		eth_hw_addr_random(netdev);
@@ -713,16 +762,10 @@ static int vnic_change_mtu(struct net_device *netdev, int new_mtu)
 	if (new_mtu > VNIC_MAX_MTU_SUPPORTED)
 		return -EINVAL;	
 
-	if (new_mtu == netdev->mtu)
-		return 0;
-
-	if (netif_running(netdev)) 
-		vnic_stop(netdev);
+	if (new_mtu < VNIC_MIN_MTU_SUPPORTED)
+		return -EINVAL;	
 
 	netdev->mtu = new_mtu;
-	if (netif_running(netdev))
-		vnic_open(netdev);
-
 	return 0;
 }
 

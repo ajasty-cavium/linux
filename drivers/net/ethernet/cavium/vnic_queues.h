@@ -128,6 +128,13 @@ struct vnic_queue_set {
 	struct    vnic_rbdr rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
 };
 
+/* Completion queue */
+/* Status */
+#define 	CQ_WR_FULL 	(1 << 26)
+#define 	CQ_WR_DISABLE 	(1 << 25)
+#define 	CQ_WR_FAULT 	(1 << 24)
+#define 	CQ_CQE_COUNT 	(0xFF << 0)
+
 int vnic_vf_config_data_transfer(struct vnic *vnic, struct vnic_vf *vf, bool enable);
 void vnic_qset_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool enable);
 int vnic_get_sq_desc (struct vnic_queue_set *qs, int qnum, void **desc); 
