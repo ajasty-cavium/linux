@@ -85,8 +85,6 @@
 #define ACCESS_WRITE_VALUE	(3 << 1)
 #define ACCESS_WRITE_MASK(x)	((x) & (3 << 1))
 
-#define VGIC_NR_SHARED_IRQS(d)	((d)->nr_irqs - VGIC_NR_PRIVATE_IRQS)
-
 static void vgic_retire_disabled_irqs(struct kvm_vcpu *vcpu);
 static void vgic_retire_lr(int lr_nr, int irq, struct kvm_vcpu *vcpu);
 static void vgic_update_state(struct kvm *kvm);
@@ -992,15 +990,15 @@ static int compute_pending_for_cpu(struct kvm_vcpu *vcpu)
 
 	pending = vgic_bitmap_get_shared_map(&dist->irq_state);
 	enabled = vgic_bitmap_get_shared_map(&dist->irq_enabled);
-	bitmap_and(pend_shared, pending, enabled, VGIC_NR_SHARED_IRQS(dist));
+	bitmap_and(pend_shared, pending, enabled, VGIC_NR_SHARED_IRQS);
 	bitmap_and(pend_shared, pend_shared,
 		   vgic_bitmap_get_shared_map(&dist->irq_spi_target[vcpu_id]),
-		   VGIC_NR_SHARED_IRQS(dist));
+		   VGIC_NR_SHARED_IRQS);
 
 	pending_private = find_first_bit(pend_percpu, VGIC_NR_PRIVATE_IRQS);
-	pending_shared = find_first_bit(pend_shared, VGIC_NR_SHARED_IRQS(dist));
+	pending_shared = find_first_bit(pend_shared, VGIC_NR_SHARED_IRQS);
 	return (pending_private < VGIC_NR_PRIVATE_IRQS ||
-		pending_shared < VGIC_NR_SHARED_IRQS(dist));
+		pending_shared < VGIC_NR_SHARED_IRQS);
 }
 
 /*
@@ -1251,7 +1249,7 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 	}
 
 	/* SPIs */
-	for_each_set_bit(i, vgic_cpu->pending_shared, VGIC_NR_SHARED_IRQS(dist)) {
+	for_each_set_bit(i, vgic_cpu->pending_shared, VGIC_NR_SHARED_IRQS) {
 		if (!vgic_queue_hwirq(vcpu, i + VGIC_NR_PRIVATE_IRQS))
 			overflow = 1;
 	}
