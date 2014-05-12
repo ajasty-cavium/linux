@@ -1174,7 +1174,7 @@ static bool vgic_queue_sgi(struct kvm_vcpu *vcpu, int irq)
 
 	sources = *vgic_get_sgi_sources(dist, vcpu_id, irq);
 
-	for_each_set_bit(c, &sources, dist->nr_cpus) {
+	for_each_set_bit(c, &sources, VGIC_MAX_CPUS) {
 		if (vgic_queue_irq(vcpu, c, irq))
 			clear_bit(c, &sources);
 	}
@@ -1545,7 +1545,7 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	if (ret)
 		return ret;
 
-	if (vcpu->vcpu_id >= dist->nr_cpus)
+	if (vcpu->vcpu_id >= VGIC_MAX_CPUS)
 		return -EBUSY;
 
 	for (i = 0; i < VGIC_NR_IRQS; i++) {
@@ -2152,7 +2152,7 @@ static void vgic_destroy(struct kvm_device *dev)
 
 static int vgic_create(struct kvm_device *dev, u32 type)
 {
-	return kvm_vgic_create(dev->kvm, KVM_MAX_CPUS, VGIC_NR_IRQS);
+	return kvm_vgic_create(dev->kvm, VGIC_MAX_CPUS, VGIC_NR_IRQS);
 }
 
 struct kvm_device_ops kvm_arm_vgic_v2_ops = {

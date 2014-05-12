@@ -29,11 +29,12 @@
 #define VGIC_NR_SGIS		16
 #define VGIC_NR_PPIS		16
 #define VGIC_NR_PRIVATE_IRQS	(VGIC_NR_SGIS + VGIC_NR_PPIS)
+#define VGIC_MAX_CPUS		KVM_MAX_VCPUS
 #define VGIC_MAX_LRS		(1 << 6)
 #define VGIC_V3_MAX_LRS		16
 
 /* Sanity checks... */
-#if (KVM_MAX_VCPUS > 8)
+#if (VGIC_MAX_CPUS > 8)
 #error	Invalid number of CPU interfaces
 #endif
 
