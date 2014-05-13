@@ -182,10 +182,14 @@
  */
 #define GICH_LR_VIRTUAL_ID_MASK		((1UL << 32) - 1)
 
+#undef GICH_LR_EOI
 #define GICH_LR_EOI			(1UL << 41)
 #define GICH_LR_GROUP			(1UL << 60)
+#undef GICH_LR_STATE
 #define GICH_LR_STATE			(3UL << 62)
+#undef GICH_LR_PENDING_BIT
 #define GICH_LR_PENDING_BIT		(1UL << 62)
+#undef GICH_LR_ACTIVE_BIT
 #define GICH_LR_ACTIVE_BIT		(1UL << 63)
 
 #define GICH_MISR_EOI			(1 << 0)
