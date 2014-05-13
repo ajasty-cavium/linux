@@ -150,8 +150,8 @@
 .macro	restore_vgic_v3_state
 	// Disable SRE_EL1 access. Necessary, otherwise
 	// ICH_VMCR_EL2.VFIQEn becomes one, and FIQ happens...
-	msr_s	ICC_SRE_EL1, xzr
-	isb
+	//msr_s	ICC_SRE_EL1, xzr
+	//isb
 
 	// Compute the address of struct vgic_cpu
 	add	x3, x0, #VCPU_VGIC_CPU
@@ -244,9 +244,9 @@
 	dsb	sy
 
 	// Prevent the guest from touching the GIC system registers
-	mrs_s	x5, ICC_SRE_EL2
-	and	x5, x5, #~ICC_SRE_EL2_ENABLE
-	msr_s	ICC_SRE_EL2, x5
+	//mrs_s	x5, ICC_SRE_EL2
+	//and	x5, x5, #~ICC_SRE_EL2_ENABLE
+	//msr_s	ICC_SRE_EL2, x5
 .endm
 
 ENTRY(__save_vgic_v3_state)

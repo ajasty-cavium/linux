@@ -149,6 +149,7 @@ struct vgic_dist {
 	/* Distributor and vcpu interface mapping in the guest */
 	phys_addr_t		vgic_dist_base;
 	phys_addr_t		vgic_cpu_base;
+	phys_addr_t		vgic_rdist_base;
 
 	/* Distributor enabled */
 	u32			enabled;
@@ -212,6 +213,9 @@ struct vgic_dist {
 
 	/* Bitmap indicating which CPU has something pending */
 	unsigned long		*irq_pending_on_cpu;
+
+	/* afinity routing */
+	u32 afi_enabled;
 #endif
 };
 

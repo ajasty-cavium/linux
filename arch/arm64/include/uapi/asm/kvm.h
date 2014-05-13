@@ -75,9 +75,11 @@ struct kvm_regs {
 /* Supported VGIC address types  */
 #define KVM_VGIC_V2_ADDR_TYPE_DIST	0
 #define KVM_VGIC_V2_ADDR_TYPE_CPU	1
+#define KVM_VGIC_V3_ADDR_TYPE_RDIST	2
 
-#define KVM_VGIC_V2_DIST_SIZE		0x1000
+#define KVM_VGIC_V2_DIST_SIZE		0x10000
 #define KVM_VGIC_V2_CPU_SIZE		0x2000
+#define KVM_VGIC_V3_RDIST_SIZE		0x200000
 
 #define KVM_ARM_VCPU_POWER_OFF		0 /* CPU is started in OFF state */
 #define KVM_ARM_VCPU_EL1_32BIT		1 /* CPU running a 32bit VM */

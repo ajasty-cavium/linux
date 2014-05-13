@@ -49,6 +49,16 @@ static void reset_actlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 	vcpu_sys_reg(vcpu, ACTLR_EL1) = actlr;
 }
 
+static bool sys_reg_access(struct kvm_vcpu *vcpu,
+			   const struct sys_reg_params *p,
+			   const struct sys_reg_desc *r)
+{
+	u64 val = *vcpu_reg(vcpu, p->Rt);
+
+	vgic_arm64_dispatch_sgi(vcpu, val);
+	return true;
+}
+
 /*
  * Implementation specific sys-reg registers.
  * Important: Must be sorted ascending by Op0, Op1, CRn, CRm, Op2
@@ -57,6 +67,8 @@ static const struct sys_reg_desc genericv8_sys_regs[] = {
 	/* ACTLR_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b0001), CRm(0b0000), Op2(0b001),
 	  access_actlr, reset_actlr, ACTLR_EL1 },
+	{ Op0(3), Op1(0), CRn(12), CRm(11), Op2(5), sys_reg_access,
+	  NULL, 0 },
 };
 
 static const struct sys_reg_desc genericv8_cp15_regs[] = {

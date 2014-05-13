@@ -32,7 +32,8 @@
 
 /* These are for GICv2 emulation only */
 #define GICH_LR_VIRTUALID		(0x3ffUL << 0)
-#define GICH_LR_PHYSID_CPUID_SHIFT	(10)
+//#define GICH_LR_PHYSID_CPUID_SHIFT	(10)
+#define GICH_LR_PHYSID_CPUID_SHIFT	(32)
 #define GICH_LR_PHYSID_CPUID		(7UL << GICH_LR_PHYSID_CPUID_SHIFT)
 
 /*
@@ -68,8 +69,10 @@ static struct vgic_lr vgic_v3_get_lr(const struct kvm_vcpu *vcpu, int lr)
 static void vgic_v3_set_lr(struct kvm_vcpu *vcpu, int lr,
 			   struct vgic_lr lr_desc)
 {
-	u64 lr_val = (((u32)lr_desc.source << GICH_LR_PHYSID_CPUID_SHIFT) |
+	u64 lr_val = (((u64)lr_desc.source << GICH_LR_PHYSID_CPUID_SHIFT) |
 		      lr_desc.irq);
+
+	lr_val |= 1UL << 60;	/* Grp1 enable */
 
 	if (lr_desc.state & LR_STATE_PENDING)
 		lr_val |= ICH_LR_PENDING_BIT;
@@ -145,12 +148,7 @@ static void vgic_v3_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcrp)
 
 static void vgic_v3_enable(struct kvm_vcpu *vcpu)
 {
-	/*
-	 * By forcing VMCR to zero, the GIC will restore the binary
-	 * points to their reset values. Anything else resets to zero
-	 * anyway.
-	 */
-	vcpu->arch.vgic_cpu.vgic_v3.vgic_vmcr = 0;
+	vcpu->arch.vgic_cpu.vgic_v3.vgic_vmcr = 2;
 
 	/* Get the show on the road... */
 	vcpu->arch.vgic_cpu.vgic_v3.vgic_hcr = ICH_HCR_EN;
