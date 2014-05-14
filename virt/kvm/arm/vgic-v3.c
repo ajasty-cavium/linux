@@ -66,7 +66,7 @@ static void vgic_v3_set_lr(struct kvm_vcpu *vcpu, int lr,
 {
 	u64 lr_val = MK_LR_PEND(lr_desc.source, lr_desc.irq);
 
-    lr_val |= (1ul<60); //Grp1 enable 
+    lr_val |= (1ul<<60); //Grp1 enable
 
 	if (lr_desc.state & LR_STATE_PENDING)
 		lr_val |= GICH_LR_PENDING_BIT;
