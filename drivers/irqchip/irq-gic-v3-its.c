@@ -239,7 +239,7 @@ static struct its_collection *its_build_mapd_cmd(struct its_cmd_block *cmd,
 						 struct its_cmd_desc *desc)
 {
 	unsigned long itt_addr;
-	u8 size = order_base_2(desc->its_mapd_cmd.dev->nr_ites);
+	u8 size = max(order_base_2(desc->its_mapd_cmd.dev->nr_ites), 1);
 
 	itt_addr = virt_to_phys(desc->its_mapd_cmd.dev->itt);
 	itt_addr = ALIGN(itt_addr, ITS_ITT_ALIGN);
