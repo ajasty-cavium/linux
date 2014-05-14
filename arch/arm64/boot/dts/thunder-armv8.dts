@@ -341,6 +341,13 @@
 		      <0x8020 0x80000000 0x0 0x10000>, /* GICH */
 		      <0x8010 0xa0000000 0x0 0x10000>; /* GICV temp for satisfying KVM vgic*/
 		interrupts = <1 9 0xf04>;
+
+		gic-its@801000020000 {
+			compatible = "arm,gic-v3-its";
+			msi-controller;
+			reg = <0x8010 0x20000 0x0 0x200000>;
+		};
+
 	};
 
 	timer {
