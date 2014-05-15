@@ -160,7 +160,7 @@ static void  vnic_handle_mbx_intr (struct vnic *vnic)
 		pf_ready_to_rcv_msg = true;
 		break;
 	default:
-		dev_err(&vf->pdev->dev, "Invalid message from PF, msg 0x%llx\n", 
+		dev_err(&vnic->pdev->dev, "Invalid message from PF, msg 0x%llx\n", 
 								mbx->msg);
 		break;
 	}
@@ -195,7 +195,6 @@ static int vnic_init_resources(struct vnic *vnic)
 
 	vf->num_qs = 1; 
 	vf->vf_mtu = vnic->mtu;
-	vf->pdev = vnic->pdev;
 
 	/* Initialize queues and HW for data transfer */
 	if ((err = vnic_vf_config_data_transfer(vnic, vf, true))) {
@@ -531,35 +530,6 @@ static void vnic_disable_msix (struct vnic *vnic)
 	}
 }
 
-static int vnic_register_misc_interrupt (struct vnic *vnic)
-{
-	int  ret = 0;
-	int irq = VNIC_VF_MISC_INTR_ID;
-	struct vnic_vf *vf = vnic->vf;
-
-	/* Enable MSI-X */
-	if (!vnic_enable_msix(vnic))
-		return 1;
-
-	sprintf(vf->irq_name[irq], "%s%d Mbox", "VNIC", vf->vnic_id);
-	/* Register Misc interrupt */
-	ret = request_irq(vf->msix_entries[irq].vector, vnic_misc_intr_handler,
-						0, vf->irq_name[irq], vnic);
-
-	if(ret)
-		return 1;
-	vf->irq_allocated[irq] = 1;
-
-	/* Enable mailbox interrupt */
-	vnic_enable_mbx_intr(vnic);
-
-	/* Check if PF is ready to receive mailbox messages */
-	if (!vnic_check_pf_ready(vnic->vf))
-		return 1;
-
-	return 0;
-}
-
 static int vnic_register_interrupts (struct vnic *vnic)
 {
 	int irq, free, ret = 0;
@@ -617,6 +587,38 @@ static void vnic_unregister_interrupts (struct vnic *vnic)
 
 	/* Disable MSI-X */
 	vnic_disable_msix(vnic);
+}
+
+static int vnic_register_misc_interrupt (struct vnic *vnic)
+{
+	int  ret = 0;
+	int irq = VNIC_VF_MISC_INTR_ID;
+	struct vnic_vf *vf = vnic->vf;
+
+	/* Enable MSI-X */
+	if (!vnic_enable_msix(vnic))
+		return 1;
+
+	sprintf(vf->irq_name[irq], "%s%d Mbox", "VNIC", vf->vnic_id);
+	/* Register Misc interrupt */
+	ret = request_irq(vf->msix_entries[irq].vector, vnic_misc_intr_handler,
+						0, vf->irq_name[irq], vnic);
+
+	if(ret)
+		return 1;
+	vf->irq_allocated[irq] = 1;
+
+	/* Enable mailbox interrupt */
+	vnic_enable_mbx_intr(vnic);
+
+	/* Check if PF is ready to receive mailbox messages */
+	if (!vnic_check_pf_ready(vnic->vf)) {
+		vnic_disable_mbx_intr(vnic);
+		vnic_unregister_interrupts(vnic);
+		return 1;
+	}
+
+	return 0;
 }
 
 static void vnic_update_tx_stats(struct vnic *vnic, struct sk_buff *skb)
@@ -690,7 +692,6 @@ static int vnic_open(struct net_device *netdev)
 	vnic->mtu = netdev->mtu;
 	
 	if ((err = vnic_register_misc_interrupt(vnic))) {
-		vnic_stop(netdev);
 		return -EIO;
 	}
 
@@ -819,6 +820,7 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
         vnic->netdev = netdev;
         vnic->pdev = pdev;
 	vnic->vf = kzalloc (sizeof (struct vnic_vf), GFP_KERNEL);
+	vnic->vf->pdev = pdev;
 	
         err = pci_enable_device(pdev); 
         if (err) {

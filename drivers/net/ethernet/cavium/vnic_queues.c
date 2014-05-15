@@ -552,7 +552,8 @@ int vnic_vf_config_data_transfer(struct vnic *vnic, struct vnic_vf *vf, bool ena
 		vnic_snd_queue_config(vf, qs, enable);
 
 	} else {
-		qs = vf->qs;
+		if (!(qs = vf->qs))
+			return 0;
 		vnic_cmp_queue_config(vf, qs, disable);
 		vnic_rbdr_config(vf, qs, disable);
 		vnic_rcv_queue_config(vf, qs, disable);
