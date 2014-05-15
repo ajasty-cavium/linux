@@ -8,9 +8,10 @@ config CAVIUM_NET
         ---help---
           If you have Cavium CN88XX boards, say Y.
 
+if CAVIUM_NET
+
 config CN88XX_VNIC_PF
         tristate "CN88XX VNIC Physical function driver"
-	default y
 	depends on PCI
 	select CN88XX_BGX 
         ---help---
@@ -28,3 +29,4 @@ config	CN88XX_BGX
         ---help---
           This driver supports programming and controlling of MAC
 	  interface from VNIC PF driver.
+endif #CAVIUM_NET
