@@ -505,7 +505,7 @@ static void pci_release_host_bridge_dev(struct device *dev)
 	kfree(bridge);
 }
 
-static struct pci_host_bridge *pci_alloc_host_bridge(struct pci_bus *b)
+static struct pci_host_bridge *pci_alloc_host_bridge(void)
 {
 	struct pci_host_bridge *bridge;
 
@@ -514,7 +514,6 @@ static struct pci_host_bridge *pci_alloc_host_bridge(struct pci_bus *b)
 		return NULL;
 
 	INIT_LIST_HEAD(&bridge->windows);
-	bridge->bus = b;
 	return bridge;
 }
 
@@ -1715,8 +1714,9 @@ void __weak pcibios_remove_bus(struct pci_bus *bus)
 {
 }
 
-struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
-		struct pci_ops *ops, void *sysdata, struct list_head *resources)
+struct pci_bus *pci_create_root_bus_in_domain(struct device *parent,
+		int domain, int bus, struct pci_ops *ops, void *sysdata,
+		struct list_head *resources)
 {
 	int error;
 	struct pci_host_bridge *bridge;
@@ -1727,37 +1727,41 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 	char bus_addr[64];
 	char *fmt;
 
+	bridge = pci_alloc_host_bridge();
+	if (!bridge)
+		return ERR_PTR(-ENOMEM);
+
+	bridge->dev.parent = parent;
+	bridge->dev.release = pci_release_host_bridge_dev;
+	bridge->domain_nr = domain;
+
 	b = pci_alloc_bus();
-	if (!b)
-		return NULL;
+	if (!b) {
+		error = -ENOMEM;
+		goto err_out;
+	}
 
 	b->sysdata = sysdata;
 	b->ops = ops;
 	b->number = b->busn_res.start = bus;
-	b2 = pci_find_bus(pci_domain_nr(b), bus);
+	b2 = pci_find_bus(bridge->domain_nr, bus);
 	if (b2) {
 		/* If we already got to this bus through a different bridge, ignore it */
 		dev_dbg(&b2->dev, "bus already known\n");
-		goto err_out;
+		error = -EEXIST;
+		goto err_bus_out;
 	}
 
-	bridge = pci_alloc_host_bridge(b);
-	if (!bridge)
-		goto err_out;
-
-	bridge->dev.parent = parent;
-	bridge->dev.release = pci_release_host_bridge_dev;
-	dev_set_name(&bridge->dev, "pci%04x:%02x", pci_domain_nr(b), bus);
+	bridge->bus = b;
+	dev_set_name(&bridge->dev, "pci%04x:%02x", bridge->domain_nr, bus);
 	error = pcibios_root_bridge_prepare(bridge);
-	if (error) {
-		kfree(bridge);
+	if (error)
 		goto err_out;
-	}
 
 	error = device_register(&bridge->dev);
 	if (error) {
 		put_device(&bridge->dev);
-		goto err_out;
+		goto err_bus_out;
 	}
 	b->bridge = get_device(&bridge->dev);
 	device_enable_async_suspend(b->bridge);
@@ -1768,7 +1772,7 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 
 	b->dev.class = &pcibus_class;
 	b->dev.parent = b->bridge;
-	dev_set_name(&b->dev, "%04x:%02x", pci_domain_nr(b), bus);
+	dev_set_name(&b->dev, "%04x:%02x", bridge->domain_nr, bus);
 	error = device_register(&b->dev);
 	if (error)
 		goto class_dev_reg_err;
@@ -1814,9 +1818,31 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 class_dev_reg_err:
 	put_device(&bridge->dev);
 	device_unregister(&bridge->dev);
-err_out:
+err_bus_out:
 	kfree(b);
-	return NULL;
+err_out:
+	kfree(bridge);
+	return ERR_PTR(error);
+}
+
+struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
+		struct pci_ops *ops, void *sysdata, struct list_head *resources)
+{
+	int domain_nr;
+	struct pci_bus *b = pci_alloc_bus();
+	if (!b)
+		return NULL;
+
+	b->sysdata = sysdata;
+	domain_nr = pci_domain_nr(b);
+	kfree(b);
+
+	b = pci_create_root_bus_in_domain(parent, domain_nr, bus,
+				ops, sysdata, resources);
+	if (IS_ERR(b))
+		return NULL;
+
+	return b;
 }
 
 int pci_bus_insert_busn_res(struct pci_bus *b, int bus, int bus_max)
