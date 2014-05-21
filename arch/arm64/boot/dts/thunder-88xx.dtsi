@@ -407,4 +407,53 @@
 			clock-names = "apb_pclk";
 		};
 	};
+
+	pcie0@0x8480,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0x8480 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8010 0x00000000 0x8010 0x00000000 0x70 0x00000000>, /* mem ranges */
+			<0x03000000 0x8300 0x00000000 0x8300 0x00000000 0x80 0x00000000>,
+			<0x03000000 0x87e0 0x00000000 0x87e0 0x00000000 0x01 0x00000000>;
+        };
+
+	pcie1@0x8490,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0x8490 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8310 0x00000000 0x8310 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8100 0x00000000 0x8100 0x00000000 0x80 0x00000000>;
+        };
+
+	pcie2@0x84a0,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0x84a0 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8320 0x00000000 0x8320 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8430 0x00000000 0x8430 0x00000000 0x01 0x00000000>;
+        };
+
+	pcie3@0x84b0,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		reg = <0x84b0 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8330 0x00000000 0x8330 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8180 0x00000000 0x8180 0x00000000 0x80 0x00000000>;
+        };
 };
