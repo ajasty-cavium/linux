@@ -383,10 +383,10 @@
 			interrupts = <1 32 4>;
 		};
 
-		nic0: ethernet@843000000000 {
+		nic0: ethernet@845000000000 {
 			compatible = "smsc,lan9115";
 			reg-io-width = <4>;
-			reg = <0x8430 0x0 0x0 0x1000>;
+			reg = <0x8450 0x0 0x0 0x1000>;
 			interrupts = <1 31 4>;
 		};
 
