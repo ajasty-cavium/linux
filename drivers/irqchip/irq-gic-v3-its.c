@@ -1166,7 +1166,7 @@ static struct its_lpi_chunk *its_find_chunk(struct its_device *its_dev,
 	struct its_lpi_chunk *chunk;
 
 	list_for_each_entry(chunk, &its_dev->hwirq_list, entry) {
-		if (chunk->lpi_base >= d->hwirq &&
+		if (chunk->lpi_base <= d->hwirq &&
 		    (chunk->lpi_base + IRQS_PER_CHUNK) > d->hwirq)
 			return chunk;
 	}
