@@ -134,6 +134,14 @@ struct vgic_params {
 	void __iomem	*vctrl_base;
 };
 
+struct vgic_vm_ops {
+	bool	(*handle_mmio)(struct kvm_vcpu *, struct kvm_run *,
+			       struct kvm_exit_mmio *);
+	bool	(*queue_sgi)(struct kvm_vcpu *vcpu, int irq);
+	void	(*add_sgi_source)(struct kvm_vcpu *vcpu, int irq, int source);
+	int	(*vgic_init)(struct kvm *kvm, const struct vgic_params *params);
+};
+
 struct vgic_dist {
 #ifdef CONFIG_KVM_ARM_VGIC
 	spinlock_t		lock;
@@ -215,6 +223,8 @@ struct vgic_dist {
 
 	/* Bitmap indicating which CPU has something pending */
 	unsigned long		*irq_pending_on_cpu;
+
+	struct vgic_vm_ops	vm_ops;
 #endif
 };
 
