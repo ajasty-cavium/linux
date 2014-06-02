@@ -237,6 +237,7 @@ int vgic_v2_probe(struct device_node *vgic_node,
 		 vctrl_res.start, vgic->maint_irq);
 
 	vgic->type = VGIC_V2;
+	vgic->max_hw_vcpus = 8;
 	*ops = &vgic_v2_ops;
 	*params = vgic;
 	goto out;

@@ -132,6 +132,7 @@ struct vgic_params {
 	unsigned int	maint_irq;
 	/* Virtual control interface base address */
 	void __iomem	*vctrl_base;
+	int		max_hw_vcpus;
 };
 
 struct vgic_vm_ops {
@@ -287,6 +288,7 @@ struct kvm_exit_mmio;
 #ifdef CONFIG_KVM_ARM_VGIC
 int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, bool write);
 int kvm_vgic_hyp_init(void);
+int kvm_vgic_get_max_vcpus(void);
 int kvm_vgic_init(struct kvm *kvm);
 int kvm_vgic_create(struct kvm *kvm, u32 type);
 void kvm_vgic_destroy(struct kvm *kvm);
