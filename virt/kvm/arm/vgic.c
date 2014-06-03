@@ -1577,6 +1577,11 @@ static int init_vgic_model(struct kvm *kvm, int type)
 	case KVM_DEV_TYPE_ARM_VGIC_V2:
 		ret = vgic_v2_init_emulation(kvm);
 		break;
+#ifdef CONFIG_ARM_GIC_V3
+	case KVM_DEV_TYPE_ARM_VGIC_V3:
+		ret = vgic_v3_init_emulation(kvm);
+		break;
+#endif
 	default:
 		ret = -ENODEV;
 		break;
