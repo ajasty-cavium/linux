@@ -621,7 +621,7 @@ static int vnic_sq_subdesc_required (struct vnic *vnic, struct sk_buff *skb)
 	int proto;
 	int subdesc_cnt = MIN_SND_QUEUE_DESC_FOR_PKT_XMIT;
 
-	if ((vnic->hw_flags & VNIC_SG_ENABLE) && ~(vnic->hw_flags & VNIC_TSO_ENABLE)) 
+	if (skb_shinfo(skb)->nr_frags)
 		subdesc_cnt += skb_shinfo(skb)->nr_frags;
 
 	if ((vnic->hw_flags & VNIC_TX_CSUM_ENABLE) && 
@@ -687,12 +687,7 @@ void vnic_sq_add_gather_subdesc (struct vnic *vnic, struct vnic_queue_set *qs,
 
 	if (!skb_is_nonlinear(skb))
 		return;
-
-	if (~((vnic->hw_flags & VNIC_SG_ENABLE) && 
-			~(vnic->hw_flags & VNIC_TSO_ENABLE)))
-		return; 
-
-	pr_err("%s skb has frags\n", __FUNCTION__); 
+	
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		const struct skb_frag_struct *frag;
 

@@ -27,6 +27,9 @@
 #define 	VNIC_SG_ENABLE	       (1 << 3)
 #define 	VNIC_TSO_ENABLE	       (1 << 4)
 
+/* TSO not supported in Thunder pass1 */
+#define 	VNIC_HW_TSO_NOT_SUPPORTED
+
 /* NAPI enable or disable, undef this to disable */
 #define		VNIC_NAPI_ENABLE      
 
