@@ -1198,6 +1198,7 @@ static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 	if (list_empty(&its_dev->hwirq_list)) {
 		/* Unmap device/itt */
 		its_send_mapd(its_dev, 0);
+		list_del(&its_dev->entry);
 		its_free_device(its_dev);
 	}
 }
