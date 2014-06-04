@@ -43,6 +43,7 @@ MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, vnic_id_table);
 
 static int vnic_enable_msix (struct vnic *vnic);
+static netdev_tx_t vnic_xmit(struct sk_buff *skb, struct net_device *netdev);
 
 static void vnic_dump_packet (struct sk_buff *skb)
 {
@@ -101,8 +102,8 @@ void vnic_send_msg_to_pf (struct vnic_vf *vf, struct vnic_mbx *mbx)
 			timeout -= sleep;
 		if (!timeout) {
 			dev_err(&vf->pdev->dev, 
-				"PF didn't ack mailbox msg from VF%d\n",
-								vf->vnic_id);
+				"PF didn't ack to mailbox msg %lld from VF%d\n",
+						(mbx->msg & 0xFF), vf->vnic_id);
 			return;
 		}
 	}
@@ -112,6 +113,8 @@ static int vnic_check_pf_ready (struct vnic_vf *vf)
 {
 	int timeout = 5000, sleep = 20;
 	uint64_t mbx_addr = NIC_VF_0_127_PF_MAILBOX_0_7;
+
+	pf_ready_to_rcv_msg = false;
 
 	vnic_vf_reg_write(vf, mbx_addr, VNIC_PF_VF_MSG_READY);
 
@@ -126,7 +129,7 @@ static int vnic_check_pf_ready (struct vnic_vf *vf)
 			timeout -= sleep;
 		if (!timeout) {
 			dev_err(&vf->pdev->dev, 
-				"PF didn't respond to mailbox msg from VF%d\n"
+				"PF didn't respond to READY msg from VF%d\n"
 								,vf->vnic_id);
 			return 0;
 		}
@@ -626,9 +629,44 @@ static void vnic_update_tx_stats(struct vnic *vnic, struct sk_buff *skb)
 	return;
 }
 
+#ifdef VNIC_HW_TSO_NOT_SUPPORTED
+static int vnic_sw_tso (struct sk_buff *skb, struct net_device *netdev)
+{
+	struct sk_buff *segs, *nskb;
+	
+	if (skb->len <= (netdev->mtu + ETH_HLEN)) 
+		return 1;
+
+	/* Segment the large frame */
+	segs = skb_gso_segment(skb, netdev->features & ~NETIF_F_TSO);
+        if (IS_ERR(segs))
+		goto gso_err;
+
+	do {
+		nskb = segs;             
+		segs = segs->next;
+		nskb->next = NULL;
+		vnic_xmit(nskb, netdev);
+	} while (segs);
+
+gso_err:
+	dev_kfree_skb(skb);
+                 
+        return NETDEV_TX_OK;
+}
+#endif
+
 static netdev_tx_t vnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct vnic *vnic = netdev_priv(netdev);
+	int ret = 1;
+
+#ifdef VNIC_HW_TSO_NOT_SUPPORTED
+	if (netdev->features & NETIF_F_TSO)
+		ret = vnic_sw_tso (skb, netdev);	
+#endif
+	if (ret == NETDEV_TX_OK)
+		return NETDEV_TX_OK;
 
 	vnic_sq_append_skb(vnic, skb);
 
@@ -856,6 +894,8 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Get this VF's number */
 	vnic->vf->vnic_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 21) & 0xFF;
+	
+	vnic->hw_flags = VNIC_SG_ENABLE | VNIC_TSO_ENABLE;
 
 	if (vnic->hw_flags & VNIC_RX_CSUM_ENABLE)
 		netdev->hw_features |= NETIF_F_RXCSUM; 
@@ -868,6 +908,7 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (vnic->hw_flags & VNIC_LRO_ENABLE)
 		netdev->hw_features |= NETIF_F_LRO; 
 
+	netdev->features |= netdev->hw_features;
 	netdev->netdev_ops = &vnic_netdev_ops;
 
 	if ((err = register_netdev(netdev))) {
