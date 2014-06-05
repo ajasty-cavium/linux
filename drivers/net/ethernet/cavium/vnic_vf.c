@@ -275,6 +275,9 @@ static void vnic_snd_pkt_handler (struct net_device *netdev,
 		}
 	}
 	vnic_put_sq_desc(vf->qs, cqe_tx->sq_idx, hdr->subdesc_cnt + 1);
+
+	if (netif_queue_stopped(netdev))
+		netif_wake_queue(netdev);
 }
 
 static void vnic_rcv_pkt_handler (struct net_device *netdev, 
@@ -661,6 +664,12 @@ static netdev_tx_t vnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	struct vnic *vnic = netdev_priv(netdev);
 	int ret = 1;
 
+	/* Check for minimum packet length */
+        if (skb->len <= ETH_HLEN) {
+                dev_kfree_skb(skb);
+                return NETDEV_TX_OK;
+        }
+
 #ifdef VNIC_HW_TSO_NOT_SUPPORTED
 	if (netdev->features & NETIF_F_TSO)
 		ret = vnic_sw_tso (skb, netdev);	
@@ -668,8 +677,13 @@ static netdev_tx_t vnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (ret == NETDEV_TX_OK)
 		return NETDEV_TX_OK;
 
-	vnic_sq_append_skb(vnic, skb);
-
+	if (!vnic_sq_append_skb(vnic, skb) && !netif_queue_stopped(netdev)) {
+		netif_stop_queue(netdev);
+		pr_err("VF%d: TX ring full, stop transmitting packets\n", 
+							vnic->vf->vnic_id);
+		return NETDEV_TX_BUSY;	
+	}
+	
 	vnic_update_tx_stats(vnic, skb);
 
 	return NETDEV_TX_OK;
@@ -742,33 +756,6 @@ static int vnic_open(struct net_device *netdev)
 	}
 
 	qs = vf->qs;
-	/* Enable interrupts */
-	/* Enable completion queue interrupt */
-	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
-		vnic_enable_intr (vnic, VNIC_INTR_CQ, qidx);
-
-	/* Init RBDR tasklet and enable RBDR threshold interrupt */
-	tasklet_init(&vf->rbdr_task, vnic_refill_rbdr, (unsigned long) vnic);
-
-	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-		vnic_enable_intr (vnic, VNIC_INTR_RBDR, qidx);
-
-	/* Init tasklet for handling Qset err interrupt */
-	tasklet_init(&vf->qs_err_task, vnic_handle_qs_err, (unsigned long) vnic);
-
-	/* Enable Qset err interrupt */
-	vnic_enable_intr (vnic, VNIC_INTR_QS_ERR, 0);
-
-	if (is_zero_ether_addr(netdev->dev_addr))
-		eth_hw_addr_random(netdev);
-
-	vnic_hw_set_mac_addr(vnic, netdev);
-
-	if (vnic_is_link_active(vnic)) {
-		netif_carrier_on(netdev);
-		netif_wake_queue(netdev);	
-	}
-
 #ifdef VNIC_NAPI_ENABLE
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		cq_poll = NULL;
@@ -793,6 +780,34 @@ napi_del:
 	return -ENOMEM;
 no_err:
 #endif
+
+	/* Set MAC-ID */
+	if (is_zero_ether_addr(netdev->dev_addr))
+		eth_hw_addr_random(netdev);
+
+	vnic_hw_set_mac_addr(vnic, netdev);
+
+	/* Init tasklet for handling Qset err interrupt */
+	tasklet_init(&vf->qs_err_task, vnic_handle_qs_err, (unsigned long) vnic);
+
+	/* Enable Qset err interrupt */
+	vnic_enable_intr (vnic, VNIC_INTR_QS_ERR, 0);
+
+	/* Enable completion queue interrupt */
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
+		vnic_enable_intr (vnic, VNIC_INTR_CQ, qidx);
+
+	/* Init RBDR tasklet and enable RBDR threshold interrupt */
+	tasklet_init(&vf->rbdr_task, vnic_refill_rbdr, (unsigned long) vnic);
+
+	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+		vnic_enable_intr (vnic, VNIC_INTR_RBDR, qidx);
+
+	if (vnic_is_link_active(vnic)) {
+		netif_carrier_on(netdev);
+		netif_start_queue(netdev);	
+	}
+
 	return 0;
 }
 
