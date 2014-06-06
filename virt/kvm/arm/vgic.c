@@ -1249,7 +1249,7 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	struct kvm_vcpu *vcpu;
 	int edge_triggered, level_triggered;
 	int enabled;
-	bool ret = true;
+	bool ret = true, can_inject = true;
 
 	spin_lock(&dist->lock);
 
@@ -1264,6 +1264,11 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 
 	if (irq_num >= VGIC_NR_PRIVATE_IRQS) {
 		cpuid = dist->irq_spi_cpu[irq_num - VGIC_NR_PRIVATE_IRQS];
+		if (cpuid == VCPU_NOT_ALLOCATED) {
+			/* Pretend we use CPU0, and prevent injection */
+			cpuid = 0;
+			can_inject = false;
+		}
 		vcpu = kvm_get_vcpu(kvm, cpuid);
 	}
 
@@ -1285,7 +1290,7 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 
 	enabled = vgic_irq_is_enabled(vcpu, irq_num);
 
-	if (!enabled) {
+	if (!enabled || !can_inject) {
 		ret = false;
 		goto out;
 	}
@@ -1438,6 +1443,7 @@ void kvm_vgic_destroy(struct kvm *kvm)
 	}
 	kfree(dist->irq_sgi_sources);
 	kfree(dist->irq_spi_cpu);
+	kfree(dist->irq_spi_mpidr);
 	kfree(dist->irq_spi_target);
 	kfree(dist->irq_pending_on_cpu);
 	dist->irq_sgi_sources = NULL;
@@ -1628,6 +1634,7 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	kvm->arch.vgic.vctrl_base = vgic->vctrl_base;
 	kvm->arch.vgic.vgic_dist_base = VGIC_ADDR_UNDEF;
 	kvm->arch.vgic.vgic_cpu_base = VGIC_ADDR_UNDEF;
+	kvm->arch.vgic.vgic_redist_base = VGIC_ADDR_UNDEF;
 
 out_unlock:
 	for (; vcpu_lock_idx >= 0; vcpu_lock_idx--) {
