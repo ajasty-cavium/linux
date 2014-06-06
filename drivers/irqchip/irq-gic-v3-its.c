@@ -197,8 +197,8 @@ static void its_encode_phys_id(struct its_cmd_block *cmd, u32 phys_id)
 
 static void its_encode_size(struct its_cmd_block *cmd, u8 size)
 {
-	cmd->raw_cmd[1] &= ~0x1fUL;
-	cmd->raw_cmd[1] |= size & 0x1f;
+	cmd->raw_cmd[1] &= ~0xffUL;
+	cmd->raw_cmd[1] |= size & 0xff;
 }
 
 static void its_encode_itt(struct its_cmd_block *cmd, u64 itt_addr)
