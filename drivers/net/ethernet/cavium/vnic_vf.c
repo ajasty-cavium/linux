@@ -930,7 +930,9 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_err(dev, "Failed to register netdevice\n");
 		goto err_unmap_resources;
 	}
-
+#ifdef VNIC_ETHTOOL_ENABLE
+	vnic_set_ethtool_ops(netdev);
+#endif
 	goto exit;
 
 err_unmap_resources:

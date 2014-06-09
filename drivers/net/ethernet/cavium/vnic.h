@@ -30,6 +30,10 @@
 /* TSO not supported in Thunder pass1 */
 #define 	VNIC_HW_TSO_NOT_SUPPORTED
 
+
+/* ETHTOOL enable or disable, undef this to disable */
+#define 	VNIC_ETHTOOL_ENABLE
+
 /* NAPI enable or disable, undef this to disable */
 #define		VNIC_NAPI_ENABLE      
 
@@ -125,8 +129,8 @@ struct vnic_pf {
 };
 
 struct vnic {
-        struct net_device  *netdev;
-        struct pci_dev     *pdev;
+	struct net_device  *netdev;
+	struct pci_dev     *pdev;
 	uint16_t	   mtu;
 	uint16_t	   hw_flags;
 	struct vnic_vf     *vf;
@@ -216,6 +220,63 @@ struct vnic_mbx {
 	uint64_t	   mbx_trigger_intr;
 };
 
+/*
+ * Stats 
+ */
+ 
+#ifdef VNIC_ETHTOOL_ENABLE
+/* Tx statistics */
+struct vnic_tx_stats {
+	u64 tx_frames_ok;
+	u64 tx_unicast_frames_ok;
+	u64 tx_multicast_frames_ok;
+	u64 tx_broadcast_frames_ok;
+	u64 tx_bytes_ok;
+	u64 tx_unicast_bytes_ok;
+	u64 tx_multicast_bytes_ok;
+	u64 tx_broadcast_bytes_ok;
+	u64 tx_drops;
+	u64 tx_errors;
+	u64 tx_tso;
+	u64 rsvd[16];
+};
+
+/* Rx statistics */
+struct vnic_rx_stats {
+	u64 rx_frames_ok;
+	u64 rx_frames_total;
+	u64 rx_unicast_frames_ok;
+	u64 rx_multicast_frames_ok;
+	u64 rx_broadcast_frames_ok;
+	u64 rx_bytes_ok;
+	u64 rx_unicast_bytes_ok;
+	u64 rx_multicast_bytes_ok;
+	u64 rx_broadcast_bytes_ok;
+	u64 rx_drop;
+	u64 rx_no_bufs;
+	u64 rx_errors;
+	u64 rx_rss;
+	u64 rx_crc_errors;
+	u64 rx_frames_64;
+	u64 rx_frames_127;
+	u64 rx_frames_255;
+	u64 rx_frames_511;
+	u64 rx_frames_1023;
+	u64 rx_frames_1518;
+	u64 rx_frames_to_max;
+	u64 rsvd[16];
+};
+
+struct eth_stats {
+	struct vnic_tx_stats tx;
+	struct vnic_rx_stats rx;
+};
+
+void vnic_set_ethtool_ops(struct net_device *netdev);
+#endif
+
 struct vnic_mbx *vnic_get_mbx (void);
 void vnic_send_msg_to_pf (struct vnic_vf *vf, struct vnic_mbx *mbx);
+
+
 #endif /* VNIC_H */
