@@ -618,20 +618,20 @@ void vnic_put_sq_desc (struct vnic_queue_set *qs, int sq_idx, int desc_cnt)
 
 static int vnic_sq_subdesc_required (struct vnic *vnic, struct sk_buff *skb)
 {
-	int proto;
 	int subdesc_cnt = MIN_SND_QUEUE_DESC_FOR_PKT_XMIT;
 
 	if (skb_shinfo(skb)->nr_frags)
 		subdesc_cnt += skb_shinfo(skb)->nr_frags;
 
-	if ((vnic->hw_flags & VNIC_TX_CSUM_ENABLE) && 
-			(skb->ip_summed == CHECKSUM_PARTIAL)) {
+#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		if (skb->protocol == htons(ETH_P_IP))
 			subdesc_cnt++;
-		proto = ip_hdr(skb)->protocol;
-		if ((proto == IPPROTO_TCP) || (proto == IPPROTO_UDP))
+		if ((ip_hdr(skb)->protocol == IPPROTO_TCP) || 
+			(ip_hdr(skb)->protocol == IPPROTO_UDP))
 			subdesc_cnt++;
 	}
+#endif
 
 	return subdesc_cnt;
 }
@@ -642,7 +642,7 @@ static int vnic_sq_subdesc_required (struct vnic *vnic, struct sk_buff *skb)
  */
 struct sq_hdr_subdesc *
 vnic_sq_add_hdr_subdesc (struct vnic_queue_set *qs, int sq_num, 
-				int subdesc_cnt, int pkt_byte_cnt)
+				int subdesc_cnt, struct sk_buff *skb)
 {
 	void *desc;
 	struct sq_hdr_subdesc *hdr;
@@ -654,7 +654,21 @@ vnic_sq_add_hdr_subdesc (struct vnic_queue_set *qs, int sq_num,
 	hdr->subdesc_type = SQ_DESC_TYPE_HEADER;
 	hdr->post_cqe = 1;
 	hdr->subdesc_cnt = subdesc_cnt;
-	hdr->tot_len = pkt_byte_cnt;
+	hdr->tot_len = skb->len;
+
+#ifdef VNIC_HW_TSO_SUPPORT	
+	if (!skb_shinfo(skb)->gso_size)
+		return hdr;
+
+	/* Packet to be subjected to TSO */
+	hdr->tso = 1;
+	hdr->tso_l4_offset = (int)(skb_transport_header(skb) - skb->data) +
+                                tcp_hdrlen(skb);
+	hdr->tso_max_paysize = skb_shinfo(skb)->gso_size + hdr->tso_l4_offset;
+	/* TBD: These fields have to be setup properly */
+	hdr->tso_sdc_first = hdr->tso_sdc_cont = 0
+	hdr->tso_flags_first = hdr->tso_flags_last = 0;
+#endif
 
 	return hdr;
 }
@@ -786,11 +800,13 @@ int vnic_sq_append_skb (struct vnic *vnic, struct sk_buff *skb)
 		goto append_fail;
 
 	/* Add SQ header subdesc */
-	hdr_desc = vnic_sq_add_hdr_subdesc(qs, sq_num, subdesc_cnt - 1, skb->len);
+	hdr_desc = vnic_sq_add_hdr_subdesc(qs, sq_num, subdesc_cnt - 1, skb);
 
+#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
 	/* Add CRC subdescriptor for IP/TCP/UDP (L3/L4) crc calculation */
-	if (vnic->hw_flags & VNIC_TX_CSUM_ENABLE)
+	if (skb->ip_summed == CHECKSUM_PARTIAL)
 		vnic_sq_add_crc_subdesc(vnic, qs, sq_num, skb);
+#endif
 
 	/* Add SQ gather subdesc */	
 	vnic_sq_add_gather_subdesc(vnic, qs, sq_num, skb);

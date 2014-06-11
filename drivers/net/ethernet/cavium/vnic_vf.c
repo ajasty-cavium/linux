@@ -22,6 +22,8 @@
 #include <linux/if_vlan.h>
 #include <linux/ethtool.h>
 #include <linux/aer.h>
+#include <linux/ip.h>
+#include <net/tcp.h>
 
 #include "vnic.h"
 #include "vnic_hw.h"
@@ -281,7 +283,7 @@ static void vnic_snd_pkt_handler (struct net_device *netdev,
 }
 
 static void vnic_rcv_pkt_handler (struct net_device *netdev, 
-				  void *cq_desc, int cqe_type)
+			struct napi_struct *napi, void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb;
 	struct vnic *vnic = netdev_priv(netdev);
@@ -305,9 +307,6 @@ static void vnic_rcv_pkt_handler (struct net_device *netdev,
 		pr_err("Packet not received\n");
 		return;
 	}
-#ifdef VNIC_RX_CHKSUM_SUPPORTED
-	skb->ip_summed = CHECKSUM_UNNECESSARY;
-#endif
 
 	vnic_dump_packet(skb);
 
@@ -316,15 +315,27 @@ static void vnic_rcv_pkt_handler (struct net_device *netdev,
 	atomic64_add(skb->len, (atomic64_t *)&netdev->stats.rx_bytes);
 
 	skb->protocol = eth_type_trans(skb, netdev);
+
+#ifdef VNIC_RX_CHKSUM_SUPPORTED
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+#else
+	skb_checksum_none_assert(skb);
+#endif
+
 #ifdef  VNIC_NAPI_ENABLE
-	netif_receive_skb(skb);
+#ifdef  VNIC_SW_LRO_SUPPORT
+	if (napi && (netdev->features & NETIF_F_GRO))
+		napi_gro_receive(napi, skb);
+	else
+#endif 
+		netif_receive_skb(skb);
 #else
 	netif_rx(skb);
 #endif
 }
 
 static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum, 
-							bool napi, int budget)
+					struct napi_struct *napi, int budget)
 {
 	int processed_cqe = 0, work_done = 0;
 	int cqe_count, cqe_head;
@@ -356,7 +367,7 @@ static int vnic_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		//pr_err("cq_desc->cqe_type %d\n", cq_desc->cqe_type);
 		switch (cq_desc->cqe_type) {
 		case CQE_TYPE_RX:
-			vnic_rcv_pkt_handler(netdev, cq_desc, CQE_TYPE_RX);
+			vnic_rcv_pkt_handler(netdev, napi, cq_desc, CQE_TYPE_RX);
 			work_done++;
 		break;
 		case CQE_TYPE_SEND:
@@ -383,7 +394,7 @@ static int vnic_poll (struct napi_struct *napi, int budget)
 	struct vnic *vnic = netdev_priv(netdev);
 	struct vnic_cq_poll *cq = container_of(napi, struct vnic_cq_poll, napi);
 
-	work_done = vnic_cq_intr_handler (netdev, cq->cq_idx, true, budget);
+	work_done = vnic_cq_intr_handler (netdev, cq->cq_idx, napi, budget);
 	
 	if (work_done < budget) {
 		/* Slow packet rate, exit polling */
@@ -412,7 +423,7 @@ void vnic_handle_qs_err (unsigned long data)
 		cq_status = vnic_queue_reg_read(vf, NIC_QSET_0_127_CQ_0_7_STATUS, cq_idx);
 		if (!(cq_status & CQ_WR_FULL))
 			continue;
-		vnic_cq_intr_handler(vnic->netdev, cq_idx, false, 0); 
+		vnic_cq_intr_handler(vnic->netdev, cq_idx, NULL, 0); 
                 /* Re-enable completion queue */
 		cq_ena = vnic_queue_reg_read(vf, NIC_QSET_0_127_CQ_0_7_CFG, cq_idx);
 		cq_ena |= (1ULL << 42);
@@ -467,7 +478,7 @@ static irqreturn_t vnic_intr_handler (int irq, void *vnic_irq)
 #else
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		if (cq_intr & (1 << qidx))
-			vnic_cq_intr_handler (vnic->netdev, qidx, false, 0);
+			vnic_cq_intr_handler (vnic->netdev, qidx, NULL, 0);
 	}
 #endif
 	/* Handle RBDR interrupts */
@@ -632,12 +643,12 @@ static void vnic_update_tx_stats(struct vnic *vnic, struct sk_buff *skb)
 	return;
 }
 
-#ifdef VNIC_HW_TSO_NOT_SUPPORTED
+#ifdef VNIC_SW_TSO_SUPPORT
 static int vnic_sw_tso (struct sk_buff *skb, struct net_device *netdev)
 {
 	struct sk_buff *segs, *nskb;
-	
-	if (skb->len <= (netdev->mtu + ETH_HLEN)) 
+
+	if (!skb_shinfo(skb)->gso_size)
 		return 1;
 
 	/* Segment the large frame */
@@ -666,20 +677,41 @@ static netdev_tx_t vnic_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 	/* Check for minimum packet length */
         if (skb->len <= ETH_HLEN) {
+		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_errors);
                 dev_kfree_skb(skb);
                 return NETDEV_TX_OK;
         }
 
-#ifdef VNIC_HW_TSO_NOT_SUPPORTED
+#ifdef VNIC_SW_TSO_SUPPORT
 	if (netdev->features & NETIF_F_TSO)
 		ret = vnic_sw_tso (skb, netdev);	
 #endif
 	if (ret == NETDEV_TX_OK)
 		return NETDEV_TX_OK;
 
+#ifndef VNIC_TX_CSUM_OFFLOAD_SUPPORT
+	/* Calculate checksum in software */
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		if (unlikely(skb_checksum_help(skb))) {
+			netdev_dbg(netdev, "unable to do checksum\n");
+			dev_kfree_skb_any(skb);
+			return NETDEV_TX_OK;
+		}
+	}
+#endif
+#ifdef VNIC_HW_TSO_SUPPORT 
+        if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
+				(ip_hdr(skb)->protocol != IPPROTO_TCP))) {
+		netdev_dbg(netdev, "Only TCP segmentation is supported, \
+							dropping packet\n");
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+#endif	
 	if (!vnic_sq_append_skb(vnic, skb) && !netif_queue_stopped(netdev)) {
 		netif_stop_queue(netdev);
-		pr_err("VF%d: TX ring full, stop transmitting packets\n", 
+		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_dropped);
+		netdev_dbg(netdev, "VF%d: TX ring full, stop transmitting packets\n", 
 							vnic->vf->vnic_id);
 		return NETDEV_TX_BUSY;	
 	}
@@ -910,18 +942,21 @@ static int vnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Get this VF's number */
 	vnic->vf->vnic_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 21) & 0xFF;
 	
-	vnic->hw_flags = VNIC_SG_ENABLE | VNIC_TSO_ENABLE;
-
-	if (vnic->hw_flags & VNIC_RX_CSUM_ENABLE)
-		netdev->hw_features |= NETIF_F_RXCSUM; 
-	if (vnic->hw_flags & VNIC_TX_CSUM_ENABLE)
-		netdev->hw_features |= NETIF_F_IP_CSUM; 
-	if (vnic->hw_flags & VNIC_SG_ENABLE)
-		netdev->hw_features |= NETIF_F_SG;
-	if (vnic->hw_flags & VNIC_TSO_ENABLE)
-		netdev->hw_features |= NETIF_F_TSO | NETIF_F_SG | NETIF_F_HW_CSUM;
-	if (vnic->hw_flags & VNIC_LRO_ENABLE)
-		netdev->hw_features |= NETIF_F_LRO; 
+#ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
+	netdev->hw_features |= NETIF_F_RXCSUM; 
+#endif
+#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
+	netdev->hw_features |= NETIF_F_IP_CSUM; 
+#endif
+#ifdef VNIC_SG_SUPPORT
+	netdev->hw_features |= NETIF_F_SG; 
+#endif
+#ifdef VNIC_TSO_SUPPORT
+	netdev->hw_features |= NETIF_F_TSO | NETIF_F_SG | NETIF_F_IP_CSUM; 
+#endif
+#ifdef VNIC_HW_LRO_SUPPORT
+	netdev->hw_features |= NETIF_F_LRO; 
+#endif
 
 	netdev->features |= netdev->hw_features;
 	netdev->netdev_ops = &vnic_netdev_ops;

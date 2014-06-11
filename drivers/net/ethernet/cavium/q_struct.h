@@ -505,12 +505,12 @@ struct sq_mem_subdesc {
 struct sq_hdr_subdesc {
 #ifdef BIG_ENDIAN
 	uint64_t    tso_sdc_cont:8;
-	uint64_t    tso_sdc_fitst:8;
+	uint64_t    tso_sdc_first:8;
 	uint64_t    tso_l4_offset:8;
 	uint64_t    tso_flags_last:12;
 	uint64_t    tso_flags_first:12;
 	uint64_t    rsvd2:2;
-	uint64_t    tso_max_psize:14;
+	uint64_t    tso_max_paysize:14;
 	uint64_t    subdesc_type:4;
 	uint64_t    tso:1;
 	uint64_t    post_cqe:1; /* Post CQE on no error also */
@@ -538,12 +538,12 @@ struct sq_hdr_subdesc {
 	uint64_t    post_cqe:1; /* Post CQE on no error also */
 	uint64_t    tso:1;
 	uint64_t    subdesc_type:4;
-	uint64_t    tso_max_psize:14;
+	uint64_t    tso_max_paysize:14;
 	uint64_t    rsvd2:2;
 	uint64_t    tso_flags_first:12;
 	uint64_t    tso_flags_last:12;
 	uint64_t    tso_l4_offset:8;
-	uint64_t    tso_sdc_fitst:8;
+	uint64_t    tso_sdc_first:8;
 	uint64_t    tso_sdc_cont:8;
 #endif
 };
