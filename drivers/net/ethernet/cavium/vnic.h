@@ -21,14 +21,23 @@
 #define		VNIC_VFID_PF	0
 
 /* VNIC HW optimiation features */
-#define 	VNIC_RX_CSUM_ENABLE    (1 << 0)
-#define 	VNIC_TX_CSUM_ENABLE    (1 << 1)
-#define 	VNIC_LRO_ENABLE	       (1 << 2)
-#define 	VNIC_SG_ENABLE	       (1 << 3)
-#define 	VNIC_TSO_ENABLE	       (1 << 4)
+#undef	 	VNIC_RX_CSUM_OFFLOAD_SUPPORT 
+#undef	 	VNIC_TX_CSUM_OFFLOAD_SUPPORT 
+#define 	VNIC_SG_SUPPORT     
+#define 	VNIC_TSO_SUPPORT
+#define 	VNIC_LRO_SUPPORT 
 
 /* TSO not supported in Thunder pass1 */
-#define 	VNIC_HW_TSO_NOT_SUPPORTED
+#ifdef VNIC_TSO_SUPPORT
+#define	 	VNIC_SW_TSO_SUPPORT
+#undef		VNIC_HW_TSO_SUPPORT
+#endif
+
+/* LRO not supported even in Thunder pass2 */
+#ifdef VNIC_LRO_SUPPORT
+#undef	 	VNIC_SW_LRO_SUPPORT
+#undef		VNIC_HW_LRO_SUPPORT
+#endif
 
 
 /* ETHTOOL enable or disable, undef this to disable */
