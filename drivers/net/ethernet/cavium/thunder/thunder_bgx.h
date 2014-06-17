@@ -6,8 +6,8 @@
  * Copyright (C) 2014 Cavium, Inc. 
  */
 
-#ifndef CN88XX_BGX_H
-#define CN88XX_BGX_H
+#ifndef THUNDER_BGX_H
+#define THUNDER_BGX_H
 
 #define MAX_BGX_PER_CN88XX  2
 #define MAX_LMAC_PER_BGX    4
@@ -22,4 +22,4 @@
 extern void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
 extern void bgx_lmac_disable (uint64_t lmac);
 extern void bgx_lmac_enable (uint64_t lmac);
-#endif
+#endif /* THUNDER_BGX_H */

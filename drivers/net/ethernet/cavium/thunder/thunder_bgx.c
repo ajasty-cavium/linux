@@ -16,11 +16,11 @@
 #include <linux/workqueue.h>
 #include <linux/pci.h>
 
-#include "vnic.h"
-#include "vnic_hw.h"
-#include "cn88xx_bgx.h"
+#include "nic.h"
+#include "nic_reg.h"
+#include "thunder_bgx.h"
 
-#define DRV_NAME  	"BGX"
+#define DRV_NAME  	"thunder-BGX"
 #define DRV_VERSION  	"1.0"
 
 struct lmac {
@@ -38,12 +38,12 @@ struct bgx *bgx_vnic[MAX_BGX_PER_CN88XX];
 
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(bgx_id_table) = {
-        { PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_8XXX_BGX) },
+        { PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_BGX) },
         { 0, }  /* end of table */
 };
 
 MODULE_AUTHOR("Cavium Inc");
-MODULE_DESCRIPTION("Cavium 8xxx BGX or MAC Driver");
+MODULE_DESCRIPTION("Cavium Thunder BGX/MAC Driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
