@@ -6,8 +6,8 @@
  * Copyright (C) 2013 Cavium, Inc. 
  */
 
-#ifndef VNIC_QUEUES_H
-#define VNIC_QUEUES_H
+#ifndef NICVF_QUEUES_H
+#define NICVF_QUEUES_H
 
 #include "q_struct.h"
 
@@ -56,16 +56,16 @@
 #define    CMP_QUEUE_DESC_SIZE		512
 
 /* Buffer / descriptor alignments */
-#define    VNIC_RCV_BUF_ALIGN		7 
-#define    VNIC_RCV_BUF_ALIGN_BYTES	(1ULL << VNIC_RCV_BUF_ALIGN) 
-#define    VNIC_CQ_BASE_ALIGN_BYTES	512  /* 9 bits */
-#define    VNIC_SQ_BASE_ALIGN_BYTES	128  /* 7 bits */
+#define    NICVF_RCV_BUF_ALIGN		7 
+#define    NICVF_RCV_BUF_ALIGN_BYTES	(1ULL << NICVF_RCV_BUF_ALIGN) 
+#define    NICVF_CQ_BASE_ALIGN_BYTES	512  /* 9 bits */
+#define    NICVF_SQ_BASE_ALIGN_BYTES	128  /* 7 bits */
 
-#define    VNIC_ALIGNED_ADDR(ADDR, ALIGN_BYTES)		ALIGN(ADDR, ALIGN_BYTES)
-#define    VNIC_ADDR_ALIGN_LEN(ADDR, BYTES) 	(VNIC_ALIGNED_ADDR(ADDR, BYTES) - BYTES)
-#define    VNIC_RCV_BUF_ALIGN_LEN(X)		(VNIC_ALIGNED_ADDR(X, VNIC_RCV_BUF_ALIGN_BYTES) - X)
+#define    NICVF_ALIGNED_ADDR(ADDR, ALIGN_BYTES)		ALIGN(ADDR, ALIGN_BYTES)
+#define    NICVF_ADDR_ALIGN_LEN(ADDR, BYTES) 	(NICVF_ALIGNED_ADDR(ADDR, BYTES) - BYTES)
+#define    NICVF_RCV_BUF_ALIGN_LEN(X)		(NICVF_ALIGNED_ADDR(X, NICVF_RCV_BUF_ALIGN_BYTES) - X)
 
-struct vnic_desc_mem {
+struct q_desc_mem {
 	dma_addr_t	dma;
 	uint64_t	size;
 	uint16_t	q_len;
@@ -73,17 +73,17 @@ struct vnic_desc_mem {
 	void		*unalign_base;
 };
 
-struct vnic_rbdr {
+struct rbdr {
 	bool		enable;
 	uint32_t	buf_size;
 	uint32_t	thresh;      /* Threshold level for interrupt */
-	struct vnic_desc_mem   desc_mem;
+	struct q_desc_mem   desc_mem;
 	struct rbdr_entry_t    *desc[DEFAULT_RCV_BUF_COUNT];
 };
 
-struct vnic_rcv_queue {
-	struct	vnic_rbdr  *rbdr_start;
-	struct	vnic_rbdr  *rbdr_cont;
+struct rcv_queue {
+	struct	rbdr  *rbdr_start;
+	struct	rbdr  *rbdr_cont;
 	bool	en_tcp_reassembly;
 	uint8_t cq_qs;  /* CQ's QS to which this RQ is assigned */
 	uint8_t cq_idx; /* CQ index (0 to 7) in the QS */
@@ -93,39 +93,39 @@ struct vnic_rcv_queue {
 	uint8_t start_qs_rbdr_idx; /* RBDR idx in the above QS */
 };
 
-struct vnic_cmp_queue {
-	struct vnic_desc_mem   desc_mem;
+struct cmp_queue {
+	struct q_desc_mem   desc_mem;
 	uint8_t   intr_timer_thresh;
 	uint16_t  thresh;
 };
 
-struct vnic_sq_desc {
+struct sq_desc {
 	bool   free;
-	struct vnic_sq_desc  *next;
+	struct sq_desc  *next;
 };
 
-struct vnic_snd_queue {
-	struct vnic_desc_mem   desc_mem;
+struct snd_queue {
+	struct    q_desc_mem   desc_mem;
 	uint8_t   cq_qs;  /* CQ's QS to which this SQ is pointing */
 	uint8_t   cq_idx; /* CQ index (0 to 7) in the above QS */
 	uint16_t  free_cnt;
 	uint64_t  head;
 	uint64_t  tail;
-	uint64_t *skbuff;
+	uint64_t  *skbuff;
 };
 
-struct vnic_queue_set {
+struct queue_set {
 	bool      enabled;
 	bool      be_en;
 	uint8_t   vnic_id;
 	uint8_t   rq_cnt;
-	struct	  vnic_rcv_queue rq[MAX_RCV_QUEUES_PER_QS];
+	struct	  rcv_queue rq[MAX_RCV_QUEUES_PER_QS];
 	uint8_t   cq_cnt;
-	struct    vnic_cmp_queue cq[MAX_CMP_QUEUES_PER_QS];
+	struct    cmp_queue cq[MAX_CMP_QUEUES_PER_QS];
 	uint8_t   sq_cnt;
-	struct    vnic_snd_queue sq[MAX_SND_QUEUES_PER_QS];
+	struct    snd_queue sq[MAX_SND_QUEUES_PER_QS];
 	uint8_t   rbdr_cnt;
-	struct    vnic_rbdr rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
+	struct    rbdr  rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
 };
 
 /* Completion queue */
@@ -135,19 +135,30 @@ struct vnic_queue_set {
 #define 	CQ_WR_FAULT 	(1 << 24)
 #define 	CQ_CQE_COUNT 	(0xFF << 0)
 
-int vnic_vf_config_data_transfer(struct vnic *vnic, struct vnic_vf *vf, bool enable);
-void vnic_qset_config (struct vnic_vf *vf, struct vnic_queue_set *qs, bool enable);
-int vnic_get_sq_desc (struct vnic_queue_set *qs, int qnum, void **desc); 
-void vnic_put_sq_desc (struct vnic_queue_set *qs, int sq_idx, int desc_cnt); 
-int vnic_sq_append_skb (struct vnic *vnic, struct sk_buff *skb);
+int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
+void nicvf_qset_config (struct nicvf *nic, bool enable);
+void nicvf_put_sq_desc (struct queue_set *qs, int sq_idx, int desc_cnt); 
+int nicvf_get_sq_desc (struct queue_set *qs, int qnum, void **desc); 
+int nicvf_sq_append_skb (struct nicvf *nic, struct sk_buff *skb);
 
-int vnic_cq_check_errs (struct vnic *vnic, void *cq_desc);
-struct sk_buff *vnic_get_rcv_skb (struct vnic *vnic, 
-				struct vnic_queue_set *qs, void *cq_desc);
-void vnic_refill_rbdr (unsigned long data);
+int nicvf_cq_check_errs (struct nicvf *nic, void *cq_desc);
+struct sk_buff *nicvf_get_rcv_skb (struct nicvf *nic, void *cq_desc);
+void nicvf_refill_rbdr (unsigned long data);
 
-void vnic_enable_intr (struct vnic *vnic, int int_type, int q_idx);
-void vnic_disable_intr (struct vnic *vnic, int int_type, int q_idx);
-void vnic_clear_intr (struct vnic *vnic, int int_type, int q_idx);
-int vnic_is_intr_enabled (struct vnic *vnic, int int_type, int q_idx);
-#endif /* VNIC_QUEUES_H */
+void nicvf_enable_intr (struct nicvf *nic, int int_type, int q_idx);
+void nicvf_disable_intr (struct nicvf *nic, int int_type, int q_idx);
+void nicvf_clear_intr (struct nicvf *nic, int int_type, int q_idx);
+int nicvf_is_intr_enabled (struct nicvf *nic, int int_type, int q_idx);
+
+/* Register access APIs */
+void nicvf_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val);
+uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset);
+
+void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val);
+uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset);
+
+void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset, 
+				uint64_t qidx, uint64_t val);
+uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx);
+
+#endif /* NICVF_QUEUES_H */
