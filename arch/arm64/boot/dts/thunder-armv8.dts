@@ -383,13 +383,6 @@
 			interrupts = <1 32 4>;
 		};
 
-		nic0: ethernet@845000000000 {
-			compatible = "smsc,lan9115";
-			reg-io-width = <4>;
-			reg = <0x8450 0x0 0x0 0x1000>;
-			interrupts = <1 31 4>;
-		};
-
 		uaa0: uart@87e024000000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x24000000 0x0 0x1000>;
