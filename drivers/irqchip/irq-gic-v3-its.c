@@ -1102,7 +1102,7 @@ static int its_alloc_device_irq(struct its_device *dev, u32 id,
 }
 
 /* FIXME: Use proper API once it is available in the kernel... */
-#define PCI_REQUESTER_ID(dev)	PCI_DEVID((dev)->bus->number, (dev)->devfn)
+#define PCI_REQUESTER_ID(dev)	((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn)
 
 static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 {
