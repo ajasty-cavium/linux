@@ -377,12 +377,6 @@
 			};
 		};
 
-		ahci0: host-bus-adapter@810000000000 {
-			compatible = "snps,spear-ahci";
-			reg = <0x8100 0x0 0x0 0x1100>;
-			interrupts = <1 32 4>;
-		};
-
 		uaa0: uart@87e024000000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x24000000 0x0 0x1000>;
