@@ -43,6 +43,7 @@
 #include <linux/hw_breakpoint.h>
 #include <linux/personality.h>
 #include <linux/notifier.h>
+#include <linux/efi.h>
 
 #include <asm/compat.h>
 #include <asm/cacheflush.h>
@@ -155,6 +156,11 @@ void machine_restart(char *cmd)
 		arm_pm_restart(reboot_mode, cmd);
 	else
 		do_kernel_restart(cmd);
+
+	/*
+	 * If all else fails, try EFI
+	 */
+	efi_reboot(reboot_mode, cmd);
 
 	/*
 	 * Whoops - the architecture was unable to reboot.

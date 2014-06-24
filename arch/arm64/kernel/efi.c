@@ -471,3 +471,14 @@ err_unmap:
 	return -1;
 }
 early_initcall(arm64_enter_virtual_mode);
+
+/*
+ * If nothing else is handling pm_power_off, use EFI
+ *
+ * This is called from a late_initcall after other mechanisms
+ * have had a chance to register a handler.
+ */
+bool efi_poweroff_required(void)
+{
+	return pm_power_off == NULL;
+}
