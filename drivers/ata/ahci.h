@@ -37,7 +37,8 @@
 
 #include <linux/clk.h>
 #include <linux/libata.h>
-#include <linux/pci.h>
+#include <linux/phy/phy.h>
+#include <linux/regulator/consumer.h>
 
 /* Enclosure Management Control */
 #define EM_CTRL_MSG_TYPE              0x000f0000
@@ -52,6 +53,7 @@
 
 enum {
 	AHCI_MAX_PORTS		= 32,
+	AHCI_MAX_CLKS		= 3,
 	AHCI_MAX_SG		= 168, /* hardware max is 64K */
 	AHCI_DMA_BOUNDARY	= 0xffffffff,
 	AHCI_MAX_CMDS		= 32,
@@ -92,6 +94,7 @@ enum {
 	/* HOST_CTL bits */
 	HOST_RESET		= (1 << 0),  /* reset controller; self-clear */
 	HOST_IRQ_EN		= (1 << 1),  /* global IRQ enable */
+	HOST_MRSM		= (1 << 2),  /* MSI Revert to Single Message */
 	HOST_AHCI_EN		= (1 << 31), /* AHCI enabled */
 
 	/* HOST_CAP bits */
@@ -234,6 +237,8 @@ enum {
 						        error-handling stage) */
 	AHCI_HFLAG_MULTI_MSI		= (1 << 16), /* multiple PCI MSIs */
 	AHCI_HFLAG_MSIX			= (1 << 17), /* PCI MSIX  */
+	AHCI_HFLAG_NO_DEVSLP		= (1 << 17), /* no device sleep */
+	AHCI_HFLAG_NO_FBS		= (1 << 18), /* no FBS */
 
 	/* ap->flags bits */
 
@@ -325,7 +330,17 @@ struct ahci_host_priv {
 	u32			em_msg_type;	/* EM message type */
 	struct clk		*clk;		/* Only for platforms supporting clk */
 	struct msix_entry  	*msix_entries;
+	bool			got_runtime_pm; /* Did we do pm_runtime_get? */
+	struct clk		*clks[AHCI_MAX_CLKS]; /* Optional */
+	struct regulator	*target_pwr;	/* Optional */
+	struct phy		*phy;		/* If platform uses phy */
 	void			*plat_data;	/* Other platform data */
+	/*
+	 * Optional ahci_start_engine override, if not set this gets set to the
+	 * default ahci_start_engine during ahci_save_initial_config, this can
+	 * be overridden anytime before the host is activated.
+	 */
+	void			(*start_engine)(struct ata_port *ap);
 };
 
 extern int ahci_ignore_sss;

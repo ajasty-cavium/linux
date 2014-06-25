@@ -247,6 +247,7 @@ EXPORT_SYMBOL(elevator_exit);
 static inline void __elv_rqhash_del(struct request *rq)
 {
 	hash_del(&rq->hash);
+	rq->cmd_flags &= ~REQ_HASHED;
 }
 
 static void elv_rqhash_del(struct request_queue *q, struct request *rq)
@@ -261,6 +262,7 @@ static void elv_rqhash_add(struct request_queue *q, struct request *rq)
 
 	BUG_ON(ELV_ON_HASH(rq));
 	hash_add(e->hash, &rq->hash, rq_hash_key(rq));
+	rq->cmd_flags |= REQ_HASHED;
 }
 
 static void elv_rqhash_reposition(struct request_queue *q, struct request *rq)
@@ -843,7 +845,7 @@ void elv_unregister_queue(struct request_queue *q)
 }
 EXPORT_SYMBOL(elv_unregister_queue);
 
-int elv_register(struct elevator_type *e)
+int __init elv_register(struct elevator_type *e)
 {
 	char *def = "";
 

@@ -185,6 +185,6 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 
 void nicvf_set_ethtool_ops(struct net_device *netdev)
 {
-	SET_ETHTOOL_OPS(netdev, &nicvf_ethtool_ops);
+	netdev->ethtool_ops = &nicvf_ethtool_ops;
 }
 

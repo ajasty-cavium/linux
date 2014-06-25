@@ -612,6 +612,31 @@ static int gic_irq_domain_map(struct irq_domain *d, unsigned int irq,
 	return 0;
 }
 
+static int gic_irq_domain_xlate(struct irq_domain *d,
+				struct device_node *controller,
+				const u32 *intspec, unsigned int intsize,
+				unsigned long *out_hwirq, unsigned int *out_type)
+{
+	if (d->of_node != controller)
+		return -EINVAL;
+	if (intsize < 3)
+		return -EINVAL;
+
+	switch(intspec[0]) {
+	case 0:			/* SPI */
+		*out_hwirq = intspec[1] + 32;
+		break;
+	case 1:			/* PPI */
+		*out_hwirq = intspec[1] + 16;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	*out_type = intspec[2] & IRQ_TYPE_SENSE_MASK;
+	return 0;
+}
+
 static const struct irq_domain_ops gic_irq_domain_ops = {
 	.map = gic_irq_domain_map,
 	.xlate = gic_irq_domain_xlate,

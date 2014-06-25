@@ -25,9 +25,5 @@ void gic_configure_irq(unsigned int irq, unsigned int type,
 void gic_dist_config(void __iomem *base, int gic_irqs,
 		     void (*sync_access)(void));
 void gic_cpu_config(void __iomem *base, void (*sync_access)(void));
-int gic_irq_domain_xlate(struct irq_domain *d,
-			 struct device_node *controller,
-			 const u32 *intspec, unsigned int intsize,
-			 unsigned long *out_hwirq, unsigned int *out_type);
 
 #endif /* _IRQ_GIC_COMMON_H */
