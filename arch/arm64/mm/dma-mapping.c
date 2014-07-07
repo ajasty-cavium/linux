@@ -27,6 +27,7 @@
 #include <linux/vmalloc.h>
 #include <linux/swiotlb.h>
 #include <linux/amba/bus.h>
+#include <linux/pci.h>
 
 #include <asm/cacheflush.h>
 
@@ -330,6 +331,10 @@ static struct notifier_block amba_bus_nb = {
 	.notifier_call = dma_bus_notifier,
 };
 
+static struct notifier_block pci_bus_nb = {
+	.notifier_call = dma_bus_notifier,
+};
+
 extern int swiotlb_late_init_with_default_size(size_t default_size);
 
 static int __init swiotlb_late_init(void)
@@ -341,6 +346,7 @@ static int __init swiotlb_late_init(void)
 	 */
 	bus_register_notifier(&platform_bus_type, &platform_bus_nb);
 	bus_register_notifier(&amba_bustype, &amba_bus_nb);
+	bus_register_notifier(&pci_bus_type, &pci_bus_nb);
 
 	dma_ops = &noncoherent_swiotlb_dma_ops;
 

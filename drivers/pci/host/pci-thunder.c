@@ -168,6 +168,12 @@ static void thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 	bus->msi = pcie->msi;
 }
 
+struct device_node *pcibios_get_phb_of_node(struct pci_bus *bus)
+{
+	struct thunder_pcie *pcie = (struct thunder_pcie *)bus->sysdata;
+	return of_node_get(pcie->node);
+}
+
 static int thunder_pcie_probe(struct platform_device *pdev)
 {
 	struct device_node *np = of_node_get(pdev->dev.of_node);

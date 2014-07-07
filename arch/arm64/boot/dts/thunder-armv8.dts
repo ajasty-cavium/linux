@@ -406,6 +406,7 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
+		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -419,6 +420,7 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
+		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -431,6 +433,7 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
+		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -443,6 +446,7 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
+		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;

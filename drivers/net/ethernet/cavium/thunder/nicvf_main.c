@@ -940,6 +940,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
                 goto err_disable_device;
         }
 
+//	set_dma_ops(&pdev->dev, &coherent_swiotlb_dma_ops);
 	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(48));
 	if (!err) {
 		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
