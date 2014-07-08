@@ -13,7 +13,6 @@
 #include <linux/interrupt.h>
 
 /* PCI device IDs */
-#define   PCI_VENDOR_ID_CAVIUM  		0x177D
 #define   PCI_DEVICE_ID_THUNDER_NIC_PF	    	0xA01E
 #define   PCI_DEVICE_ID_THUNDER_NIC_VF	    	0x0011
 #define   PCI_DEVICE_ID_THUNDER_BGX	    	0xA026
