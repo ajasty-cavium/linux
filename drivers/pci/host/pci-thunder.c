@@ -22,9 +22,11 @@
 #include <linux/slab.h>
 #include <linux/msi.h>
 
-#define THUNDER_PCIE_BUS_SHIFT          20
-#define THUNDER_PCIE_DEV_SHIFT          15
-#define THUNDER_PCIE_FUNC_SHIFT         12
+#define PCI_DEVICE_ID_THUNDER_BRIDGE	0xa002
+
+#define THUNDER_PCIE_BUS_SHIFT		20
+#define THUNDER_PCIE_DEV_SHIFT		15
+#define THUNDER_PCIE_FUNC_SHIFT		12
 
 struct thunder_pcie {
 	struct device_node	*node;
@@ -56,7 +58,7 @@ static void pci_bridge_resource_fixup(struct pci_dev *dev)
 		dev->resource[resno].flags = 0;
 	}
 }
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_8XXX_BRIDGE, 
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_BRIDGE,
 						pci_bridge_resource_fixup);
 
 /*
