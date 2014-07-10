@@ -69,6 +69,7 @@ struct q_desc_mem {
 	dma_addr_t	dma;
 	uint64_t	size;
 	uint16_t	q_len;
+	dma_addr_t	phys_base;
 	void		*base;
 	void		*unalign_base;
 };
