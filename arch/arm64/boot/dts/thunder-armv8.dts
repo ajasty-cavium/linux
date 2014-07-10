@@ -10,7 +10,7 @@
  */
 /dts-v1/;
 
-/memreserve/ 0x80000000 0x00010000;
+/memreserve/ 0x00000000 0x00010000;
 
 / {
 	model = "Cavium Thunder";
@@ -325,9 +325,9 @@
 		};
 	};
 
-	memory@80000000 {
+	memory@00000000 {
 		device_type = "memory";
-		reg = <0x0 0x80000000 0x0 0x80000000>;
+		reg = <0x0 0x00000000 0x0 0x80000000>;
 	};
 
 	gic0: interrupt-controller@801000000000 {
@@ -406,7 +406,6 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
-		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -420,7 +419,6 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
-		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -433,7 +431,6 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
-		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
@@ -446,7 +443,6 @@
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
-		dma-coherent;
 		bus-range = <0 255>;
 		#size-cells = <2>;
 		#address-cells = <3>;
