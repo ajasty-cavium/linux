@@ -344,7 +344,7 @@ struct arm_smmu_smr {
 
 struct arm_smmu_master_cfg {
 	int				num_streamids;
-	u16				streamids[MAX_MASTER_STREAMIDS];
+	u32				streamids[MAX_MASTER_STREAMIDS];
 	struct arm_smmu_smr		*smrs;
 };
 
@@ -1575,7 +1575,8 @@ static bool arm_smmu_capable(enum iommu_cap cap)
 
 static int __arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 {
-	*((u16 *)data) = alias;
+	/* include domain number with pci device id */
+	*((u32 *)data) = ((pci_domain_nr(pdev->bus)<<16)|alias);
 	return 0; /* Continue walking */
 }
 
@@ -1891,6 +1892,7 @@ static const struct of_device_id arm_smmu_of_match[] = {
 	{ .compatible = "arm,mmu-400", .data = (void *)ARM_SMMU_V1 },
 	{ .compatible = "arm,mmu-401", .data = (void *)ARM_SMMU_V1 },
 	{ .compatible = "arm,mmu-500", .data = (void *)ARM_SMMU_V2 },
+	{ .compatible = "thunder,smmu-v2", .data = (void *)ARM_SMMU_V2 },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
