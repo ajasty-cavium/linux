@@ -2,13 +2,13 @@
 # Cavium ethernet device configuration
 #
 
-config CAVIUM_NET
+config NET_VENDOR_CAVIUM
         tristate "Cavium ethernet drivers"
 	depends on PCI
         ---help---
           If you have Cavium Thunder board, say Y.
 
-if CAVIUM_NET
+if NET_VENDOR_CAVIUM
 
 config THUNDER_NIC_PF
         tristate "Thunder Physical function driver"
@@ -30,4 +30,4 @@ config	THUNDER_BGX
           This driver supports programming and controlling of MAC
 	  interface from NIC physical function driver.
 
-endif #CAVIUM_NET
+endif #NET_VENDOR_CAVIUM
