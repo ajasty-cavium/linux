@@ -41,7 +41,9 @@ static int nicvf_alloc_q_desc_mem (struct nicvf *nic,
 		return -1;
 	}
 
-	desc_mem->base = (void *)NICVF_ALIGNED_ADDR((uint64_t)desc_mem->unalign_base, align_bytes); 
+	desc_mem->phys_base = NICVF_ALIGNED_ADDR((uint64_t)desc_mem->dma, align_bytes); 
+	desc_mem->base = (void *)((u8 *)desc_mem->unalign_base + 
+					(desc_mem->dma - desc_mem->phys_base));
 	return 0;
 }
 
@@ -54,6 +56,7 @@ static void nicvf_free_q_desc_mem (struct nicvf *nic, struct q_desc_mem *desc_me
 			desc_mem->unalign_base, desc_mem->dma);
 	desc_mem->unalign_base = NULL;
 	desc_mem->base = NULL;
+	desc_mem->phys_base = (dma_addr_t)NULL;
 }
 
 static int nicvf_alloc_rcv_buffer(struct nicvf *nic, uint64_t buf_len, 
@@ -340,7 +343,7 @@ void nicvf_cmp_queue_config (struct nicvf *nic, struct queue_set *qs, bool enabl
 
 		/* Set completion queue base address */
 		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE, i, 
-						(uint64_t)virt_to_phys(cq->desc_mem.base));
+						(uint64_t)(cq->desc_mem.phys_base));
 
 		/* Set CQ's head entry */
 		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, i, 0);
@@ -390,7 +393,7 @@ void nicvf_snd_queue_config (struct nicvf *nic, struct queue_set *qs, bool enabl
 
 		/* Set queue base address */
 		nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_BASE, i, 
-						(uint64_t)virt_to_phys(sq->desc_mem.base));
+						(uint64_t)(sq->desc_mem.phys_base));
 		
 		/* Set SQ's head entry */
 		nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_HEAD, i, 0);
@@ -421,7 +424,7 @@ void nicvf_rbdr_config (struct nicvf *nic, struct queue_set *qs, bool enable)
 
 		/* Set descriptor base address */
 		nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_BASE, i, 
-						(uint64_t)virt_to_phys(rbdr->desc_mem.base));
+						(uint64_t)(rbdr->desc_mem.phys_base));
 		
 		/* Set RBDR head entry */
 		nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_HEAD, i, 0);

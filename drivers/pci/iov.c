@@ -103,7 +103,6 @@ static int virtfn_add(struct pci_dev *dev, int id, int reset)
 	if (reset)
 		__pci_reset_function(virtfn);
 
-	pci_set_of_node(virtfn);
 	pci_device_add(virtfn, virtfn->bus);
 	mutex_unlock(&iov->dev->sriov->lock);
 

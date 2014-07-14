@@ -19,9 +19,8 @@ void pci_set_of_node(struct pci_dev *dev)
 {
 	if (!dev->bus->dev.of_node)
 		return;
-	/* dev->dev.of_node = of_pci_find_child_device(dev->bus->dev.of_node,
-						    dev->devfn);*/
-	dev->dev.of_node = dev->bus->dev.of_node;
+	dev->dev.of_node = of_pci_find_child_device(dev->bus->dev.of_node,
+						    dev->devfn);
 }
 
 void pci_release_of_node(struct pci_dev *dev)
