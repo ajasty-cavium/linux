@@ -1100,6 +1100,9 @@ int __must_check pci_bus_alloc_resource(struct pci_bus *bus,
 						  resource_size_t),
 			void *alignf_data);
 
+
+int pci_remap_iospace(const struct resource *res, phys_addr_t phys_addr);
+
 static inline dma_addr_t pci_bus_address(struct pci_dev *pdev, int bar)
 {
 	struct pci_bus_region region;
@@ -1805,24 +1808,19 @@ static inline struct device_node *pci_bus_to_OF_node(struct pci_bus *bus)
 	return bus ? bus->dev.of_node : NULL;
 }
 
-struct pci_host_bridge *
-of_create_pci_host_bridge(struct device *parent, struct pci_ops *ops,
-			void *host_data);
-
-int pcibios_fixup_bridge_ranges(struct list_head *resources);
 #else /* CONFIG_OF */
 static inline void pci_set_of_node(struct pci_dev *dev) { }
 static inline void pci_release_of_node(struct pci_dev *dev) { }
 static inline void pci_set_bus_of_node(struct pci_bus *bus) { }
 static inline void pci_release_bus_of_node(struct pci_bus *bus) { }
 
-static inline struct pci_host_bridge *
-of_create_pci_host_bridge(struct device *parent, struct pci_ops *ops,
-			void *host_data)
-{
-	return NULL;
-}
 #endif  /* CONFIG_OF */
+
+/* Used by architecture code to apply any quirks to the list of
+ * pci_host_bridge resource ranges before they are being used
+ * by of_create_pci_host_bridge()
+ */
+extern int pcibios_fixup_bridge_ranges(struct list_head *resources);
 
 #ifdef CONFIG_EEH
 static inline struct eeh_dev *pci_dev_to_eeh_dev(struct pci_dev *pdev)

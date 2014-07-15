@@ -43,9 +43,7 @@ static inline int pci_proc_domain(struct pci_bus *bus)
 {
 	return 1;
 }
-#endif
-
-extern unsigned long pci_ioremap_io(const struct resource *res, phys_addr_t phys_addr);
+#endif  /* CONFIG_PCI */
 
 #endif  /* __KERNEL__ */
 #endif  /* __ASM_PCI_H */
