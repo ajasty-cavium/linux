@@ -390,13 +390,6 @@
 			clock-names = "apb_pclk";
 		};
 
-		rtc@8ee000000000 {
-			compatible = "arm,pl031", "arm,primecell";
-			reg = <0x8ee0 0x0000 0x0 0x1000>;
-			interrupts = <1 20 4>;
-			clocks = <&refclk50mhz>;
-			clock-names = "apb_pclk";
-		};
 	};
 
 	pcie0: pcie0@0x848000000000 {
