@@ -335,6 +335,8 @@
 .endm
 
 .macro activate_traps
+	ldr     x2, [x0, #VCPU_HCR_EL2]
+	msr     hcr_el2, x2
 	ldr	x2, =(CPTR_EL2_TTA)
 	msr	cptr_el2, x2
 
@@ -348,6 +350,8 @@
 .endm
 
 .macro deactivate_traps
+	mov	x2, #HCR_RW
+	msr	hcr_el2, x2
 	msr	cptr_el2, xzr
 	msr	hstr_el2, xzr
 
@@ -365,6 +369,36 @@
 
 .macro deactivate_vm
 	msr	vttbr_el2, xzr
+.endm
+
+/*
+ * Call into the vgic backend for state saving
+ */
+.macro save_vgic_state
+	adr	x24, __vgic_sr_vectors
+	ldr	x24, [x24, VGIC_SAVE_FN]
+	kern_hyp_va	x24
+	blr	x24
+	mrs	x24, hcr_el2
+	mov	x25, #HCR_INT_OVERRIDE
+	neg	x25, x25
+	and	x24, x24, x25
+	msr	hcr_el2, x24
+.endm
+
+/*
+ * Call into the vgic backend for state restoring
+ */
+.macro restore_vgic_state
+	mrs	x24, hcr_el2
+	ldr	x25, [x0, #VCPU_IRQ_LINES]
+	orr	x24, x24, #HCR_INT_OVERRIDE
+	orr	x24, x24, x25
+	msr	hcr_el2, x24
+	adr	x24, __vgic_sr_vectors
+	ldr	x24, [x24, #VGIC_RESTORE_FN]
+	kern_hyp_va	x24
+	blr	x24
 .endm
 
 .macro save_timer_state
@@ -463,10 +497,7 @@ ENTRY(__kvm_vcpu_run)
 	activate_traps
 	activate_vm
 
-	adr	x24, __vgic_sr_vectors
-	ldr	x24, [x24, #VGIC_RESTORE_FN]
-	kern_hyp_va	x24
-	blr	x24
+	restore_vgic_state
 	restore_timer_state
 
 	// Guest context
@@ -493,10 +524,7 @@ __kvm_vcpu_return:
 	save_guest_32bit_state
 
 	save_timer_state
-	adr	x24, __vgic_sr_vectors
-	ldr	x24, [x24, VGIC_SAVE_FN]
-	kern_hyp_va	x24
-	blr	x24
+	save_vgic_state
 
 	deactivate_traps
 	deactivate_vm
@@ -565,12 +593,6 @@ __kvm_hyp_panic:
 	cbz	x0, 1f
 
 	mrs	x0, tpidr_el2
-
-	save_timer_state
-	adr	x24, __vgic_sr_vectors
-	ldr	x24, [x24, VGIC_SAVE_FN]
-	kern_hyp_va	x24
-	blr	x24
 
 	deactivate_traps
 	deactivate_vm

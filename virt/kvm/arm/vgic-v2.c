@@ -36,7 +36,10 @@ static struct vgic_lr vgic_v2_get_lr(const struct kvm_vcpu *vcpu, int lr)
 	u32 val = vcpu->arch.vgic_cpu.vgic_v2.vgic_lr[lr];
 
 	lr_desc.irq	= val & GICH_LR_VIRTUALID;
-	lr_desc.source	= (val >> GICH_LR_PHYSID_CPUID_SHIFT) & 0xff;
+	if (lr_desc.irq <= 15)
+		lr_desc.source	= (val >> GICH_LR_PHYSID_CPUID_SHIFT) & 0x7;
+	else
+		lr_desc.source = 0;
 	lr_desc.state	= 0;
 
 	if (val & GICH_LR_PENDING_BIT)
@@ -49,13 +52,10 @@ static struct vgic_lr vgic_v2_get_lr(const struct kvm_vcpu *vcpu, int lr)
 	return lr_desc;
 }
 
-#define MK_LR_PEND(src, irq)	\
-	(GICH_LR_PENDING_BIT | ((src) << GICH_LR_PHYSID_CPUID_SHIFT) | (irq))
-
 static void vgic_v2_set_lr(struct kvm_vcpu *vcpu, int lr,
 			   struct vgic_lr lr_desc)
 {
-	u32 lr_val = MK_LR_PEND(lr_desc.source, lr_desc.irq);
+	u32 lr_val = (lr_desc.source << GICH_LR_PHYSID_CPUID_SHIFT) | lr_desc.irq;
 
 	if (lr_desc.state & LR_STATE_PENDING)
 		lr_val |= GICH_LR_PENDING_BIT;
@@ -65,25 +65,35 @@ static void vgic_v2_set_lr(struct kvm_vcpu *vcpu, int lr,
 		lr_val |= GICH_LR_EOI;
 
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_lr[lr] = lr_val;
+}
 
-	/*
-	 * Despite being EOIed, the LR may not have been marked as
-	 * empty.
-	 */
-	if (!(lr_val & GICH_LR_STATE))
+static void vgic_v2_sync_lr_elrsr(struct kvm_vcpu *vcpu, int lr,
+				  struct vgic_lr lr_desc)
+{
+	if (!(lr_desc.state & LR_STATE_MASK))
 		set_bit(lr, (unsigned long *)vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr);
 }
 
 static u64 vgic_v2_get_elrsr(const struct kvm_vcpu *vcpu)
 {
-	const u32 *elrsr = vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr;
-	return *(u64 *)elrsr;
+	u64 val;
+
+	val  = vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr[1];
+	val <<= 32;
+	val |= vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr[0];
+
+	return val;
 }
 
 static u64 vgic_v2_get_eisr(const struct kvm_vcpu *vcpu)
 {
-	const u32 *eisr = vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr;
-	return *(u64 *)eisr;
+	u64 val;
+
+	val  = vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr[1];
+	val <<= 32;
+	val |= vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr[0];
+
+	return val;
 }
 
 static u32 vgic_v2_get_interrupt_status(const struct kvm_vcpu *vcpu)
@@ -99,12 +109,12 @@ static u32 vgic_v2_get_interrupt_status(const struct kvm_vcpu *vcpu)
 	return ret;
 }
 
-static void vgic_v2_set_underflow(struct kvm_vcpu *vcpu)
+static void vgic_v2_enable_underflow(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_hcr |= GICH_HCR_UIE;
 }
 
-static void vgic_v2_clear_underflow(struct kvm_vcpu *vcpu)
+static void vgic_v2_disable_underflow(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.vgic_cpu.vgic_v2.vgic_hcr &= ~GICH_HCR_UIE;
 }
@@ -147,11 +157,12 @@ static void vgic_v2_enable(struct kvm_vcpu *vcpu)
 static const struct vgic_ops vgic_v2_ops = {
 	.get_lr			= vgic_v2_get_lr,
 	.set_lr			= vgic_v2_set_lr,
+	.sync_lr_elrsr		= vgic_v2_sync_lr_elrsr,
 	.get_elrsr		= vgic_v2_get_elrsr,
 	.get_eisr		= vgic_v2_get_eisr,
 	.get_interrupt_status	= vgic_v2_get_interrupt_status,
-	.set_underflow		= vgic_v2_set_underflow,
-	.clear_underflow	= vgic_v2_clear_underflow,
+	.enable_underflow	= vgic_v2_enable_underflow,
+	.disable_underflow	= vgic_v2_disable_underflow,
 	.get_vmcr		= vgic_v2_get_vmcr,
 	.set_vmcr		= vgic_v2_set_vmcr,
 	.enable			= vgic_v2_enable,
@@ -159,20 +170,24 @@ static const struct vgic_ops vgic_v2_ops = {
 
 static struct vgic_params vgic_v2_params;
 
-int vgic_v2_probe(const struct vgic_ops **ops,
+/**
+ * vgic_v2_probe - probe for a GICv2 compatible interrupt controller in DT
+ * @node:	pointer to the DT node
+ * @ops: 	address of a pointer to the GICv2 operations
+ * @params:	address of a pointer to HW-specific parameters
+ *
+ * Returns 0 if a GICv2 has been found, with the low level operations
+ * in *ops and the HW parameters in *params. Returns an error code
+ * otherwise.
+ */
+int vgic_v2_probe(struct device_node *vgic_node,
+		  const struct vgic_ops **ops,
 		  const struct vgic_params **params)
 {
 	int ret;
 	struct resource vctrl_res;
 	struct resource vcpu_res;
-	struct device_node *vgic_node;
 	struct vgic_params *vgic = &vgic_v2_params;
-
-	vgic_node = of_find_compatible_node(NULL, NULL, "arm,cortex-a15-gic");
-	if (!vgic_node) {
-		kvm_err("error: no compatible GICv2 node in DT\n");
-		return -ENODEV;
-	}
 
 	vgic->maint_irq = irq_of_parse_and_map(vgic_node, 0);
 	if (!vgic->maint_irq) {

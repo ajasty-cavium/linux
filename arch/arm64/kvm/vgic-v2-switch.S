@@ -34,7 +34,8 @@
  * x0: Register pointing to VCPU struct
  * Do not corrupt x1!!!
  */
-.macro save_vgic_v2_state
+ENTRY(__save_vgic_v2_state)
+__save_vgic_v2_state:
 	/* Get VGIC VCTRL base into x2 */
 	ldr	x2, [x0, #VCPU_KVM]
 	kern_hyp_va	x2
@@ -85,21 +86,15 @@ CPU_BE(	rev	w5, w5 )
 	sub	w4, w4, #1
 	cbnz	w4, 1b
 2:
-	mov	x2, #HCR_RW
-	msr	hcr_el2, x2
-	isb
-.endm
+	ret
+ENDPROC(__save_vgic_v2_state)
 
 /*
  * Restore the VGIC CPU state from memory
  * x0: Register pointing to VCPU struct
  */
-.macro restore_vgic_v2_state
-	ldr	x2, [x0, #VCPU_IRQ_LINES]
-	ldr	x1, [x0, #VCPU_HCR_EL2]
-	orr	x2, x2, x1
-	msr	hcr_el2, x2
-
+ENTRY(__restore_vgic_v2_state)
+__restore_vgic_v2_state:
 	/* Get VGIC VCTRL base into x2 */
 	ldr	x2, [x0, #VCPU_KVM]
 	kern_hyp_va	x2
@@ -132,18 +127,7 @@ CPU_BE(	rev	w5, w5 )
 	sub	w4, w4, #1
 	cbnz	w4, 1b
 2:
-.endm
-
-ENTRY(__save_vgic_v2_state)
-	save_vgic_v2_state
-	ret
-ENDPROC(__save_vgic_v2_state)
-
-ENTRY(__restore_vgic_v2_state)
-__restore_vgic_v2_state:
-	restore_vgic_v2_state
 	ret
 ENDPROC(__restore_vgic_v2_state)
-
 
 	.popsection

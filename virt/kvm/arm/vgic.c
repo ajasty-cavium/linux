@@ -1207,15 +1207,21 @@ static void vgic_update_state(struct kvm *kvm)
 	}
 }
 
-static inline struct vgic_lr vgic_get_lr(const struct kvm_vcpu *vcpu, int lr)
+static struct vgic_lr vgic_get_lr(const struct kvm_vcpu *vcpu, int lr)
 {
 	return vgic_ops->get_lr(vcpu, lr);
 }
 
-static inline void vgic_set_lr(struct kvm_vcpu *vcpu, int lr,
+static void vgic_set_lr(struct kvm_vcpu *vcpu, int lr,
 			       struct vgic_lr vlr)
 {
 	vgic_ops->set_lr(vcpu, lr, vlr);
+}
+
+static void vgic_sync_lr_elrsr(struct kvm_vcpu *vcpu, int lr,
+			       struct vgic_lr vlr)
+{
+	vgic_ops->sync_lr_elrsr(vcpu, lr, vlr);
 }
 
 static inline u64 vgic_get_elrsr(struct kvm_vcpu *vcpu)
@@ -1233,14 +1239,14 @@ static inline u32 vgic_get_interrupt_status(struct kvm_vcpu *vcpu)
 	return vgic_ops->get_interrupt_status(vcpu);
 }
 
-static inline void vgic_set_underflow(struct kvm_vcpu *vcpu)
+static inline void vgic_enable_underflow(struct kvm_vcpu *vcpu)
 {
-	vgic_ops->set_underflow(vcpu);
+	vgic_ops->enable_underflow(vcpu);
 }
 
-static inline void vgic_clear_underflow(struct kvm_vcpu *vcpu)
+static inline void vgic_disable_underflow(struct kvm_vcpu *vcpu)
 {
-	vgic_ops->clear_underflow(vcpu);
+	vgic_ops->disable_underflow(vcpu);
 }
 
 static inline void vgic_get_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr)
@@ -1439,9 +1445,9 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 
 epilog:
 	if (overflow) {
-		vgic_set_underflow(vcpu);
+		vgic_enable_underflow(vcpu);
 	} else {
-		vgic_clear_underflow(vcpu);
+		vgic_disable_underflow(vcpu);
 		/*
 		 * We're about to run this VCPU, and we've consumed
 		 * everything the distributor had in store for
@@ -1472,6 +1478,7 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 			struct vgic_lr vlr = vgic_get_lr(vcpu, lr);
 
 			vgic_irq_clear_active(vcpu, vlr.irq);
+			WARN_ON(vlr.state & LR_STATE_MASK);
 			vlr.state = 0;
 			vgic_set_lr(vcpu, lr, vlr);
 
@@ -1482,11 +1489,17 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 			} else {
 				vgic_cpu_irq_clear(vcpu, vlr.irq);
 			}
+
+			/*
+			 * Despite being EOIed, the LR may not have
+			 * been marked as empty.
+			 */
+			vgic_sync_lr_elrsr(vcpu, lr, vlr);
 		}
 	}
 
 	if (status & INT_STATUS_UNDERFLOW)
-		vgic_clear_underflow(vcpu);
+		vgic_disable_underflow(vcpu);
 
 	return level_pending;
 }
@@ -1499,12 +1512,14 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	u64 elrsr = vgic_get_elrsr(vcpu);
-	unsigned long *elrsr_ptr = (unsigned long *)&elrsr;
+	u64 elrsr;
+	unsigned long *elrsr_ptr;
 	int lr, pending;
 	bool level_pending;
 
 	level_pending = vgic_process_maintenance(vcpu);
+	elrsr = vgic_get_elrsr(vcpu);
+	elrsr_ptr = (unsigned long *)&elrsr;
 
 	/* Clear mappings for empty LRs */
 	for_each_set_bit(lr, elrsr_ptr, vgic->nr_lr) {
@@ -1666,8 +1681,7 @@ out:
 int kvm_vgic_inject_irq(struct kvm *kvm, int cpuid, unsigned int irq_num,
 			bool level)
 {
-	if (likely(vgic_initialized(kvm)) &&
-	    vgic_update_irq_state(kvm, cpuid, irq_num, level))
+	if (vgic_update_irq_state(kvm, cpuid, irq_num, level))
 		vgic_kick_vcpus(kvm);
 
 	return 0;
@@ -1711,6 +1725,11 @@ int kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 		vgic_cpu->vgic_irq_lr_map[i] = LR_EMPTY;
 	}
 
+	/*
+	 * Store the number of LRs per vcpu, so we don't have to go
+	 * all the way to the distributor structure to find out. Only
+	 * assembly code should use this one.
+	 */
 	vgic_cpu->nr_lr = vgic->nr_lr;
 
 	vgic_enable(vcpu);
@@ -1744,13 +1763,29 @@ static struct notifier_block vgic_cpu_nb = {
 	.notifier_call = vgic_cpu_notify,
 };
 
+static const struct of_device_id vgic_ids[] = {
+	{ .compatible = "arm,cortex-a15-gic", .data = vgic_v2_probe, },
+	{ .compatible = "arm,gic-v3", .data = vgic_v3_probe, },
+	{},
+};
+
 int kvm_vgic_hyp_init(void)
 {
+	const struct of_device_id *matched_id;
+	int (*vgic_probe)(struct device_node *,const struct vgic_ops **,
+			  const struct vgic_params **);
+	struct device_node *vgic_node;
 	int ret;
 
-	ret = vgic_v2_probe(&vgic_ops, &vgic);
-	if (ret)
-		ret = vgic_v3_probe(&vgic_ops, &vgic);
+	vgic_node = of_find_matching_node_and_match(NULL,
+						    vgic_ids, &matched_id);
+	if (!vgic_node) {
+		kvm_err("error: no compatible GIC node found\n");
+		return -ENODEV;
+	}
+
+	vgic_probe = matched_id->data;
+	ret = vgic_probe(vgic_node, &vgic_ops, &vgic);
 	if (ret)
 		return ret;
 
@@ -1818,10 +1853,9 @@ int kvm_vgic_init(struct kvm *kvm)
 	for (i = VGIC_NR_PRIVATE_IRQS; i < VGIC_NR_IRQS; i += 4)
 		vgic_set_target_reg(kvm, 0, i);
 
+	kvm->arch.vgic.ready = true;
 out:
 	mutex_unlock(&kvm->lock);
-	if (!ret)
-		kvm->arch.vgic.ready = true;
 	return ret;
 }
 
@@ -1856,6 +1890,7 @@ int kvm_vgic_create(struct kvm *kvm)
 	}
 
 	spin_lock_init(&kvm->arch.vgic.lock);
+	kvm->arch.vgic.in_kernel = true;
 	kvm->arch.vgic.vctrl_base = vgic->vctrl_base;
 	kvm->arch.vgic.vgic_dist_base = VGIC_ADDR_UNDEF;
 	kvm->arch.vgic.vgic_cpu_base = VGIC_ADDR_UNDEF;

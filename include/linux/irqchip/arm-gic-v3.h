@@ -53,6 +53,8 @@
 #define GICD_IROUTER_SPI_MODE_ANY	(1U << 31)
 
 #define GIC_PIDR2_ARCH_MASK		0xf0
+#define GIC_PIDR2_ARCH_GICv3		0x30
+#define GIC_PIDR2_ARCH_GICv4		0x40
 
 /*
  * Re-Distributor registers, offsets from RD_base
@@ -173,39 +175,35 @@
 /*
  * CPU interface registers
  */
-#define GICC_CTLR_EL1_EOImode_drop_dir	(0U << 1)
-#define GICC_CTLR_EL1_EOImode_drop	(1U << 1)
-#define GICC_SRE_EL1_SRE		(1U << 0)
+#define ICC_CTLR_EL1_EOImode_drop_dir	(0U << 1)
+#define ICC_CTLR_EL1_EOImode_drop	(1U << 1)
+#define ICC_SRE_EL1_SRE			(1U << 0)
 
 /*
  * Hypervisor interface registers (SRE only)
  */
-#define GICH_LR_VIRTUAL_ID_MASK		((1UL << 32) - 1)
+#define ICH_LR_VIRTUAL_ID_MASK		((1UL << 32) - 1)
 
-#undef GICH_LR_EOI
-#define GICH_LR_EOI			(1UL << 41)
-#define GICH_LR_GROUP			(1UL << 60)
-#undef GICH_LR_STATE
-#define GICH_LR_STATE			(3UL << 62)
-#undef GICH_LR_PENDING_BIT
-#define GICH_LR_PENDING_BIT		(1UL << 62)
-#undef GICH_LR_ACTIVE_BIT
-#define GICH_LR_ACTIVE_BIT		(1UL << 63)
+#define ICH_LR_EOI			(1UL << 41)
+#define ICH_LR_GROUP			(1UL << 60)
+#define ICH_LR_STATE			(3UL << 62)
+#define ICH_LR_PENDING_BIT		(1UL << 62)
+#define ICH_LR_ACTIVE_BIT		(1UL << 63)
 
-#define GICH_MISR_EOI			(1 << 0)
-#define GICH_MISR_U			(1 << 1)
+#define ICH_MISR_EOI			(1 << 0)
+#define ICH_MISR_U			(1 << 1)
 
-#define GICH_HCR_EN			(1 << 0)
-#define GICH_HCR_UIE			(1 << 1)
+#define ICH_HCR_EN			(1 << 0)
+#define ICH_HCR_UIE			(1 << 1)
 
-#define GICH_VMCR_CTLR_SHIFT		0
-#define GICH_VMCR_CTLR_MASK		(0x21f << GICH_VMCR_CTLR_SHIFT)
-#define GICH_VMCR_BPR1_SHIFT		18
-#define GICH_VMCR_BPR1_MASK		(7 << GICH_VMCR_BPR1_SHIFT)
-#define GICH_VMCR_BPR0_SHIFT		21
-#define GICH_VMCR_BPR0_MASK		(7 << GICH_VMCR_BPR0_SHIFT)
-#define GICH_VMCR_PMR_SHIFT		24
-#define GICH_VMCR_PMR_MASK		(0xffUL << GICH_VMCR_PMR_SHIFT)
+#define ICH_VMCR_CTLR_SHIFT		0
+#define ICH_VMCR_CTLR_MASK		(0x21f << ICH_VMCR_CTLR_SHIFT)
+#define ICH_VMCR_BPR1_SHIFT		18
+#define ICH_VMCR_BPR1_MASK		(7 << ICH_VMCR_BPR1_SHIFT)
+#define ICH_VMCR_BPR0_SHIFT		21
+#define ICH_VMCR_BPR0_MASK		(7 << ICH_VMCR_BPR0_SHIFT)
+#define ICH_VMCR_PMR_SHIFT		24
+#define ICH_VMCR_PMR_MASK		(0xffUL << ICH_VMCR_PMR_SHIFT)
 
 #define ICC_EOIR1_EL1			S3_0_C12_C12_1
 #define ICC_IAR1_EL1			S3_0_C12_C12_0
@@ -215,8 +213,16 @@
 #define ICC_SRE_EL1			S3_0_C12_C12_5
 #define ICC_GRPEN1_EL1			S3_0_C12_C12_7
 
+#define ICC_IAR1_EL1_SPURIOUS		0x3ff
+
 #define ICC_SRE_EL2			S3_4_C12_C9_5
 
+#define ICC_SRE_EL2_SRE			(1 << 0)
+#define ICC_SRE_EL2_ENABLE		(1 << 3)
+
+/*
+ * System register definitions
+ */
 #define ICH_VSEIR_EL2			S3_4_C12_C9_4
 #define ICH_HCR_EL2			S3_4_C12_C11_0
 #define ICH_VTR_EL2			S3_4_C12_C11_1
@@ -279,8 +285,8 @@ static inline void gic_write_eoir(u64 irq)
 }
 
 int its_cpu_init(void);
-int its_init(struct device_node *node, struct rdist *rdist);
-void its_handle_lpi(u64 irqnr, struct pt_regs *regs);
+struct irq_chip *its_init(struct device_node *node, struct rdist *rdist,
+			  struct irq_domain *domain);
 
 #endif
 

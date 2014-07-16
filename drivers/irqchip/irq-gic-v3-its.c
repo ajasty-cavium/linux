@@ -109,12 +109,12 @@ struct its_cmd_desc {
 	union {
 		struct {
 			struct its_device *dev;
-			u32 id;
+			u32 event_id;
 		} its_inv_cmd;
 
 		struct {
 			struct its_device *dev;
-			u32 id;
+			u32 event_id;
 		} its_int_cmd;
 
 		struct {
@@ -130,7 +130,7 @@ struct its_cmd_desc {
 		struct {
 			struct its_device *dev;
 			u32 phys_id;
-			u32 id;
+			u32 event_id;
 		} its_mapvi_cmd;
 
 		struct {
@@ -141,7 +141,7 @@ struct its_cmd_desc {
 
 		struct {
 			struct its_device *dev;
-			u32 id;
+			u32 event_id;
 		} its_discard_cmd;
 
 		struct {
@@ -183,7 +183,7 @@ static void its_encode_devid(struct its_cmd_block *cmd, u32 devid)
 	cmd->raw_cmd[0] |= ((u64)devid) << 32;
 }
 
-static void its_encode_id(struct its_cmd_block *cmd, u32 id)
+static void its_encode_event_id(struct its_cmd_block *cmd, u32 id)
 {
 	cmd->raw_cmd[1] &= ~0xffffffffUL;
 	cmd->raw_cmd[1] |= id;
@@ -239,7 +239,7 @@ static struct its_collection *its_build_mapd_cmd(struct its_cmd_block *cmd,
 						 struct its_cmd_desc *desc)
 {
 	unsigned long itt_addr;
-	u8 size = max(order_base_2(desc->its_mapd_cmd.dev->nr_ites), 1);
+	u8 size = order_base_2(desc->its_mapd_cmd.dev->nr_ites);
 
 	itt_addr = virt_to_phys(desc->its_mapd_cmd.dev->itt);
 	itt_addr = ALIGN(itt_addr, ITS_ITT_ALIGN);
@@ -273,7 +273,7 @@ static struct its_collection *its_build_mapvi_cmd(struct its_cmd_block *cmd,
 {
 	its_encode_cmd(cmd, GITS_CMD_MAPVI);
 	its_encode_devid(cmd, desc->its_mapvi_cmd.dev->device_id);
-	its_encode_id(cmd, desc->its_mapvi_cmd.id);
+	its_encode_event_id(cmd, desc->its_mapvi_cmd.event_id);
 	its_encode_phys_id(cmd, desc->its_mapvi_cmd.phys_id);
 	its_encode_collection(cmd, desc->its_mapvi_cmd.dev->collection->col_id);
 
@@ -287,7 +287,7 @@ static struct its_collection *its_build_movi_cmd(struct its_cmd_block *cmd,
 {
 	its_encode_cmd(cmd, GITS_CMD_MOVI);
 	its_encode_devid(cmd, desc->its_movi_cmd.dev->device_id);
-	its_encode_id(cmd, desc->its_movi_cmd.id);
+	its_encode_event_id(cmd, desc->its_movi_cmd.id);
 	its_encode_collection(cmd, desc->its_movi_cmd.col->col_id);
 
 	its_fixup_cmd(cmd);
@@ -300,7 +300,7 @@ static struct its_collection *its_build_discard_cmd(struct its_cmd_block *cmd,
 {
 	its_encode_cmd(cmd, GITS_CMD_DISCARD);
 	its_encode_devid(cmd, desc->its_discard_cmd.dev->device_id);
-	its_encode_id(cmd, desc->its_discard_cmd.id);
+	its_encode_event_id(cmd, desc->its_discard_cmd.event_id);
 
 	its_fixup_cmd(cmd);
 
@@ -312,7 +312,7 @@ static struct its_collection *its_build_inv_cmd(struct its_cmd_block *cmd,
 {
 	its_encode_cmd(cmd, GITS_CMD_INV);
 	its_encode_devid(cmd, desc->its_inv_cmd.dev->device_id);
-	its_encode_id(cmd, desc->its_inv_cmd.id);
+	its_encode_event_id(cmd, desc->its_inv_cmd.event_id);
 
 	its_fixup_cmd(cmd);
 
@@ -336,7 +336,7 @@ static struct its_collection *its_build_int_cmd(struct its_cmd_block *cmd,
 {
 	its_encode_cmd(cmd, GITS_CMD_INT);
 	its_encode_devid(cmd, desc->its_int_cmd.dev->device_id);
-	its_encode_id(cmd, desc->its_int_cmd.id);
+	its_encode_event_id(cmd, desc->its_int_cmd.event_id);
 
 	its_fixup_cmd(cmd);
 
@@ -469,12 +469,12 @@ post:
 	its_wait_for_range_completion(its, cmd, next_cmd);
 }
 
-static void its_send_inv(struct its_device *dev, u32 lpi)
+static void its_send_inv(struct its_device *dev, u32 event_id)
 {
 	struct its_cmd_desc desc;
 
 	desc.its_inv_cmd.dev = dev;
-	desc.its_inv_cmd.id = lpi;
+	desc.its_inv_cmd.event_id = event_id;
 
 	its_send_single_command(dev->its, its_build_inv_cmd, &desc);
 }
@@ -485,7 +485,7 @@ static void its_send_int(struct its_device *dev, u32 id)
 	struct its_cmd_desc desc;
 
 	desc.its_int_cmd.dev = dev;
-	desc.its_int_cmd.id = id;
+	desc.its_int_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_int_cmd, &desc);
 }
@@ -518,7 +518,7 @@ static void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
 
 	desc.its_mapvi_cmd.dev = dev;
 	desc.its_mapvi_cmd.phys_id = irq_id;
-	desc.its_mapvi_cmd.id = id;
+	desc.its_mapvi_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_mapvi_cmd, &desc);
 }
@@ -535,12 +535,12 @@ static void its_send_movi(struct its_device *dev,
 	its_send_single_command(dev->its, its_build_movi_cmd, &desc);
 }
 
-static void its_send_discard(struct its_device *dev, u32 irq_id)
+static void its_send_discard(struct its_device *dev, u32 id)
 {
 	struct its_cmd_desc desc;
 
 	desc.its_discard_cmd.dev = dev;
-	desc.its_discard_cmd.id = irq_id;
+	desc.its_discard_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_discard_cmd, &desc);
 }
@@ -645,26 +645,7 @@ static struct irq_chip its_irq_chip = {
 	.irq_set_affinity	= its_set_affinity,
 };
 
-static int its_lpi_map(struct irq_domain *domain, unsigned int irq,
-		       irq_hw_number_t hwirq)
-{
-	irq_set_chip_and_handler(irq, &its_irq_chip, handle_fasteoi_irq);
-	set_irq_flags(irq, IRQF_VALID);
-	irq_set_chip_data(irq, domain->host_data);
-	return 0;
-}
-
-static const struct irq_domain_ops its_lpi_domain_ops = {
-	.map	= its_lpi_map,
-};
-
 static struct irq_domain *lpi_domain;
-
-void its_handle_lpi(u64 irqnr, struct pt_regs *regs)
-{
-	irqnr = irq_find_mapping(lpi_domain, irqnr);
-	handle_IRQ(irqnr, regs);
-}
 
 /*
  * How we allocate LPIs:
@@ -695,28 +676,11 @@ static int its_chunk_to_lpi(int chunk)
 
 static int its_lpi_init(u32 id_bits)
 {
-	struct its_node *its;
-
 	lpi_chunks = its_lpi_to_chunk(1UL << id_bits);
 
 	lpi_bitmap = kzalloc(lpi_chunks / 8, GFP_KERNEL);
 	if (!lpi_bitmap) {
 		lpi_chunks = 0;
-		return -ENOMEM;
-	}
-
-	/*
-	 * Hack alert! We want a irq_domain, but we can't attach it to
-	 * the GIC root node, as that interferes badly with the GIC's
-	 * irq_domain. Dazed and confused. Instead, use the node of
-	 * the first ITS we have. Irk...
-	 */
-	its = list_first_entry(&its_nodes, struct its_node, entry);
-	lpi_domain = irq_domain_add_linear(its->msi_chip.of_node,
-					   (1UL << id_bits) - 8192,
-					   &its_lpi_domain_ops, NULL);
-	if (!lpi_domain) {
-		kfree(lpi_bitmap);
 		return -ENOMEM;
 	}
 
@@ -1166,7 +1130,7 @@ static struct its_lpi_chunk *its_find_chunk(struct its_device *its_dev,
 	struct its_lpi_chunk *chunk;
 
 	list_for_each_entry(chunk, &its_dev->hwirq_list, entry) {
-		if (chunk->lpi_base <= d->hwirq &&
+		if (d->hwirq >= chunk->lpi_base &&
 		    (chunk->lpi_base + IRQS_PER_CHUNK) > d->hwirq)
 			return chunk;
 	}
@@ -1183,7 +1147,7 @@ static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 	BUG_ON(!chunk);		/* OMG! */
 
 	/* Stop the delivery of interrupts */
-	its_send_discard(its_dev, d->hwirq);
+	its_send_discard(its_dev, its_msi_get_entry_nr(d->msi_desc));
 
 	/* Mark interrupt index as unused, and clear the mapping */
 	clear_bit(d->hwirq - chunk->lpi_base, &chunk->lpi_map);
@@ -1204,7 +1168,7 @@ static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 }
 
 /* FIXME: Use proper API once it is available in the kernel... */
-#define PCI_REQUESTER_ID(dev)	((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn)
+#define PCI_REQUESTER_ID(dev)	PCI_DEVID((dev)->bus->number, (dev)->devfn)
 
 static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 {
@@ -1377,10 +1341,10 @@ static struct of_device_id its_device_id[] = {
 	{},
 };
 
-int its_init(struct device_node *node, struct rdist *rdist)
+struct irq_chip *its_init(struct device_node *node, struct rdist *rdist,
+			  struct irq_domain *domain)
 {
 	struct device_node *np;
-
 
 	for (np = of_find_matching_node(node, its_device_id); np;
 	     np = of_find_matching_node(np, its_device_id)) {
@@ -1389,14 +1353,15 @@ int its_init(struct device_node *node, struct rdist *rdist)
 
 	if (list_empty(&its_nodes)) {
 		pr_info("ITS: No ITS available, not enabling LPIs\n");
-		return -ENXIO;
+		return NULL;
 	}
 
 	gic_rdist = rdist;
 	gic_root_node = node;
+	lpi_domain = domain;
 
 	its_alloc_lpi_tables();
 	its_lpi_init(rdist->id_bits);
 
-	return 0;
+	return &its_irq_chip;
 }

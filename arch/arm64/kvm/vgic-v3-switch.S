@@ -29,6 +29,12 @@
 	.pushsection	.hyp.text, "ax"
 
 /*
+ * We store LRs in reverse order to let the CPU deal with streaming
+ * access. Use this macro to make it look saner...
+ */
+#define LR_OFFSET(n)	(VGIC_V3_CPU_LR + (15 - n) * 8)
+
+/*
  * Save the VGIC CPU state into memory
  * x0: Register pointing to VCPU struct
  * Do not corrupt x1!!!
@@ -39,7 +45,7 @@
 
 	// Make sure stores to the GIC via the memory mapped interface
 	// are now visible to the system register interface
-	dsb	sy
+	dsb	st
 
 	// Save all interesting registers
 	mrs	x4, ICH_HCR_EL2
@@ -57,12 +63,11 @@
 	msr	ICH_HCR_EL2, xzr
 
 	mrs	x21, ICH_VTR_EL2
-	and	w22, w21, #0xf
-	mov	w23, #0xf
-	sub	w23, w23, w22	// How many regs we have to skip
+	mvn	w22, w21
+	ubfiz	w23, w22, 2, 4	// w23 = (15 - ListRegs) * 4
 
 	adr	x24, 1f
-	add	x24, x24, x23, lsl #2
+	add	x24, x24, x23
 	br	x24
 
 1:
@@ -84,32 +89,29 @@
 	mrs	x5, ICH_LR0_EL2
 
 	adr	x24, 1f
-	add	x24, x24, x23, lsl #2	// adr(1f) + unimp_nr*4
+	add	x24, x24, x23
 	br	x24
 
 1:
-	str	x20, [x3, #(VGIC_V3_CPU_LR + 15*8)]
-	str	x19, [x3, #(VGIC_V3_CPU_LR + 14*8)]
-	str	x18, [x3, #(VGIC_V3_CPU_LR + 13*8)]
-	str	x17, [x3, #(VGIC_V3_CPU_LR + 12*8)]
-	str	x16, [x3, #(VGIC_V3_CPU_LR + 11*8)]
-	str	x15, [x3, #(VGIC_V3_CPU_LR + 10*8)]
-	str	x14, [x3, #(VGIC_V3_CPU_LR + 9*8)]
-	str	x13, [x3, #(VGIC_V3_CPU_LR + 8*8)]
-	str	x12, [x3, #(VGIC_V3_CPU_LR + 7*8)]
-	str	x11, [x3, #(VGIC_V3_CPU_LR + 6*8)]
-	str	x10, [x3, #(VGIC_V3_CPU_LR + 5*8)]
-	str	x9, [x3, #(VGIC_V3_CPU_LR + 4*8)]
-	str	x8, [x3, #(VGIC_V3_CPU_LR + 3*8)]
-	str	x7, [x3, #(VGIC_V3_CPU_LR + 2*8)]
-	str	x6, [x3, #(VGIC_V3_CPU_LR + 1*8)]
-	str	x5, [x3, #VGIC_V3_CPU_LR]
+	str	x20, [x3, #LR_OFFSET(15)]
+	str	x19, [x3, #LR_OFFSET(14)]
+	str	x18, [x3, #LR_OFFSET(13)]
+	str	x17, [x3, #LR_OFFSET(12)]
+	str	x16, [x3, #LR_OFFSET(11)]
+	str	x15, [x3, #LR_OFFSET(10)]
+	str	x14, [x3, #LR_OFFSET(9)]
+	str	x13, [x3, #LR_OFFSET(8)]
+	str	x12, [x3, #LR_OFFSET(7)]
+	str	x11, [x3, #LR_OFFSET(6)]
+	str	x10, [x3, #LR_OFFSET(5)]
+	str	x9, [x3, #LR_OFFSET(4)]
+	str	x8, [x3, #LR_OFFSET(3)]
+	str	x7, [x3, #LR_OFFSET(2)]
+	str	x6, [x3, #LR_OFFSET(1)]
+	str	x5, [x3, #LR_OFFSET(0)]
 
-	lsr	w22, w21, #29	// Get PRIbits
-	cmp	w22, #4		// 5 bits
-	b.eq	5f
-	cmp	w22, #5		// 6 bits
-	b.eq	6f
+	tbnz	w21, #29, 6f	// 6 bits
+	tbz	w21, #30, 5f	// 5 bits
 				// 7 bits
 	mrs	x20, ICH_AP0R3_EL2
 	str	w20, [x3, #(VGIC_V3_CPU_AP0R + 3*4)]
@@ -120,10 +122,8 @@
 5:	mrs	x17, ICH_AP0R0_EL2
 	str	w17, [x3, #VGIC_V3_CPU_AP0R]
 
-	cmp	w22, #4		// 5 bits
-	b.eq	5f
-	cmp	w22, #5		// 6 bits
-	b.eq	6f
+	tbnz	w21, #29, 6f	// 6 bits
+	tbz	w21, #30, 5f	// 5 bits
 				// 7 bits
 	mrs	x20, ICH_AP1R3_EL2
 	str	w20, [x3, #(VGIC_V3_CPU_AP1R + 3*4)]
@@ -136,14 +136,11 @@
 
 	// Restore SRE_EL1 access and re-enable SRE at EL1.
 	mrs	x5, ICC_SRE_EL2
-	orr	x5, x5, #(1 << 3)
+	orr	x5, x5, #ICC_SRE_EL2_ENABLE
 	msr	ICC_SRE_EL2, x5
 	isb
 	mov	x5, #1
 	msr	ICC_SRE_EL1, x5
-
-	mov	x2, #HCR_RW
-	msr	hcr_el2, x2
 .endm
 
 /*
@@ -151,11 +148,6 @@
  * x0: Register pointing to VCPU struct
  */
 .macro	restore_vgic_v3_state
-	ldr	x2, [x0, #VCPU_IRQ_LINES]
-	ldr	x1, [x0, #VCPU_HCR_EL2]
-	orr	x2, x2, x1
-	msr	hcr_el2, x2
-
 	// Disable SRE_EL1 access. Necessary, otherwise
 	// ICH_VMCR_EL2.VFIQEn becomes one, and FIQ happens...
 	//msr	ICC_SRE_EL1, xzr
@@ -173,11 +165,8 @@
 
 	mrs	x21, ICH_VTR_EL2
 
-	lsr	w22, w21, #29	// Get PRIbits
-	cmp	w22, #4		// 5 bits
-	b.eq	5f
-	cmp	w22, #5		// 6 bits
-	b.eq	6f
+	tbnz	w21, #29, 6f	// 6 bits
+	tbz	w21, #30, 5f	// 5 bits
 				// 7 bits
 	ldr	w20, [x3, #(VGIC_V3_CPU_AP1R + 3*4)]
 	msr	ICH_AP1R3_EL2, x20
@@ -188,10 +177,8 @@
 5:	ldr	w17, [x3, #VGIC_V3_CPU_AP1R]
 	msr	ICH_AP1R0_EL2, x17
 
-	cmp	w22, #4		// 5 bits
-	b.eq	5f
-	cmp	w22, #5		// 6 bits
-	b.eq	6f
+	tbnz	w21, #29, 6f	// 6 bits
+	tbz	w21, #30, 5f	// 5 bits
 				// 7 bits
 	ldr	w20, [x3, #(VGIC_V3_CPU_AP0R + 3*4)]
 	msr	ICH_AP0R3_EL2, x20
@@ -203,33 +190,33 @@
 	msr	ICH_AP0R0_EL2, x17
 
 	and	w22, w21, #0xf
-	mov	w23, #0xf
-	sub	w23, w23, w22	// How many regs we have to skip
+	mvn	w22, w21
+	ubfiz	w23, w22, 2, 4	// w23 = (15 - ListRegs) * 4
 
 	adr	x24, 1f
-	add	x24, x24, x23, lsl #2	// adr(1f) + unimp_nr*4
+	add	x24, x24, x23
 	br	x24
 
 1:
-	ldr	x20, [x3, #(VGIC_V3_CPU_LR + 15*8)]
-	ldr	x19, [x3, #(VGIC_V3_CPU_LR + 14*8)]
-	ldr	x18, [x3, #(VGIC_V3_CPU_LR + 13*8)]
-	ldr	x17, [x3, #(VGIC_V3_CPU_LR + 12*8)]
-	ldr	x16, [x3, #(VGIC_V3_CPU_LR + 11*8)]
-	ldr	x15, [x3, #(VGIC_V3_CPU_LR + 10*8)]
-	ldr	x14, [x3, #(VGIC_V3_CPU_LR + 9*8)]
-	ldr	x13, [x3, #(VGIC_V3_CPU_LR + 8*8)]
-	ldr	x12, [x3, #(VGIC_V3_CPU_LR + 7*8)]
-	ldr	x11, [x3, #(VGIC_V3_CPU_LR + 6*8)]
-	ldr	x10, [x3, #(VGIC_V3_CPU_LR + 5*8)]
-	ldr	x9, [x3, #(VGIC_V3_CPU_LR + 4*8)]
-	ldr	x8, [x3, #(VGIC_V3_CPU_LR + 3*8)]
-	ldr	x7, [x3, #(VGIC_V3_CPU_LR + 2*8)]
-	ldr	x6, [x3, #(VGIC_V3_CPU_LR + 1*8)]
-	ldr	x5, [x3, #VGIC_V3_CPU_LR]
+	ldr	x20, [x3, #LR_OFFSET(15)]
+	ldr	x19, [x3, #LR_OFFSET(14)]
+	ldr	x18, [x3, #LR_OFFSET(13)]
+	ldr	x17, [x3, #LR_OFFSET(12)]
+	ldr	x16, [x3, #LR_OFFSET(11)]
+	ldr	x15, [x3, #LR_OFFSET(10)]
+	ldr	x14, [x3, #LR_OFFSET(9)]
+	ldr	x13, [x3, #LR_OFFSET(8)]
+	ldr	x12, [x3, #LR_OFFSET(7)]
+	ldr	x11, [x3, #LR_OFFSET(6)]
+	ldr	x10, [x3, #LR_OFFSET(5)]
+	ldr	x9, [x3, #LR_OFFSET(4)]
+	ldr	x8, [x3, #LR_OFFSET(3)]
+	ldr	x7, [x3, #LR_OFFSET(2)]
+	ldr	x6, [x3, #LR_OFFSET(1)]
+	ldr	x5, [x3, #LR_OFFSET(0)]
 
 	adr	x24, 1f
-	add	x24, x24, x23, lsl #2
+	add	x24, x24, x23
 	br	x24
 
 1:
@@ -250,14 +237,15 @@
 	msr	ICH_LR1_EL2,   x6
 	msr	ICH_LR0_EL2,   x5
 
-	// Ensure that the above will be visible via the memory-mapped
-	// view of the CPU interface (GICV).
+	// Ensure that the above will have reached the
+	// (re)distributors. This ensure the guest will read
+	// the correct values from the memory-mapped interface.
 	isb
 	dsb	sy
 
 	// Prevent the guest from touching the GIC system registers
 	//mrs	x5, ICC_SRE_EL2
-	//and	x5, x5, #~(1 << 3)
+	//and	x5, x5, #~ICC_SRE_EL2_ENABLE
 	//msr	ICC_SRE_EL2, x5
 .endm
 
