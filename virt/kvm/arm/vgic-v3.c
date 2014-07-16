@@ -72,7 +72,7 @@ static void vgic_v3_set_lr(struct kvm_vcpu *vcpu, int lr,
 	u64 lr_val = (((u64)lr_desc.source << GICH_LR_PHYSID_CPUID_SHIFT) |
 		      lr_desc.irq);
 
-    lr_val |= (1ul<<60); //Grp1 enable
+	lr_val |= 1UL << 60;	/* Grp1 enable */
 
 	if (lr_desc.state & LR_STATE_PENDING)
 		lr_val |= ICH_LR_PENDING_BIT;
