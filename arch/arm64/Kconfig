@@ -137,6 +137,9 @@ config ARCH_THUNDER
 	select NET_VENDOR_CAVIUM
 	select SATA_AHCI
 	select SATA_AHCI_PLATFORM
+	select PCI
+	select PCI_THUNDER
+	select PCI_IOV
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
