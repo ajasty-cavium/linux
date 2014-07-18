@@ -146,6 +146,8 @@ config ARCH_THUNDER
 	bool "Cavium Inc. Thunder SoC Family"
 	help
 	  This enables support for Cavium's Thunder Family of SoCs.
+	select SATA_AHCI
+	select SATA_AHCI_PLATFORM
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
