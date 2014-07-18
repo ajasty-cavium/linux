@@ -134,6 +134,7 @@ config ARCH_THUNDER
 	bool "Cavium Inc. Thunder SoC Family"
 	help
 	  This enables support for Cavium's Thunder Family of SoCs.
+	select NET_VENDOR_CAVIUM
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
