@@ -225,6 +225,7 @@ config NR_CPUS
 	range 2 32
 	depends on SMP
 	# These have to remain sorted largest to smallest
+	default "32" if ARCH_THUNDER
 	default "8"
 
 config HOTPLUG_CPU
