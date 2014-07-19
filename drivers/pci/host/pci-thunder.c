@@ -70,9 +70,8 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
         struct resource *res;
         int resno;
 
-        for (resno = 0; resno <= PCI_NUM_RESOURCES; resno++) {
+        for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
                 dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
-        }
 
         for (resno = 0; resno < PCI_BRIDGE_RESOURCES; resno++) {
                 res = &dev->resource[resno];
