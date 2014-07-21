@@ -10,6 +10,7 @@
  */
 /dts-v1/;
 
+/* Reserving first 12MB of DDR for firmware */
 /memreserve/ 0x00000000 0x00c00000;
 
 / {
