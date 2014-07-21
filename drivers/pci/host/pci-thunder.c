@@ -32,14 +32,14 @@ struct thunder_pcie {
 	struct device_node	*node;
 	struct device		*dev;
 	void __iomem		*cfg_base;
-	struct msi_chip 	*msi;
+	struct msi_chip		*msi;
 };
 
 /*
- * This bridge is just for the sake of supporting ARI for 
+ * This bridge is just for the sake of supporting ARI for
  * downstream devices. No resources are attached to it.
- * Copy upstream root bus resources to bridge which aide in 
- * resource claiming for downstream devices 
+ * Copy upstream root bus resources to bridge which aide in
+ * resource claiming for downstream devices
  */
 static void pci_bridge_resource_fixup(struct pci_dev *dev)
 {
@@ -52,7 +52,7 @@ static void pci_bridge_resource_fixup(struct pci_dev *dev)
 					 PCI_BRIDGE_RESOURCE_NUM + resno);
 	}
 
-	for (resno = PCI_BRIDGE_RESOURCES; 
+	for (resno = PCI_BRIDGE_RESOURCES;
 		resno <= PCI_BRIDGE_RESOURCE_END; resno++) {
 		dev->resource[resno].start = dev->resource[resno].end = 0;
 		dev->resource[resno].flags = 0;
@@ -81,7 +81,7 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
                 pci_claim_resource(dev, resno);
         }
 }
-DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID, 
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 						pci_dev_resource_fixup);
 
 static void __iomem *thunder_pcie_build_config_addr(struct thunder_pcie *pcie,
@@ -89,13 +89,13 @@ static void __iomem *thunder_pcie_build_config_addr(struct thunder_pcie *pcie,
 {
         void __iomem *cfg_addr = NULL;
 
-        cfg_addr =  pcie->cfg_base + 
+	cfg_addr =  pcie->cfg_base +
 			((bus << THUNDER_PCIE_BUS_SHIFT) |
-        		(dev << THUNDER_PCIE_DEV_SHIFT) |
-        		(fn  << THUNDER_PCIE_FUNC_SHIFT) |
+			(dev << THUNDER_PCIE_DEV_SHIFT) |
+			(fn  << THUNDER_PCIE_FUNC_SHIFT) |
 			(reg & ~0x3));
 
-        return cfg_addr;
+	return cfg_addr;
 }
 
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
@@ -104,15 +104,15 @@ static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
 
-	addr = thunder_pcie_build_config_addr(pcie, bus->number, 
+	addr = thunder_pcie_build_config_addr(pcie, bus->number,
 				devfn >> 3,  devfn & 0x7, reg);
 	*val = readl(addr);
 
-	if (size == 1) 
+	if (size == 1)
 		*val = (*val >> (8 * (reg & 3))) & 0xff;
 	else if (size == 2)
 		*val = (*val >> (8 * (reg & 3))) & 0xffff;
-	
+
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -123,7 +123,7 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 	void __iomem *addr;
 	u32 cur_val, final_val;
 
-	addr = thunder_pcie_build_config_addr(pcie, bus->number, 
+	addr = thunder_pcie_build_config_addr(pcie, bus->number,
 				devfn >> 3,  devfn & 0x7, reg);
 	cur_val = readl(addr);
 
@@ -140,12 +140,12 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 		cur_val = 0;
 		break;
 	default:
-		return PCIBIOS_FUNC_NOT_SUPPORTED;	
+		return PCIBIOS_FUNC_NOT_SUPPORTED;
 	}
 
 	final_val = cur_val | val;
 	writel(final_val, addr);
-	
+
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -154,7 +154,7 @@ static struct pci_ops thunder_pcie_ops = {
 	.write = thunder_pcie_write_config
 };
 
-static void thunder_pcie_msi_enable(struct thunder_pcie *pcie, 
+static void thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 					struct pci_bus *bus)
 {
 	struct device_node *msi_node;
@@ -162,7 +162,7 @@ static void thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 	msi_node = of_parse_phandle(pcie->node, "msi-parent", 0);
 	if (!msi_node)
 		return;
-	
+
 	pcie->msi = of_pci_find_msi_chip_by_node(msi_node);
 
 	if (pcie->msi)
