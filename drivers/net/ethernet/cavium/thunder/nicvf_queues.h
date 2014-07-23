@@ -13,31 +13,9 @@
 
 #define    MAX_QUEUE_SET			128
 #define    MAX_RCV_QUEUES_PER_QS 		8
+#define    MAX_RCV_BUF_DESC_RINGS_PER_QS	2
 #define    MAX_SND_QUEUES_PER_QS		8
 #define    MAX_CMP_QUEUES_PER_QS		8
-#define    MAX_RCV_BUF_DESC_RINGS_PER_QS	2
-
-#define    SND_QUEUE_SIZE0	 0ULL /* 1K entries */   
-#define    SND_QUEUE_SIZE1	 1ULL /* 2K entries */   
-#define    SND_QUEUE_SIZE2	 2ULL /* 4K entries */   
-#define    SND_QUEUE_SIZE3	 3ULL /* 8K entries */   
-#define    SND_QUEUE_SIZE4	 4ULL /* 16K entries */   
-#define    SND_QUEUE_SIZE5	 5ULL /* 32K entries */   
-#define    SND_QUEUE_SIZE6	 6ULL /* 64K entries */   
-
-#define    DEFAULT_SND_QUEUE_LEN  	 (1ULL << (SND_QUEUE_SIZE0 + 10))
-#define    DEFAULT_SND_QUEUE_THRESH	  2ULL
-
-#define    COMPLETION_QUEUE_SIZE0	 0ULL /* 1K entries */   
-#define    COMPLETION_QUEUE_SIZE1	 1ULL /* 2K entries */   
-#define    COMPLETION_QUEUE_SIZE2	 2ULL /* 4K entries */   
-#define    COMPLETION_QUEUE_SIZE3	 3ULL /* 8K entries */   
-#define    COMPLETION_QUEUE_SIZE4	 4ULL /* 16K entries */   
-#define    COMPLETION_QUEUE_SIZE5	 5ULL /* 32K entries */   
-#define    COMPLETION_QUEUE_SIZE6	 6ULL /* 64K entries */   
-
-#define    DEFAULT_CMP_QUEUE_LEN         (1ULL << (COMPLETION_QUEUE_SIZE0 + 10))
-#define    DEFAULT_CMP_QUEUE_THRESH	  0
 
 #define    RBDR_SIZE0	 0ULL /* 8K entries */   
 #define    RBDR_SIZE1	 1ULL /* 16K entries */   
@@ -47,9 +25,37 @@
 #define    RBDR_SIZE5	 5ULL /* 256K entries */   
 #define    RBDR_SIZE6	 6ULL /* 512K entries */   
 
-#define    DEFAULT_RBDR_THRESH	  	 2048
-#define    DEFAULT_RCV_BUF_COUNT  	 (1ULL << (RBDR_SIZE0 + 13) )
-#define    DEFAULT_RCV_BUFFER_LEN	 2048 /* Should be multiples of 128bytes */
+#define    SND_QUEUE_SIZE0	 0ULL /* 1K entries */   
+#define    SND_QUEUE_SIZE1	 1ULL /* 2K entries */   
+#define    SND_QUEUE_SIZE2	 2ULL /* 4K entries */   
+#define    SND_QUEUE_SIZE3	 3ULL /* 8K entries */   
+#define    SND_QUEUE_SIZE4	 4ULL /* 16K entries */   
+#define    SND_QUEUE_SIZE5	 5ULL /* 32K entries */   
+#define    SND_QUEUE_SIZE6	 6ULL /* 64K entries */   
+
+#define    CMP_QUEUE_SIZE0	 0ULL /* 1K entries */   
+#define    CMP_QUEUE_SIZE1	 1ULL /* 2K entries */   
+#define    CMP_QUEUE_SIZE2	 2ULL /* 4K entries */   
+#define    CMP_QUEUE_SIZE3	 3ULL /* 8K entries */   
+#define    CMP_QUEUE_SIZE4	 4ULL /* 16K entries */   
+#define    CMP_QUEUE_SIZE5	 5ULL /* 32K entries */   
+#define    CMP_QUEUE_SIZE6	 6ULL /* 64K entries */   
+
+/* Default queue count per QS, its lengths and threshold values */
+#define    RBDR_CNT		1
+#define    RCV_QUEUE_CNT	1
+#define    SND_QUEUE_CNT	8
+#define    CMP_QUEUE_CNT	8 /* Max of RCV and SND qcount */
+
+#define    SND_QUEUE_LEN	(1ULL << (SND_QUEUE_SIZE0 + 10))
+#define    SND_QUEUE_THRESH	2ULL
+
+#define    CMP_QUEUE_LEN	(1ULL << (CMP_QUEUE_SIZE1 + 10))
+#define    CMP_QUEUE_THRESH	0
+
+#define    RCV_BUF_COUNT	(1ULL << (RBDR_SIZE0 + 13) )
+#define    RBDR_THRESH		2048
+#define    RCV_BUFFER_LEN	2048 /* In multiples of 128bytes */
 
 /* Descriptor size */
 #define    SND_QUEUE_DESC_SIZE		16   /* 128 bits */
@@ -79,7 +85,7 @@ struct rbdr {
 	uint32_t	buf_size;
 	uint32_t	thresh;      /* Threshold level for interrupt */
 	struct q_desc_mem   desc_mem;
-	struct rbdr_entry_t    *desc[DEFAULT_RCV_BUF_COUNT];
+	struct rbdr_entry_t    *desc[RCV_BUF_COUNT];
 };
 
 struct rcv_queue {
@@ -96,8 +102,9 @@ struct rcv_queue {
 
 struct cmp_queue {
 	struct q_desc_mem   desc_mem;
-	uint8_t   intr_timer_thresh;
-	uint16_t  thresh;
+	uint8_t    intr_timer_thresh;
+	uint16_t   thresh;
+	spinlock_t cq_lock;  /* lock to serialize processing CQEs */
 };
 
 struct sq_desc {
@@ -109,6 +116,7 @@ struct snd_queue {
 	struct    q_desc_mem   desc_mem;
 	uint8_t   cq_qs;  /* CQ's QS to which this SQ is pointing */
 	uint8_t   cq_idx; /* CQ index (0 to 7) in the above QS */
+	uint16_t  thresh;
 	uint16_t  free_cnt;
 	uint64_t  head;
 	uint64_t  tail;
@@ -123,23 +131,30 @@ struct queue_set {
 	struct	  rcv_queue rq[MAX_RCV_QUEUES_PER_QS];
 	uint8_t   cq_cnt;
 	struct    cmp_queue cq[MAX_CMP_QUEUES_PER_QS];
+	uint64_t  cq_len;
 	uint8_t   sq_cnt;
 	struct    snd_queue sq[MAX_SND_QUEUES_PER_QS];
+	uint64_t  sq_len;
 	uint8_t   rbdr_cnt;
 	struct    rbdr  rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
+	uint64_t  rbdr_len;
 };
 
-/* Completion queue */
-/* Status */
+/* CQ status bits */
 #define 	CQ_WR_FULL 	(1 << 26)
 #define 	CQ_WR_DISABLE 	(1 << 25)
 #define 	CQ_WR_FAULT 	(1 << 24)
-#define 	CQ_CQE_COUNT 	(0xFF << 0)
+#define 	CQ_CQE_COUNT 	(0xFFFF << 0)
+
+/* CQ err mask */
+#define		CQ_ERR_MASK	(CQ_WR_FULL | CQ_WR_DISABLE | CQ_WR_FAULT)
 
 int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
 void nicvf_qset_config (struct nicvf *nic, bool enable);
-void nicvf_put_sq_desc (struct queue_set *qs, int sq_idx, int desc_cnt); 
-int nicvf_get_sq_desc (struct queue_set *qs, int qnum, void **desc); 
+void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx);
+void nicvf_sq_disable(struct nicvf *nic, int qidx);
+void nicvf_put_sq_desc (struct snd_queue *sq, int desc_cnt); 
+void nicvf_sq_free_used_descs (struct net_device *netdev, struct snd_queue *sq, int qidx);
 int nicvf_sq_append_skb (struct nicvf *nic, struct sk_buff *skb);
 
 int nicvf_cq_check_errs (struct nicvf *nic, void *cq_desc);
@@ -161,5 +176,5 @@ uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset);
 void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset, 
 				uint64_t qidx, uint64_t val);
 uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx);
-
+void nicvf_cmp_queue_config (struct nicvf *nic, struct queue_set *qs, int qidx, bool enable);
 #endif /* NICVF_QUEUES_H */
