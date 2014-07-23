@@ -324,7 +324,7 @@ struct cqe_send_t {
 };
 
 union cq_desc_t {
-	uint8_t u[48];
+	uint64_t u[64];
 	struct cqe_send_t snd_hdr;
 	struct cqe_rx_t rx_hdr;
 	struct cqe_rx_tcp_t rx_tcp_hdr;

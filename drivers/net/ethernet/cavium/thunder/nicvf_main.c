@@ -249,7 +249,7 @@ static int nicvf_init_resources(struct nicvf *nic)
 	return 0;
 }
 
-static void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb) 
+void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb) 
 {
 	int i;
 
@@ -270,50 +270,29 @@ free_skb:
 static void nicvf_snd_pkt_handler (struct net_device *netdev, 
 				  void *cq_desc, int cqe_type)
 {
-	int i;
 	struct sk_buff *skb = NULL;
 	struct cqe_send_t *cqe_tx;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct snd_queue *sq;
-	struct sq_hdr_subdesc *hdr, *desc;
-	struct sq_gather_subdesc *gather;
+	struct sq_hdr_subdesc *hdr;
 
 	cqe_tx = (struct cqe_send_t *)cq_desc;
 	sq = &nic->qs->sq[cqe_tx->sq_idx];
-	
-	hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base + 
-			(cqe_tx->sqe_ptr * SND_QUEUE_DESC_SIZE));
 
+	hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base + 
+				(cqe_tx->sqe_ptr * SND_QUEUE_DESC_SIZE));
+	if (hdr->subdesc_type != SQ_DESC_TYPE_HEADER)
+		return;
+	
 	nic_dbg(&nic->pdev->dev, "%s Qset #%d SQ #%d SQ ptr #%d Subdesc count %d\n",
 			 	__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx, 
 					cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
-	for (i = 1; i <= hdr->subdesc_cnt; i++) {
-		desc = (struct sq_hdr_subdesc *)(sq->desc_mem.base + 
-			((cqe_tx->sqe_ptr + i) * SND_QUEUE_DESC_SIZE));
-
-		switch (desc->subdesc_type) {
-		case SQ_DESC_TYPE_GATHER:
-			gather = (struct sq_gather_subdesc *)(sq->desc_mem.base +
-						((cqe_tx->sqe_ptr + i) *
-						SND_QUEUE_DESC_SIZE));
-
-			if (skb)
-				continue;
-
-			skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr + i];
-			atomic64_add(1, (atomic64_t *)&netdev->stats.tx_packets);
-			atomic64_add(gather->size, (atomic64_t *)&netdev->stats.tx_bytes);
-			nicvf_free_skb(nic, skb);
-		break;
-		default:
-		break;
-		}
-	}
-	nicvf_put_sq_desc(nic->qs, cqe_tx->sq_idx, hdr->subdesc_cnt + 1);
-
-	if (netif_queue_stopped(netdev))
-		netif_wake_queue(netdev);
+	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
+	atomic64_add(1, (atomic64_t *)&netdev->stats.tx_packets);
+	atomic64_add(hdr->tot_len, (atomic64_t *)&netdev->stats.tx_bytes);
+	nicvf_free_skb(nic, skb);
+	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 }
 
 static void nicvf_rcv_pkt_handler (struct net_device *netdev, 
@@ -325,7 +304,6 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 	if (!((cqe_type == CQE_TYPE_RX) || (cqe_type == CQE_TYPE_RX_SPLIT) || 
 						(cqe_type == CQE_TYPE_RX_TCP))) {
 		atomic64_add(1, (atomic64_t *)&netdev->stats.rx_dropped);
-		dev_kfree_skb_any(skb);
 		return;
 	}
 
@@ -367,24 +345,25 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 #endif
 }
 
-static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum, 
+static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx, 
 					struct napi_struct *napi, int budget)
 {
 	int processed_cqe = 0, work_done = 0;
 	int cqe_count, cqe_head;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
-	struct cmp_queue *cq = &qs->cq[cq_qnum];
+	struct cmp_queue *cq = &qs->cq[cq_idx];
 	struct cqe_rx_t *cq_desc;
 
+	spin_lock(&cq->cq_lock);
 	/* Get no of valid CQ entries to process */
-	cqe_count = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_STATUS, cq_qnum);
-	cqe_count &= 0xFFFF;
+	cqe_count = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_STATUS, cq_idx);
+	cqe_count &= CQ_CQE_COUNT;
 	if (!cqe_count)
-		return 0;
+		goto done;
 
 	/* Get head of the valid CQ entries */
-	cqe_head = nicvf_qset_reg_read(nic, NIC_QSET_CQ_0_7_HEAD) >> 9;
+	cqe_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx) >> 9;
 	cqe_head &= 0xFFFF;
 
 	nic_dbg(&nic->pdev->dev, "%s cqe_count %d cqe_head %d\n", __FUNCTION__, cqe_count, cqe_head);
@@ -392,10 +371,12 @@ static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		/* Get the CQ descriptor */
 		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base + 
 				(cqe_head * CMP_QUEUE_DESC_SIZE));
+
 		if (napi && (work_done >= budget) && 
 			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
 			break;
-		} 
+		}
+		
 		nic_dbg(&nic->pdev->dev, "cq_desc->cqe_type %d\n", cq_desc->cqe_type);
 		switch (cq_desc->cqe_type) {
 		case CQE_TYPE_RX:
@@ -405,16 +386,26 @@ static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_qnum,
 		case CQE_TYPE_SEND:
 			nicvf_snd_pkt_handler(netdev, cq_desc, CQE_TYPE_SEND);
 		break;
+		case CQE_TYPE_INVALID:
+		case CQE_TYPE_RX_SPLIT:
+		case CQE_TYPE_RX_TCP:
+		case CQE_TYPE_SEND_PTP:
+			/* Ignore for now */
+		break;
 		}
+		cq_desc->cqe_type = CQE_TYPE_INVALID;
 		processed_cqe++;
 		cqe_head++;
 		cqe_head &= (cq->desc_mem.q_len - 1);
 	}
 	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n", 
 			__FUNCTION__, processed_cqe, work_done, budget);
-	/* Dequeue CQE */
+
+	/* Ring doorbell to inform H/W to reuse processed CQEs */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,  
-					cq_qnum, processed_cqe);
+					cq_idx, processed_cqe);
+done:
+	spin_unlock(&cq->cq_lock);
 	return work_done;
 }
 
@@ -425,8 +416,13 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
 	struct net_device *netdev = napi->dev;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct nicvf_cq_poll *cq = container_of(napi, struct nicvf_cq_poll, napi);
+	struct netdev_queue *txq;
 
 	work_done = nicvf_cq_intr_handler (netdev, cq->cq_idx, napi, budget);
+	
+	txq = netdev_get_tx_queue(netdev, cq->cq_idx);
+	if (netif_tx_queue_stopped(txq))
+		netif_tx_wake_queue(txq);
 	
 	if (work_done < budget) {
 		/* Slow packet rate, exit polling */
@@ -434,32 +430,41 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
 		/* Re-enable interrupts */
 		nicvf_enable_intr (nic, NICVF_INTR_CQ, cq->cq_idx);
 	}
-		
 	return work_done;
 }
 #endif
 
 /*
  * Qset error interrupt handler
- * As of now only 'CQ full' errors are only handled
+ * As of now only CQ errors are handled
  */
 void nicvf_handle_qs_err (unsigned long data)
 {
 	struct nicvf *nic = (struct nicvf *)data;
 	struct queue_set *qs = nic->qs;
-	int cq_idx;
-	uint64_t cq_status, cq_ena;
-	
-	for (cq_idx = 0; cq_idx < qs->cq_cnt; cq_idx++) {
-		cq_status = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_STATUS, cq_idx);
-		if (!(cq_status & CQ_WR_FULL))
+	int qidx;
+	uint64_t status;
+
+        netif_tx_disable(nic->netdev);
+
+	/* Check if it is CQ err */
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
+		status = nicvf_queue_reg_read(nic, 
+					NIC_QSET_CQ_0_7_STATUS, qidx);
+		if (!(status & CQ_ERR_MASK))
 			continue;
-		nicvf_cq_intr_handler(nic->netdev, cq_idx, NULL, 0); 
-                /* Re-enable completion queue */
-		cq_ena = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_CFG, cq_idx);
-		cq_ena |= (1ULL << 42);
-                nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, cq_idx, cq_ena);
+		/* Process already queued CQEs and reconfig CQ */
+		nicvf_disable_intr (nic, NICVF_INTR_CQ, qidx);
+		nicvf_sq_disable(nic, qidx);
+		nicvf_cq_intr_handler (nic->netdev, qidx, NULL, 0);
+		nicvf_cmp_queue_config(nic, qs, qidx, true);
+		nicvf_sq_free_used_descs(nic->netdev, &qs->sq[qidx], qidx);
+		nicvf_sq_enable(nic, &qs->sq[qidx], qidx);
+
+		nicvf_enable_intr (nic, NICVF_INTR_CQ, qidx);
 	}
+
+	netif_tx_start_all_queues(nic->netdev);	
 	/* Re-enable Qset error interrupt */
 	nicvf_enable_intr (nic, NICVF_INTR_QS_ERR, 0);
 }
@@ -519,14 +524,11 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 			nicvf_disable_intr (nic, NICVF_INTR_RBDR, qidx);
 
-		tasklet_schedule(&nic->rbdr_task);
+		tasklet_hi_schedule(&nic->rbdr_task);
 	}
 		
 	/* Clear interrupts */
-	nicvf_qset_reg_write(nic, NIC_VF_INT, 
-				(cq_intr << NICVF_INTR_CQ_SHIFT) | 
-				(rbdr_intr << NICVF_INTR_RBDR_SHIFT)| 
-				(qs_err_intr << NICVF_INTR_QS_ERR_SHIFT));
+	nicvf_qset_reg_write(nic, NIC_VF_INT, intr); 
 	return IRQ_HANDLED;
 }
 
@@ -698,6 +700,8 @@ gso_err:
 static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct nicvf *nic = netdev_priv(netdev);
+	int qid = skb_get_queue_mapping(skb);
+	struct netdev_queue *txq = netdev_get_tx_queue(netdev, qid);
 	int ret = 1;
 
 	/* Check for minimum packet length */
@@ -733,16 +737,15 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 		return NETDEV_TX_OK;
 	}
 #endif	
-	if (!nicvf_sq_append_skb(nic, skb) && !netif_queue_stopped(netdev)) {
-		netif_stop_queue(netdev);
+	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
+		netif_tx_stop_queue(txq);
 		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_dropped);
-		nic_dbg(&nic->pdev->dev, "VF%d: TX ring full, stop transmitting packets\n", 
-							nic->vnic_id);
+		nic_dbg(&nic->pdev->dev, 
+			"VF%d: TX ring full, stop transmitting packets\n", nic->vnic_id);
 		return NETDEV_TX_BUSY;	
 	}
 	
 	nicvf_update_tx_stats(nic, skb);
-
 	return NETDEV_TX_OK;
 }
 
@@ -774,6 +777,7 @@ static int nicvf_stop(struct net_device *netdev)
 	nicvf_unregister_interrupts(nic);
 #ifdef NICVF_NAPI_ENABLE
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
+		napi_synchronize(&nic->napi[qidx]->napi);
 		napi_disable(&nic->napi[qidx]->napi);
 		netif_napi_del(&nic->napi[qidx]->napi);
 		kfree(nic->napi[qidx]);
@@ -798,6 +802,8 @@ static int nicvf_open(struct net_device *netdev)
 
 	nic->mtu = netdev->mtu;
 	
+        netif_carrier_off(netdev);
+
 	if ((err = nicvf_register_misc_interrupt(nic))) {
 		return -EIO;
 	}
@@ -805,12 +811,28 @@ static int nicvf_open(struct net_device *netdev)
 	if ((err = nicvf_init_resources(nic)))
 		return err;
 
+	qs = nic->qs;
+
+	/* Set real no of queues */
+	//rtnl_lock();
+        if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
+                netdev_err(netdev, 
+			"Failed to set real number of Tx queues: %d\n", err);
+                return err;
+        }
+
+        if ((err = netif_set_real_num_rx_queues(netdev, qs->rq_cnt))) {
+                netdev_err(netdev,
+			"Failed to set real number of Rx queues: %d\n", err);
+                return err;
+        }
+	//rtnl_unlock();
+
 	if ((err = nicvf_register_interrupts(nic))) {
 		nicvf_stop(netdev);
 		return -EIO;
 	}
 
-	qs = nic->qs;
 #ifdef NICVF_NAPI_ENABLE
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		cq_poll = NULL;
@@ -860,7 +882,7 @@ no_err:
 
 	if (nicvf_is_link_active(nic)) {
 		netif_carrier_on(netdev);
-		netif_start_queue(netdev);	
+		netif_tx_start_all_queues(netdev);	
 	}
 
 	return 0;
@@ -916,7 +938,9 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct nicvf *nic;
 	int    err;
 
-        netdev = alloc_etherdev(sizeof(struct nicvf)); /* Consider using alloc_etherdev_mq for multiple send queues */
+	netdev = alloc_etherdev_mqs(sizeof(struct nicvf), 
+			MAX_RCV_QUEUES_PER_QS, MAX_SND_QUEUES_PER_QS);
+
         if (!netdev)
                 return -ENOMEM;
 
@@ -962,7 +986,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Get this VF's number */
 	nic->vnic_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 21) & 0xFF;
-	
+
 #ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
 	netdev->hw_features |= NETIF_F_RXCSUM; 
 #endif
@@ -986,6 +1010,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_err(dev, "Failed to register netdevice\n");
 		goto err_unmap_resources;
 	}
+
 #ifdef NICVF_ETHTOOL_ENABLE
 	nicvf_set_ethtool_ops(netdev);
 #endif
