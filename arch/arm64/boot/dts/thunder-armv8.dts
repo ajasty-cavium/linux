@@ -14,8 +14,8 @@
 /memreserve/ 0x00000000 0x00c00000;
 
 / {
-	model = "Cavium Thunder";
-	compatible = "cavium,thunder";
+	model = "Cavium ThunderX CN88XX Family";
+	compatible = "cavium,thunder-88xx";
 	interrupt-parent = <&gic0>;
 	#address-cells = <2>;
 	#size-cells = <2>;
