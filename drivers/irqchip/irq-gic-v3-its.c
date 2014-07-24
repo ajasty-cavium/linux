@@ -1136,7 +1136,6 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 		if (WARN_ON(nvec <= 0))
 			return nvec;
 		its_dev = its_create_device(its, dev_id, nvec);
-		dev_info(&pdev->dev, "ITT %d entries, %d bits\n", nvec, ilog2(nvec));
 	}
 	if (!its_dev)
 		return -ENOMEM;
@@ -1145,7 +1144,6 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 	if (err)
 		return err;
 
-	dev_info(&pdev->dev, "ID:%d pID:%d vID:%d\n", its_msi_get_entry_nr(desc), hwirq, irq);
 	irq_set_msi_desc(irq, desc);
 	irq_set_handler_data(irq, its_dev);
 
