@@ -139,7 +139,6 @@ config ARCH_THUNDER
 	select SATA_AHCI_PLATFORM
 	select PCI
 	select PCI_THUNDER
-	select PCI_IOV
 	select TIMER_STATS
 
 config ARCH_VEXPRESS
