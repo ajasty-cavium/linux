@@ -49,7 +49,6 @@ config PCI_HOST_GENERIC
 config PCI_THUNDER
 	bool "Thunder PCIe controller"
 	depends on ARCH_THUNDER
-	depends on OF
 	select PCI_MSI
 	select PCI_IOV
 	help
