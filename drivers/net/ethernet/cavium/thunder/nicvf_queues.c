@@ -32,11 +32,8 @@ static int nicvf_alloc_q_desc_mem (struct nicvf *nic,
 	desc_mem->size = (desc_size * q_len) + align_bytes;
 	desc_mem->unalign_base = dma_alloc_coherent (&nic->pdev->dev, desc_mem->size,
 							&desc_mem->dma, GFP_ATOMIC);
-	if (!desc_mem->unalign_base) {
-		netdev_err(nic->netdev, 
-			"Unable to allocate memory for Rcv.buffer descriptor ring\n");
+	if (!desc_mem->unalign_base)
 		return -1;
-	}
 
 	desc_mem->phys_base = NICVF_ALIGNED_ADDR((uint64_t)desc_mem->dma, align_bytes); 
 	desc_mem->base = (void *)((u8 *)desc_mem->unalign_base + 
@@ -96,8 +93,11 @@ static int  nicvf_init_rbdr (struct nicvf *nic, struct rbdr *rbdr,
 	unsigned char *rcv_buffer;
 
 	if (nicvf_alloc_q_desc_mem (nic, &rbdr->desc_mem, ring_len, 
-				sizeof(struct rbdr_entry_t), NICVF_RCV_BUF_ALIGN_BYTES))
+				sizeof(struct rbdr_entry_t), NICVF_RCV_BUF_ALIGN_BYTES)) {
+		netdev_err(nic->netdev, 
+			"Unable to allocate memory for rcv buffer ring\n");
 		return -ENOMEM;
+	}
 
 	/* Buffer size has to be in multiples of 128 bytes */
 	rbdr->buf_size = buf_size;
@@ -224,8 +224,11 @@ static int nicvf_init_cmp_queue (struct nicvf *nic, struct cmp_queue *cq,
 								int q_len)
 {
 	if (nicvf_alloc_q_desc_mem (nic, &cq->desc_mem, q_len, 
-				CMP_QUEUE_DESC_SIZE, NICVF_CQ_BASE_ALIGN_BYTES))
+				CMP_QUEUE_DESC_SIZE, NICVF_CQ_BASE_ALIGN_BYTES)) {
+		netdev_err(nic->netdev, 
+			"Unable to allocate memory for Tx/Rx notification queue\n");
 		return -ENOMEM;
+	}
 	cq->intr_timer_thresh = 0;
 	cq->thresh = CMP_QUEUE_THRESH; 
 
@@ -246,8 +249,11 @@ static int nicvf_init_snd_queue (struct nicvf *nic, struct snd_queue *sq,
 								int q_len)
 {
 	if (nicvf_alloc_q_desc_mem (nic, &sq->desc_mem, q_len, 
-				SND_QUEUE_DESC_SIZE, NICVF_SQ_BASE_ALIGN_BYTES))
+				SND_QUEUE_DESC_SIZE, NICVF_SQ_BASE_ALIGN_BYTES)) {
+		netdev_err(nic->netdev, 
+			"Unable to allocate memory for transmit queue\n");
 		return -ENOMEM;
+	}
 		
 	sq->skbuff = kzalloc(sizeof(uint64_t) * q_len, GFP_ATOMIC);
 	sq->head = sq->tail = 0;
@@ -299,7 +305,17 @@ static void nicvf_rcv_queue_config (struct nicvf *nic, struct queue_set *qs,
 			(rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
 	nicvf_send_msg_to_pf(nic, mbx);
 
+	/* RQ drop config
+	 * Enable CQ drop to reserve sufficient CQEs for all tx packets 
+	 */
+	mbx->msg = NIC_PF_VF_MSG_RQ_DROP_CFG;
+	mbx->data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
+	nicvf_send_msg_to_pf(nic, mbx);
+
 	/* Enable Receive queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, (1ULL << 1));
+
+	kfree(mbx);
 }
 
 void nicvf_cmp_queue_config (struct nicvf *nic, struct queue_set *qs, 
@@ -378,6 +394,7 @@ static void nicvf_snd_queue_config (struct nicvf *nic, struct queue_set *qs,
 	
 	/* Set SQ's head entry */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_HEAD, qidx, 0);
+	kfree(mbx);
 }
 
 static void nicvf_rbdr_config (struct nicvf *nic, struct queue_set *qs, 
@@ -433,6 +450,7 @@ void nicvf_qset_config (struct nicvf *nic, bool enable)
 		mbx->data.qs.cfg = 0;
 		nicvf_send_msg_to_pf(nic, mbx);
 	}
+	kfree(mbx);
 }
 
 static void nicvf_free_resources(struct nicvf *nic)

@@ -201,7 +201,8 @@ struct nicvf_stats {
 #define		NIC_PF_VF_MSG_QS_CFG       0x03 /* Configure Qset */
 #define		NIC_PF_VF_MSG_RQ_CFG       0x04 /* Configure receive queue */
 #define		NIC_PF_VF_MSG_SQ_CFG       0x05 /* Configure Send queue */
-#define		NIC_PF_VF_MSG_SET_MAC      0x06 /* Add VF's MAC ID into BGX's DMAC filter */
+#define		NIC_PF_VF_MSG_RQ_DROP_CFG  0x06 /* Configure receive queue */
+#define		NIC_PF_VF_MSG_SET_MAC      0x07 /* Add VF's MAC ID into BGX's DMAC filter */
 
 struct nic_mbx {
 	uint64_t	   msg;
