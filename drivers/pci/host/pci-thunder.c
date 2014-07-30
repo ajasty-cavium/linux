@@ -43,13 +43,13 @@ struct thunder_pcie {
  */
 static void pci_bridge_resource_fixup(struct pci_dev *dev)
 {
-        struct pci_bus *bus;
-        int resno;
+	struct pci_bus *bus;
+	int resno;
 
 	bus = dev->subordinate;
 	for (resno = 0; resno < PCI_BRIDGE_RESOURCE_NUM; resno++) {
 		bus->resource[resno] = pci_bus_resource_n(bus->parent,
-					 PCI_BRIDGE_RESOURCE_NUM + resno);
+			PCI_BRIDGE_RESOURCE_NUM + resno);
 	}
 
 	for (resno = PCI_BRIDGE_RESOURCES;
@@ -67,18 +67,18 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_BRIDGE,
  */
 static void pci_dev_resource_fixup(struct pci_dev *dev)
 {
-        struct resource *res;
-        int resno;
+	struct resource *res;
+	int resno;
 
-        for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
-                dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
+	for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
+		dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
 
-        for (resno = 0; resno < PCI_BRIDGE_RESOURCES; resno++) {
-                res = &dev->resource[resno];
-                if (res->parent || !(res->flags & IORESOURCE_MEM))
-                        continue;
-                pci_claim_resource(dev, resno);
-        }
+	for (resno = 0; resno < PCI_BRIDGE_RESOURCES; resno++) {
+		res = &dev->resource[resno];
+		if (res->parent || !(res->flags & IORESOURCE_MEM))
+			continue;
+		pci_claim_resource(dev, resno);
+	}
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 						pci_dev_resource_fixup);
@@ -86,13 +86,13 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 static void __iomem *thunder_pcie_build_config_addr(struct thunder_pcie *pcie,
 					 int bus, int dev, int fn, int reg)
 {
-        void __iomem *cfg_addr = NULL;
+	void __iomem *cfg_addr = NULL;
 
 	cfg_addr =  pcie->cfg_base +
-			((bus << THUNDER_PCIE_BUS_SHIFT) |
-			(dev << THUNDER_PCIE_DEV_SHIFT) |
-			(fn  << THUNDER_PCIE_FUNC_SHIFT) |
-			(reg & ~0x3));
+		((bus << THUNDER_PCIE_BUS_SHIFT) |
+		(dev << THUNDER_PCIE_DEV_SHIFT) |
+		(fn  << THUNDER_PCIE_FUNC_SHIFT) |
+		(reg & ~0x3));
 
 	return cfg_addr;
 }
