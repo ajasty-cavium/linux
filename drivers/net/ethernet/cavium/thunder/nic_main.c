@@ -164,6 +164,11 @@ static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 							  (mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg); 
 		break;
+	case NIC_PF_VF_MSG_RQ_DROP_CFG:
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) | 
+								(mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg); 
+		break;
 	case NIC_PF_VF_MSG_SQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG | (mbx->data.sq.qs_num << NIC_QS_ID_SHIFT) | 
 							  (mbx->data.sq.sq_num << NIC_Q_NUM_SHIFT);
