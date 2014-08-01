@@ -329,24 +329,6 @@
 		reg = <0x0 0x00000000 0x0 0x80000000>;
 	};
 
-	gic0: interrupt-controller@801000000000 {
-		compatible = "arm,gic-v3";
-		#interrupt-cells = <3>;
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-		interrupt-controller;
-		reg = <0x8010 0x00000000 0x0 0x010000>, /* GICD */
-		      <0x8010 0x80000000 0x0 0x200000>; /* GICR */
-		interrupts = <1 9 0xf04>;
-
-		its: gic-its@801000020000 {
-			compatible = "arm,gic-v3-its";
-			msi-controller;
-			reg = <0x8010 0x20000 0x0 0x200000>;
-		};
-	};
-
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupts = <1 13 0xff01>,
@@ -371,6 +353,24 @@
 				#clock-cells = <0>;
 				clock-frequency = <50000000>;
 				clock-output-names = "refclk50mhz";
+			};
+		};
+
+		gic0: interrupt-controller@801000000000 {
+			compatible = "arm,gic-v3";
+			#interrupt-cells = <3>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			interrupt-controller;
+			reg = <0x8010 0x00000000 0x0 0x010000>, /* GICD */
+			      <0x8010 0x80000000 0x0 0x200000>; /* GICR */
+			interrupts = <1 9 0xf04>;
+
+			its: gic-its@801000020000 {
+				compatible = "arm,gic-v3-its";
+				msi-controller;
+				reg = <0x8010 0x20000 0x0 0x200000>;
 			};
 		};
 
