@@ -343,17 +343,11 @@
 		#size-cells = <2>;
 		ranges;
 
-		clocks {
-			#address-cells = <2>;
-			#size-cells = <2>;
-			ranges;
-
-			refclk50mhz: refclk50mhz {
-				compatible = "fixed-clock";
-				#clock-cells = <0>;
-				clock-frequency = <50000000>;
-				clock-output-names = "refclk50mhz";
-			};
+		refclk50mhz: refclk50mhz {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <50000000>;
+			clock-output-names = "refclk50mhz";
 		};
 
 		gic0: interrupt-controller@801000000000 {
