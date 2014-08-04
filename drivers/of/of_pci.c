@@ -89,6 +89,40 @@ int of_pci_parse_bus_range(struct device_node *node, struct resource *res)
 }
 EXPORT_SYMBOL_GPL(of_pci_parse_bus_range);
 
+static atomic_t of_domain_nr = ATOMIC_INIT(-1);
+
+/**
+ * This function will try to obtain the host bridge domain number by
+ * using of_alias_get_id() call with "pci-domain" as a stem. If that
+ * fails, a local allocator will be used. The local allocator can
+ * be requested to return a new domain_nr if the information is missing
+ * from the device tree.
+ *
+ * @node: device tree node with the domain information
+ * @allocate_if_missing: if DT lacks information about the domain nr,
+ * allocate a new number.
+ *
+ * Returns the associated domain number from DT, or a new domain number
+ * if DT information is missing and @allocate_if_missing is true. If
+ * @allocate_if_missing is false then the last allocated domain number
+ * will be returned.
+ */
+int of_pci_get_domain_nr(struct device_node *node, bool allocate_if_missing)
+{
+	int domain;
+
+	domain = of_alias_get_id(node, "pci-domain");
+	if (domain == -ENODEV) {
+		if (allocate_if_missing)
+			domain = atomic_inc_return(&of_domain_nr);
+		else
+			domain = atomic_read(&of_domain_nr);
+	}
+
+	return domain;
+}
+EXPORT_SYMBOL_GPL(of_pci_get_domain_nr);
+
 #ifdef CONFIG_PCI_MSI
 
 static LIST_HEAD(of_pci_msi_chip_list);
