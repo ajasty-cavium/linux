@@ -199,7 +199,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 	/* Set reference to MSI chip */
 	ret = thunder_pcie_msi_enable(pcie, bridge->bus);
-	if (ret < 0)
+	if (ret)
 		goto err_msi;
 
 	platform_set_drvdata(pdev, pcie);
