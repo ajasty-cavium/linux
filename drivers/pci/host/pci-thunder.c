@@ -78,12 +78,12 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 						pci_dev_resource_fixup);
 
-static void __iomem *thunder_pcie_cfg_addr(struct thunder_pcie *pcie,
-				 unsigned int bus, unsigned int devfn, int reg)
+static void __iomem *thunder_pcie_cfg_base(struct thunder_pcie *pcie,
+				 unsigned int bus, unsigned int devfn)
 {
-	return  pcie->cfg_base + ((bus << THUNDER_PCIE_BUS_SHIFT) |
-		(PCI_SLOT(devfn) << THUNDER_PCIE_DEV_SHIFT) |
-		(PCI_FUNC(devfn) << THUNDER_PCIE_FUNC_SHIFT) | reg);
+	return  pcie->cfg_base + ((bus << THUNDER_PCIE_BUS_SHIFT)
+		| (PCI_SLOT(devfn) << THUNDER_PCIE_DEV_SHIFT)
+		| (PCI_FUNC(devfn) << THUNDER_PCIE_FUNC_SHIFT));
 }
 
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
@@ -91,8 +91,12 @@ static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 {
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
+	unsigned int busnr = bus->number;
 
-	addr = thunder_pcie_cfg_addr(pcie, bus->number, devfn, reg);
+	if (busnr > 255 || devfn > 255 || reg > 4095)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
+	addr = thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
 
 	switch (size) {
 	case 1:
@@ -116,8 +120,12 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 {
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
+	unsigned int busnr = bus->number;
 
-	addr = thunder_pcie_cfg_addr(pcie, bus->number, devfn, reg);
+	if (busnr > 255 || devfn > 255 || reg > 4095)
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
+	addr = thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
 
 	switch (size) {
 	case 1:
@@ -137,8 +145,8 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 }
 
 static struct pci_ops thunder_pcie_ops = {
-	.read = thunder_pcie_read_config,
-	.write = thunder_pcie_write_config
+	.read	= thunder_pcie_read_config,
+	.write	= thunder_pcie_write_config,
 };
 
 static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
