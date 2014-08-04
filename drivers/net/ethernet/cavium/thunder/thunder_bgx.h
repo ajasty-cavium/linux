@@ -9,11 +9,12 @@
 #ifndef THUNDER_BGX_H
 #define THUNDER_BGX_H
 
-#define MAX_BGX_PER_CN88XX  2
-#define MAX_LMAC_PER_BGX    4
-#define MAX_DMAC_PER_LMAC   8
+#define    MAX_BGX_PER_CN88XX		2
+#define    MAX_LMAC_PER_BGX		4
+#define    MAX_BGX_CHANS_PER_LMAC	16
+#define    MAX_DMAC_PER_LMAC		8
 
-#define MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE   2
+#define    MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE	2
 
 /* Registers */
 #define BGX_CMRX_CFG		0x00 

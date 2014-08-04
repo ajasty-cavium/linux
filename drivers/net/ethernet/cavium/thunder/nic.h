@@ -61,8 +61,31 @@
 /* Max pkinds */
 #define 	NIC_MAX_PKIND            16
 
-/* Channels */
-#define		NIC_MAX_CHANNELS	  256
+/* Rx Channels */
+#define		NIC_MAX_BGX		2
+#define		NIC_CHANS_PER_BGX_INF	128
+#define		NIC_MAX_CHANS		(NIC_MAX_BGX * NIC_CHANS_PER_BGX_INF)
+#define		NIC_MAX_CPI		2048 /* Channel parse index */
+#define		NIC_MAX_RSSI		4096 /* Receive side scaling index */
+
+/* TNS bi-pass mode: 1-1 mapping between VNIC and LMAC */
+#define		NIC_CPI_PER_BGX		(NIC_MAX_CPI / NIC_MAX_BGX)
+#define		NIC_CPI_PER_LMAC	(NIC_MAX_CPI / NIC_MAX_CHANS)
+#define		NIC_RSSI_PER_BGX	(NIC_MAX_RSSI / NIC_MAX_BGX)
+#define		NIC_RSSI_PER_LMAC	(NIC_MAX_RSSI / NIC_MAX_CHANS)
+
+/* Tx scheduling */
+#define		NIC_MAX_TL4		1024
+#define		NIC_MAX_TL4_SHAPERS	256 /* 1 shaper for 4 TL4s */
+#define		NIC_MAX_TL3		256
+#define		NIC_MAX_TL3_SHAPERS	64  /* 1 shaper for 4 TL3s */
+#define		NIC_MAX_TL2		64
+#define		NIC_MAX_TL2_SHAPERS	2  /* 1 shaper for 32 TL2s */
+#define		NIC_MAX_TL1		2
+
+/* TNS bi-pass mode */
+#define		NIC_TL4_PER_BGX		(NIC_MAX_TL4 / NIC_MAX_BGX)
+#define		NIC_TL4_PER_LMAC	(NIC_MAX_TL4 / NIC_CHANS_PER_BGX_INF)
 
 /* NIC VF Interrupts */
 #define 	NICVF_INTR_CQ		 0
@@ -207,6 +230,7 @@ struct nicvf_stats {
 struct nic_mbx {
 	uint64_t	   msg;
 	union	{
+		uint64_t	vnic_id;
 		struct {			/* Qset configuration */
 			uint64_t   num;
 			uint64_t   cfg;
