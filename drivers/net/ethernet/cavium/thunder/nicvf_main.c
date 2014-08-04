@@ -150,6 +150,9 @@ void nicvf_send_msg_to_pf (struct nicvf *nic, struct nic_mbx *mbx)
 	}
 }
 
+/* Checks if VF is able to comminicate with PF
+* and also gets the VNIC number this VF is associated to.
+*/
 static int nicvf_check_pf_ready (struct nicvf *nic)
 {
 	int timeout = 5000, sleep = 20;
@@ -170,8 +173,7 @@ static int nicvf_check_pf_ready (struct nicvf *nic)
 			timeout -= sleep;
 		if (!timeout) {
 			netdev_err(nic->netdev, 
-				"PF didn't respond to READY msg from VF%d\n"
-								,nic->vnic_id);
+				"PF didn't respond to READY msg\n");
 			return 0;
 		}
 	}
@@ -201,6 +203,7 @@ static void  nicvf_handle_mbx_intr (struct nicvf *nic)
 		break;
 	case NIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
+		nic->vnic_id = mbx->data.vnic_id & 0x7F;
 		break;
 	default:
 		netdev_err(nic->netdev, "Invalid message from PF, msg 0x%llx\n", 
@@ -655,7 +658,7 @@ static int nicvf_register_misc_interrupt (struct nicvf *nic)
 	/* Enable mailbox interrupt */
 	nicvf_enable_mbx_intr(nic);
 
-	/* Check if PF is ready to receive mailbox messages */
+	/* Check if VF is able to communicate with PF */
 	if (!nicvf_check_pf_ready(nic)) {
 		nicvf_disable_mbx_intr(nic);
 		nicvf_unregister_interrupts(nic);
@@ -813,20 +816,16 @@ static int nicvf_open(struct net_device *netdev)
 
 	qs = nic->qs;
 
-	/* Set real no of queues */
-	//rtnl_lock();
         if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
                 netdev_err(netdev, 
 			"Failed to set real number of Tx queues: %d\n", err);
                 return err;
         }
-
         if ((err = netif_set_real_num_rx_queues(netdev, qs->rq_cnt))) {
                 netdev_err(netdev,
 			"Failed to set real number of Rx queues: %d\n", err);
                 return err;
         }
-	//rtnl_unlock();
 
 	if ((err = nicvf_register_interrupts(nic))) {
 		nicvf_stop(netdev);
@@ -983,9 +982,6 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
                 err = -ENOMEM;
                 goto err_release_regions;
         }       
-
-	/* Get this VF's number */
-	nic->vnic_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 21) & 0xFF;
 
 #ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
 	netdev->hw_features |= NETIF_F_RXCSUM; 

@@ -30,6 +30,8 @@
 #define DRV_NAME  	"thunder-nic"
 #define DRV_VERSION  	"1.0"
 
+static void nic_channel_cfg(struct nicpf *nic, int vnic);
+
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
         { PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
@@ -103,7 +105,9 @@ static void nic_mbx_send_ready (struct nicpf *nic, int vf)
 	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
 	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
 
-	nic_reg_write (nic, mbx_addr, NIC_PF_VF_MSG_READY);
+	/* Respond with VNIC ID */
+	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_READY);
+	nic_reg_write(nic, mbx_addr + 8, vf);
 	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
 	/* Set 1 in last MBX reg */ 
 	nic_reg_write (nic, mbx_addr, 1ULL); 
@@ -147,13 +151,13 @@ static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 	switch (mbx->msg & 0xFF) {
 	case NIC_PF_VF_MSG_READY:
 		nic_dbg(&nic->pdev->dev, "NIC_PF_VF_MSG_READY\n");
-		/* Nothing to do, just send an ack */
 		nic_mbx_send_ready(nic, vf);
 		goto exit;
 		break;
 	case NIC_PF_VF_MSG_QS_CFG:
 		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx->data.qs.num << NIC_QS_ID_SHIFT);
 		nic_reg_write (nic, reg_addr, mbx->data.qs.cfg);
+		nic_channel_cfg(nic, mbx->data.qs.num);
 		if (!mbx->data.qs.cfg) 
 			bgx_lmac_disable(mbx->data.qs.num);
 		else 
@@ -186,88 +190,6 @@ exit:
 	kfree(mbx);
 }
 
-static void nic_channel_cfg (struct nicpf *nic)
-{
-	uint8_t  rq_idx = 0;
-	uint8_t  vnic, bgx;
-	uint32_t chan, tl3, tl4;
-	uint64_t cpi_base;
-	uint64_t rssi_base;
-
-	/* Disable backpressure for now */
-	for (chan = 0; chan < NIC_MAX_CHANNELS; chan++) {
-		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (chan << 3), 0);
-	}
-
-	for (vnic = 0; vnic < 8; vnic++) {
-		/* Each BGX LMAC port has 16 channels */
-		/* As per current simulator BGX implementation,
- 		 * BGX0-LMAC0-CHAN0 - VNIC CHAN0
- 		 * BGX0-LMAC1-CHAN0 - VNIC CHAN16
- 		 * BGX1-LMAC0-CHAN0 - VNIC CHAN128
- 		 */
-		bgx = vnic / 4; 
-		if (vnic < 4) {
-		        chan = vnic * 16;
-		        cpi_base = vnic * (2048 / 256);
-		        rssi_base = vnic * (4096 / 256) * (bgx + 1);
-		} else {
-			chan = (vnic - 4) * 16 + 128;
-		        cpi_base = (vnic - 4) * (2048 / 256) + 1024;
-		        rssi_base = (vnic - 4) * (4096 / 256) + 2048;
-		}
-
-		/* CPI ALG none */
-		nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3), 
-							cpi_base << 48);
-		nic_reg_write(nic, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3), 
-							(vnic << 24) | rssi_base);
-		/* RQ's QS & RQ idx within QS */
-		nic_reg_write(nic, NIC_PF_RSSI_0_4097_RQ | (rssi_base << 3), 
-							(vnic << 3) | rq_idx);
-	
-		/* Transmit Channel config (TL4 -> TL3 -> Chan) */
-		/* By-pass mode configuration
-		 * For 0 - 3 VNICs
-		 */
-		/* VNIC0-SQ0 -> TL4(0)  -> TL4A(0) -> TL3[0] -> BGX0/LMAC0/Chan0
-		 * VNIC1-SQ0 -> TL4(8)  -> TL4A(2) -> TL3[2] -> BGX0/LMAC1/Chan0
-		 * VNIC2-SQ0 -> TL4(16) -> TL4A(4) -> TL3[4] -> BGX0/LMAC2/Chan0
-		 * VNIC3-SQ0 -> TL4(32) -> TL4A(6) -> TL3[6] -> BGX0/LMAC3/Chan0
-		 */
-		if (vnic >= 4)
-			goto vnic4;
-		tl4 = vnic * 8;
-		tl3 = tl4 / 4;
-		nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 | 
-					(vnic << NIC_QS_ID_SHIFT), tl4);
-		nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | 
-					(tl4 << 3), (vnic << 27) | (0 << 24));
-		nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
-		nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | 
-				(tl3 << 3), (bgx << 7) | (vnic << 4) | (0 << 0));
-
-vnic4:
-		if (!vnic >= 4)
-			continue;
-		/* For 4 - 7 VNICs
-		 * VNIC4-SQ0 -> TL4(512)  -> TL4A(128) -> TL3[128] -> BGX1/LMAC0/Chan0
-		 * VNIC5-SQ0 -> TL4(520)  -> TL4A(130) -> TL3[130] -> BGX1/LMAC1/Chan0
-		 * VNIC6-SQ0 -> TL4(528)  -> TL4A(132) -> TL3[132] -> BGX1/LMAC2/Chan0
-		 * VNIC7-SQ0 -> TL4(536)  -> TL4A(134) -> TL3[134] -> BGX1/LMAC3/Chan0
-		 */
-		tl4 = ((vnic - 4) * 8) + 512;
-		tl3 = tl4 / 4;
-		nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 | 
-					(vnic << NIC_QS_ID_SHIFT), tl4);
-		nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | 
-					(tl4 << 3), (vnic << 27) | (0 << 24));
-		nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
-		nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | 
-			(tl3 << 3), (bgx << 7) | ((vnic - 4) << 4) | (0 << 0));
-	}
-}
-
 static void nic_init_hw (struct nicpf *nic)
 {
 	int i;
@@ -291,8 +213,64 @@ static void nic_init_hw (struct nicpf *nic)
 	for (i = 0; i < NIC_MAX_PKIND; i++) 
 		nic_reg_write (nic, NIC_PF_PKIND_0_15_CFG | (i << 3), 
 								0x206000000);
+	/* Disable backpressure for now */
+	for (i = 0; i < NIC_MAX_CHANS; i++)
+		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 0);
+}
 
-	nic_channel_cfg(nic);
+static void nic_channel_cfg(struct nicpf *nic, int vnic)
+{
+	uint8_t  rq_idx = 0;
+	uint8_t  sq_idx = 0;
+	uint32_t bgx, lmac, chan, tl3, tl4;
+	uint64_t cpi_base, rssi_base;
+
+	/* Below are the channel mappings
+	 * BGX0-LMAC0-CHAN0 - VNIC CHAN0
+	 * BGX0-LMAC1-CHAN0 - VNIC CHAN16
+	 * ...
+	 * BGX1-LMAC0-CHAN0 - VNIC CHAN128
+	 * ...
+	 * BGX1-LMAC3-CHAN0 - VNIC CHAN174
+	 */
+	bgx = vnic / MAX_LMAC_PER_BGX;
+	lmac = vnic - (bgx * MAX_LMAC_PER_BGX);
+	chan = (lmac * MAX_BGX_CHANS_PER_LMAC) + (bgx * NIC_CHANS_PER_BGX_INF);
+	cpi_base = (lmac * NIC_CPI_PER_LMAC) + (bgx * NIC_CPI_PER_BGX);
+	rssi_base = (lmac * NIC_RSSI_PER_LMAC) + (bgx * NIC_RSSI_PER_BGX);
+
+	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3),
+		      cpi_base << 48);
+	nic_reg_write(nic, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3),
+		      (vnic << 24) | rssi_base);
+	/* RQ's QS & RQ idx within QS */
+	nic_reg_write(nic, NIC_PF_RSSI_0_4097_RQ | (rssi_base << 3),
+		      (vnic << 3) | rq_idx);
+
+	/* Transmit Channel config (TL4 -> TL3 -> Chan) */
+	/* VNIC0-SQ0 -> TL4(0)  -> TL4A(0) -> TL3[0] -> BGX0/LMAC0/Chan0
+	 * VNIC1-SQ0 -> TL4(8)  -> TL4A(2) -> TL3[2] -> BGX0/LMAC1/Chan0
+	 * VNIC2-SQ0 -> TL4(16) -> TL4A(4) -> TL3[4] -> BGX0/LMAC2/Chan0
+	 * VNIC3-SQ0 -> TL4(32) -> TL4A(6) -> TL3[6] -> BGX0/LMAC3/Chan0
+	 * VNIC4-SQ0 -> TL4(512)  -> TL4A(128) -> TL3[128] -> BGX1/LMAC0/Chan0
+	 * VNIC5-SQ0 -> TL4(520)  -> TL4A(130) -> TL3[130] -> BGX1/LMAC1/Chan0
+	 * VNIC6-SQ0 -> TL4(528)  -> TL4A(132) -> TL3[132] -> BGX1/LMAC2/Chan0
+	 * VNIC7-SQ0 -> TL4(536)  -> TL4A(134) -> TL3[134] -> BGX1/LMAC3/Chan0
+	 */
+	tl4 = (lmac * NIC_TL4_PER_LMAC) + (bgx * NIC_TL4_PER_BGX);
+
+	for (sq_idx = 0; sq_idx < 8; sq_idx++) {
+		tl4 = tl4 + sq_idx;
+		tl3 = tl4 / (NIC_MAX_TL4 / NIC_MAX_TL3);
+		nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
+					(vnic << NIC_QS_ID_SHIFT) |
+					(sq_idx << NIC_Q_NUM_SHIFT), tl4);
+		nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
+			      (vnic << 27) | (sq_idx << 24));
+		nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
+		nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3),
+			      (lmac << 4));
+	}
 }
 
 static irqreturn_t nic_intr_handler (int irq, void *nic_irq) 
