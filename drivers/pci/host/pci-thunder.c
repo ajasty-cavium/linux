@@ -10,16 +10,11 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/delay.h>
-#include <linux/of.h>
-#include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/of_pci.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 #include <linux/msi.h>
 
 #define PCI_DEVICE_ID_THUNDER_BRIDGE	0xa002
@@ -83,18 +78,12 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 						pci_dev_resource_fixup);
 
-static void __iomem *thunder_pcie_build_config_addr(struct thunder_pcie *pcie,
-					 int bus, int dev, int fn, int reg)
+static void __iomem *thunder_pcie_cfg_addr(struct thunder_pcie *pcie,
+				 unsigned int bus, unsigned int devfn, int reg)
 {
-	void __iomem *cfg_addr = NULL;
-
-	cfg_addr =  pcie->cfg_base +
-		((bus << THUNDER_PCIE_BUS_SHIFT) |
-		(dev << THUNDER_PCIE_DEV_SHIFT) |
-		(fn  << THUNDER_PCIE_FUNC_SHIFT) |
-		(reg & ~0x3));
-
-	return cfg_addr;
+	return  pcie->cfg_base + ((bus << THUNDER_PCIE_BUS_SHIFT) |
+		(PCI_SLOT(devfn) << THUNDER_PCIE_DEV_SHIFT) |
+		(PCI_FUNC(devfn) << THUNDER_PCIE_FUNC_SHIFT) | reg);
 }
 
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
@@ -103,14 +92,21 @@ static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
 
-	addr = thunder_pcie_build_config_addr(pcie, bus->number,
-				devfn >> 3,  devfn & 0x7, reg);
-	*val = readl(addr);
+	addr = thunder_pcie_cfg_addr(pcie, bus->number, devfn, reg);
 
-	if (size == 1)
-		*val = (*val >> (8 * (reg & 3))) & 0xff;
-	else if (size == 2)
-		*val = (*val >> (8 * (reg & 3))) & 0xffff;
+	switch (size) {
+	case 1:
+		*val = readb(addr);
+		break;
+	case 2:
+		*val = readw(addr);
+		break;
+	case 4:
+		*val = readl(addr);
+		break;
+	default:
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	}
 
 	return PCIBIOS_SUCCESSFUL;
 }
@@ -120,30 +116,22 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 {
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
-	u32 cur_val, final_val;
 
-	addr = thunder_pcie_build_config_addr(pcie, bus->number,
-				devfn >> 3,  devfn & 0x7, reg);
-	cur_val = readl(addr);
+	addr = thunder_pcie_cfg_addr(pcie, bus->number, devfn, reg);
 
 	switch (size) {
 	case 1:
-		val = ((val & 0xff) << (8 * (reg & 3)));
-		cur_val = cur_val & ~(0xff << (8 * (reg & 3)));
+		writeb(val, addr);
 		break;
 	case 2:
-		val = ((val & 0xffff) << (8 * (reg & 3)));
-		cur_val = cur_val & ~(0xffff << (8 * (reg & 3)));
+		writew(val, addr);
 		break;
 	case 4:
-		cur_val = 0;
+		writel(val, addr);
 		break;
 	default:
-		return PCIBIOS_FUNC_NOT_SUPPORTED;
+		return PCIBIOS_BAD_REGISTER_NUMBER;
 	}
-
-	final_val = cur_val | val;
-	writel(final_val, addr);
 
 	return PCIBIOS_SUCCESSFUL;
 }
@@ -153,20 +141,21 @@ static struct pci_ops thunder_pcie_ops = {
 	.write = thunder_pcie_write_config
 };
 
-static void thunder_pcie_msi_enable(struct thunder_pcie *pcie,
+static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 					struct pci_bus *bus)
 {
 	struct device_node *msi_node;
 
 	msi_node = of_parse_phandle(pcie->node, "msi-parent", 0);
 	if (!msi_node)
-		return;
+		return -ENODEV;
 
 	pcie->msi = of_pci_find_msi_chip_by_node(msi_node);
 
 	if (pcie->msi)
 		pcie->msi->dev = pcie->dev;
 	bus->msi = pcie->msi;
+	return 0;
 }
 
 static int thunder_pcie_probe(struct platform_device *pdev)
@@ -176,10 +165,13 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct resource *cfg_base;
 	struct pci_host_bridge *bridge;
 	resource_size_t lastbus;
+	int ret;
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
-	if (!pcie)
-		return -ENOMEM;
+	if (!pcie) {
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	pcie->dev = &pdev->dev;
 	pcie->node = np;
@@ -187,15 +179,21 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	/* Get controller's configuration space range */
 	cfg_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-	if (IS_ERR(pcie->cfg_base))
-		return PTR_ERR(pcie->cfg_base);
+	if (IS_ERR(pcie->cfg_base)) {
+		ret = PTR_ERR(pcie->cfg_base);
+		goto err;
+	}
 
 	bridge = of_create_pci_host_bridge(&pdev->dev, &thunder_pcie_ops, pcie);
-	if (IS_ERR_OR_NULL(bridge))
-		return PTR_ERR(bridge);
+	if (IS_ERR_OR_NULL(bridge)) {
+		ret = PTR_ERR(bridge);
+		goto err;
+	}
 
 	/* Set reference to MSI chip */
-	thunder_pcie_msi_enable(pcie, bridge->bus);
+	ret = thunder_pcie_msi_enable(pcie, bridge->bus);
+	if (ret < 0)
+		goto err;
 
 	platform_set_drvdata(pdev, pcie);
 
@@ -204,6 +202,10 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	pci_bus_update_busn_res_end(bridge->bus, lastbus);
 
 	return 0;
+err:
+	of_node_put(pdev->dev.of_node);
+	kfree(pcie);
+	return ret;
 }
 
 static const struct of_device_id thunder_pcie_of_match[] = {
@@ -223,5 +225,5 @@ static struct platform_driver thunder_pcie_driver = {
 module_platform_driver(thunder_pcie_driver);
 
 MODULE_AUTHOR("Sunil Goutham");
-MODULE_DESCRIPTION("Cavium Thunder PCIe driver");
+MODULE_DESCRIPTION("Cavium Thunder PCIe host controller driver");
 MODULE_LICENSE("GPLv2");
