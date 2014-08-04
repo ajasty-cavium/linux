@@ -206,7 +206,9 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 	lastbus = pci_scan_child_bus(bridge->bus);
 	pci_bus_add_devices(bridge->bus);
-	pci_bus_update_busn_res_end(bridge->bus, lastbus);
+	ret = pci_bus_update_busn_res_end(bridge->bus, lastbus);
+	if (ret)
+		goto err_msi;
 
 	return 0;
 err_msi:
