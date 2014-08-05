@@ -64,7 +64,7 @@ static const struct nicvf_stat nicvf_rx_stats[] = {
 	NICVF_RX_STAT(rx_frames_511),
 	NICVF_RX_STAT(rx_frames_1023),
 	NICVF_RX_STAT(rx_frames_1518),
-	NICVF_RX_STAT(rx_frames_to_max),
+	NICVF_RX_STAT(rx_frames_jumbo),
 };
 
 static const unsigned int nicvf_n_tx_stats = ARRAY_SIZE(nicvf_tx_stats);
@@ -147,23 +147,27 @@ static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 static void nicvf_get_ethtool_stats(struct net_device *netdev, 
 				   struct ethtool_stats *stats, u64 *data)
 {
+	struct nicvf *nic = netdev_priv(netdev);
+	struct eth_stats vstats = nic->vstats;
 	int stat;
-	struct eth_stats vstats;
 
 	memset(&vstats, 0, sizeof(struct eth_stats));
-	vstats.tx.tx_frames_ok = netdev->stats.tx_packets;
-	vstats.tx.tx_bytes_ok = netdev->stats.tx_bytes;
-	vstats.tx.tx_errors = netdev->stats.tx_errors;
-	vstats.tx.tx_drops = netdev->stats.tx_dropped;
-	vstats.rx.rx_frames_ok = netdev->stats.rx_packets;
-	vstats.rx.rx_bytes_ok = netdev->stats.rx_bytes;
-	vstats.rx.rx_errors = netdev->stats.rx_errors;
-	vstats.rx.rx_drop = netdev->stats.rx_dropped;
+
+	nic->vstats.tx.tx_frames_ok = netdev->stats.tx_packets;
+	nic->vstats.tx.tx_bytes_ok = netdev->stats.tx_bytes;
+	nic->vstats.tx.tx_errors = netdev->stats.tx_errors;
+	nic->vstats.tx.tx_drops = netdev->stats.tx_dropped;
+	nic->vstats.rx.rx_frames_ok = netdev->stats.rx_packets;
+	nic->vstats.rx.rx_bytes_ok = netdev->stats.rx_bytes;
+	nic->vstats.rx.rx_errors = netdev->stats.rx_errors;
+	nic->vstats.rx.rx_drop = netdev->stats.rx_dropped;
 
 	for (stat = 0; stat < nicvf_n_tx_stats; stat++)
-		*(data++) = ((u64 *)&vstats.tx)[nicvf_tx_stats[stat].index];
+		*(data++) = ((u64 *)&nic->vstats.tx)
+				[nicvf_tx_stats[stat].index];
 	for (stat = 0; stat < nicvf_n_rx_stats; stat++)
-		*(data++) = ((u64 *)&vstats.rx)[nicvf_rx_stats[stat].index];
+		*(data++) = ((u64 *)&nic->vstats.rx)
+				[nicvf_rx_stats[stat].index];
 }
 
 static const struct ethtool_ops nicvf_ethtool_ops = {
