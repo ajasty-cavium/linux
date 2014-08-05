@@ -60,6 +60,24 @@ static void nicvf_dump_packet (struct sk_buff *skb)
 #endif
 }
 
+static void nicvf_update_stats (struct nicvf *nic, struct sk_buff *skb)
+{
+	if (skb->len <= 64)
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_64);
+	else if ((skb->len > 64) && (skb->len <= 127))
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_127);
+	else if ((skb->len > 127) && (skb->len <= 255))
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_255);
+	else if ((skb->len > 255) && (skb->len <= 511))
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_511);
+	else if ((skb->len > 511) && (skb->len <= 1023))
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_1023);
+	else if ((skb->len > 1023) && (skb->len <= 1518))
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_1518);
+	else if (skb->len > 1518)
+		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_jumbo);
+}
+
 /* Register read/write APIs */
 void nicvf_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
 {
@@ -327,6 +345,10 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 	/* Update stats */
 	atomic64_add(1, (atomic64_t *)&netdev->stats.rx_packets);
 	atomic64_add(skb->len, (atomic64_t *)&netdev->stats.rx_bytes);
+
+#ifdef NICVF_ETHTOOL_ENABLE
+	nicvf_update_stats(nic, skb);
+#endif
 
 	skb->protocol = eth_type_trans(skb, netdev);
 
