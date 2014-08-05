@@ -347,7 +347,7 @@
 			clock-output-names = "refclk50mhz";
 		};
 
-		gic0: interrupt-controller@801000000000 {
+		gic0: interrupt-controller@8010,00000000 {
 			compatible = "arm,gic-v3";
 			#interrupt-cells = <3>;
 			#address-cells = <2>;
@@ -358,14 +358,14 @@
 			      <0x8010 0x80000000 0x0 0x200000>; /* GICR */
 			interrupts = <1 9 0xf04>;
 
-			its: gic-its@801000020000 {
+			its: gic-its@8010,00020000 {
 				compatible = "arm,gic-v3-its";
 				msi-controller;
 				reg = <0x8010 0x20000 0x0 0x200000>;
 			};
 		};
 
-		uaa0: serial@87e024000000 {
+		uaa0: serial@87e0,24000000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x24000000 0x0 0x1000>;
 			interrupts = <1 21 4>;
@@ -373,7 +373,7 @@
 			clock-names = "apb_pclk";
 		};
 
-		uaa1: serial@87e025000000 {
+		uaa1: serial@87e0,25000000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x25000000 0x0 0x1000>;
 			interrupts = <1 22 4>;
@@ -382,7 +382,7 @@
 		};
 	};
 
-	pcie0: pcie0@0x848000000000 {
+	pcie0: pcie0@0x8480,00000000 {
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
@@ -396,7 +396,7 @@
 			<0x03000000 0x87e0 0x00000000 0x87e0 0x00000000 0x01 0x00000000>;
         };
 
-	pcie1: pcie1@0x849000000000 {
+	pcie1: pcie1@0x8490,00000000 {
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
@@ -409,7 +409,7 @@
 			<0x03000000 0x8100 0x00000000 0x8100 0x00000000 0x80 0x00000000>;
         };
 
-	pcie2: pcie2@0x84a000000000 {
+	pcie2: pcie2@0x84a0,00000000 {
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
@@ -422,7 +422,7 @@
 			<0x03000000 0x8430 0x00000000 0x8430 0x00000000 0x01 0x00000000>;
         };
 
-	pcie3: pcie3@0x84b000000000 {
+	pcie3: pcie3@0x84b0,00000000 {
 	        compatible = "cavium,thunder-pcie";
 		device_type = "pci";
 		msi-parent = <&its>;
@@ -435,7 +435,7 @@
 			<0x03000000 0x8180 0x00000000 0x8180 0x00000000 0x80 0x00000000>;
         };
 
-	smmu0@0x830000000000 {
+	smmu0@0x8300,00000000 {
                 compatible = "thunder,smmu-v2";
                 reg = <0x8300 0x0 0x0 0x2000000>;
                 #global-interrupts = <1>;
@@ -465,7 +465,7 @@
                 mmu-masters = <&pcie0 0x100>;
         };
 
-	smmu1@0x831000000000 {
+	smmu1@0x8310,00000000 {
                 compatible = "thunder,smmu-v2";
                 reg = <0x8310 0x0 0x0 0x2000000>;
                 #global-interrupts = <1>;
@@ -495,7 +495,7 @@
                 mmu-masters = <&pcie1 0x100>;
         };
 
-	smmu2@0x832000000000 {
+	smmu2@0x8320,00000000 {
                 compatible = "thunder,smmu-v2";
                 reg = <0x8320 0x0 0x0 0x2000000>;
                 #global-interrupts = <1>;
@@ -525,7 +525,7 @@
                 mmu-masters = <&pcie2 0x100>;
         };
 
-	smmu3@0x833000000000 {
+	smmu3@0x8330,00000000 {
                 compatible = "thunder,smmu-v2";
                 reg = <0x8330 0x0 0x0 0x2000000>;
                 #global-interrupts = <1>;
