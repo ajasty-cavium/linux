@@ -138,4 +138,25 @@
 #define   NIC_QS_ID_SHIFT			21
 #define   NIC_VF_NUM_SHIFT			21
 
+/* Port kind configuration */
+struct pkind_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_42_63:22;
+	uint64_t hdr_sl:5;	/* Header skip length */
+	uint64_t rx_hdr:3;	/* TNS Receive header present */
+	uint64_t lenerr_en:1;	/* L2 length error check enable */
+	uint64_t reserved_32_32:1;
+	uint64_t maxlen:16;	/* Max frame size */
+	uint64_t minlen:16;	/* Min frame size */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t minlen:16;
+	uint64_t maxlen:16;
+	uint64_t reserved_32_32:1;
+	uint64_t lenerr_en:1;
+	uint64_t rx_hdr:3;
+	uint64_t hdr_sl:5;
+	uint64_t reserved_42_63:22;
+#endif
+};
+
 #endif /* NIC_REG_H */

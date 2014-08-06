@@ -25,8 +25,8 @@
 #include <linux/ip.h>
 #include <net/tcp.h>
 
-#include "nic.h"
 #include "nic_reg.h"
+#include "nic.h"
 #include "nicvf_queues.h"
 
 #define DRV_NAME	"thunder-nicvf"
@@ -124,7 +124,8 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
 
 /* VF -> PF mailbox communication */
 static bool pf_ready_to_rcv_msg;
-static bool vf_pf_msg_delivered;
+static bool pf_acked;
+static bool pf_nacked;
 
 struct nic_mbx *nicvf_get_mbx(void)
 {
@@ -143,13 +144,14 @@ static void nicvf_disable_mbx_intr(struct nicvf *nic)
 	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
 }
 
-void nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
+int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
 	int i, timeout = 5000, sleep = 10;
 	uint64_t *msg;
 	uint64_t mbx_addr;
 
-	vf_pf_msg_delivered = false;
+	pf_acked = false;
+	pf_nacked = false;
 	mbx->mbx_trigger_intr = 1;
 	msg = (uint64_t *)mbx;
 	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_7;
@@ -158,9 +160,11 @@ void nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
 
 	/* Wait for previous message to be acked, timeout 5sec */
-	while (!vf_pf_msg_delivered) {
+	while (!pf_acked) {
+		if (pf_nacked)
+			return -EINVAL;
 		msleep(sleep);
-		if (vf_pf_msg_delivered)
+		if (pf_acked)
 			break;
 		else
 			timeout -= sleep;
@@ -168,9 +172,10 @@ void nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 			netdev_err(nic->netdev,
 				"PF didn't ack to mailbox msg %lld from VF%d\n",
 						(mbx->msg & 0xFF), nic->vnic_id);
-			return;
+			return -EBUSY;
 		}
 	}
+	return 0;
 }
 
 /* Checks if VF is able to comminicate with PF
@@ -221,12 +226,15 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 	}
 
 	switch (mbx->msg & 0xFF) {
-	case NIC_PF_VF_MSG_ACK:
-		vf_pf_msg_delivered = true;
-		break;
 	case NIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
 		nic->vnic_id = mbx->data.vnic_id & 0x7F;
+		break;
+	case NIC_PF_VF_MSG_ACK:
+		pf_acked = true;
+		break;
+	case NIC_PF_VF_MSG_NACK:
+		pf_nacked = true;
 		break;
 	default:
 		netdev_err(nic->netdev, "Invalid message from PF, msg 0x%llx\n",
@@ -237,18 +245,22 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 	kfree(mbx);
 }
 
-static void nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
+static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 {
 	int i;
+	int ret;
 	struct  nic_mbx *mbx;
-
 
 	mbx = nicvf_get_mbx();
 	mbx->msg = NIC_PF_VF_MSG_SET_MAC;
 	mbx->data.mac.vnic_id = nic->vnic_id;
 	for (i = 0; i < ETH_ALEN; i++)
 		mbx->data.mac.addr = (mbx->data.mac.addr << 8) | netdev->dev_addr[i];
-	nicvf_send_msg_to_pf(nic, mbx);
+
+	ret = nicvf_send_msg_to_pf(nic, mbx);
+	kfree(mbx);
+
+	return ret;
 }
 
 static int nicvf_is_link_active(struct nicvf *nic)
@@ -909,15 +921,34 @@ no_err:
 	return 0;
 }
 
+static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)
+{
+	int ret;
+	struct  nic_mbx *mbx;
+
+	mbx = nicvf_get_mbx();
+	mbx->msg = NIC_VF_SET_MAX_FRS;
+	mbx->data.max_frs = mtu;
+	ret = nicvf_send_msg_to_pf(nic, mbx);
+	kfree(mbx);
+
+	return ret;
+}
+
 static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
 {
-	if (new_mtu > NICVF_MAX_MTU_SUPPORTED)
+	struct nicvf *nic = netdev_priv(netdev);
+
+	if (new_mtu > NIC_HW_MAX_FRS)
 		return -EINVAL;
 
-	if (new_mtu < NICVF_MIN_MTU_SUPPORTED)
+	if (new_mtu < NIC_HW_MIN_FRS)
 		return -EINVAL;
 
+	if (nicvf_update_hw_max_frs(nic, new_mtu))
+		return -EINVAL;
 	netdev->mtu = new_mtu;
+
 	return 0;
 }
 
@@ -929,9 +960,10 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
+	if (nicvf_hw_set_mac_addr(nic, netdev))
+		return -EBUSY;
+
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
-	if (netif_running(netdev))
-		nicvf_hw_set_mac_addr(nic, netdev);
 
 	return 0;
 }

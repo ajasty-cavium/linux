@@ -55,8 +55,8 @@
 #define	NICVF_NAPI_ENABLE
 
 /* Min/Max packet size */
-#define	NICVF_MIN_MTU_SUPPORTED		64
-#define	NICVF_MAX_MTU_SUPPORTED		1500
+#define	NIC_HW_MIN_FRS			64
+#define	NIC_HW_MAX_FRS			1500
 
 /* Max pkinds */
 #define	NIC_MAX_PKIND			16
@@ -220,6 +220,7 @@ struct nicpf {
 	uint16_t		total_vf_cnt;   /* Total num of VF supported */
 	uint16_t		num_vf_en;      /* No of VF enabled */
 	uint64_t		reg_base;       /* Register start address */
+	struct pkind_cfg	pkind;
 	/* MSI-X */
 	bool			msix_enabled;
 	uint16_t		num_vec;
@@ -273,14 +274,15 @@ struct nicvf_stats {
 #define	NIC_PF_VF_MAILBOX_SIZE		8
 
 /* Mailbox message types */
-#define	NIC_PF_VF_MSG_CLEAR		0x00
-#define	NIC_PF_VF_MSG_READY		0x01	/* Check if PF is ready to rcv messages */
+#define	NIC_PF_VF_MSG_READY		0x01	/* Is PF ready to rcv msgs */
 #define	NIC_PF_VF_MSG_ACK		0x02	/* ACK the message received */
-#define	NIC_PF_VF_MSG_QS_CFG		0x03	/* Configure Qset */
-#define	NIC_PF_VF_MSG_RQ_CFG		0x04	/* Configure receive queue */
-#define	NIC_PF_VF_MSG_SQ_CFG		0x05	/* Configure Send queue */
-#define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x06	/* Configure receive queue */
-#define	NIC_PF_VF_MSG_SET_MAC		0x07	/* Add VF's MAC ID into BGX's DMAC filter */
+#define	NIC_PF_VF_MSG_NACK		0x03	/* NACK the message received */
+#define	NIC_PF_VF_MSG_QS_CFG		0x04	/* Configure Qset */
+#define	NIC_PF_VF_MSG_RQ_CFG		0x05	/* Configure receive queue */
+#define	NIC_PF_VF_MSG_SQ_CFG		0x06	/* Configure Send queue */
+#define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x07	/* Configure receive queue */
+#define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to BGX's DMAC filter */
+#define	NIC_VF_SET_MAX_FRS		0x09	/* Set max frame size */
 
 struct nic_mbx {
 	uint64_t	   msg;
@@ -304,6 +306,7 @@ struct nic_mbx {
 			uint64_t   vnic_id;
 			uint64_t   addr;
 		} mac;
+		uint64_t	max_frs; /* Max frame size */
 	} data;
 	uint64_t	   mbx4;
 	uint64_t	   mbx5;
@@ -316,7 +319,7 @@ void nicvf_set_ethtool_ops(struct net_device *netdev);
 #endif
 
 struct nic_mbx *nicvf_get_mbx(void);
-void nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
+int nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
 void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 
 /* Debug */
