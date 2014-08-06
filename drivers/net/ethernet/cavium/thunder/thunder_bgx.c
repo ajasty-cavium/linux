@@ -16,8 +16,8 @@
 #include <linux/workqueue.h>
 #include <linux/pci.h>
 
-#include "nic.h"
 #include "nic_reg.h"
+#include "nic.h"
 #include "thunder_bgx.h"
 
 #define DRV_NAME	"thunder-BGX"

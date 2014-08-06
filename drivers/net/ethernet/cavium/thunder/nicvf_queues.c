@@ -15,8 +15,8 @@
 #include <linux/ip.h>
 #include <net/checksum.h>
 
-#include "nic.h"
 #include "nic_reg.h"
+#include "nic.h"
 #include "q_struct.h"
 #include "nicvf_queues.h"
 
@@ -897,13 +897,11 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 			skb->len += payload_len;
 			skb->data_len += payload_len;
 			skb_frag->len = payload_len;
-			skb_shinfo(skb)->nr_frags++;
 		}
 		/* Next buffer pointer */
 		rb_lens++;
 		rb_ptrs++;
 	}
-
 	return skb;
 }
 
