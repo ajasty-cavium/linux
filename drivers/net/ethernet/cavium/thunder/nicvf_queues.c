@@ -253,7 +253,8 @@ static int nicvf_init_snd_queue(struct nicvf *nic, struct snd_queue *sq,
 	}
 
 	sq->skbuff = kcalloc(q_len, sizeof(uint64_t), GFP_ATOMIC);
-	sq->head = sq->tail = 0;
+	sq->head = 0;
+	sq->tail = 0;
 	sq->free_cnt = q_len;
 	sq->thresh = SND_QUEUE_THRESH;
 
@@ -706,10 +707,11 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 				tcp_hdrlen(skb);
 	hdr->tso_max_paysize = skb_shinfo(skb)->gso_size + hdr->tso_l4_offset;
 	/* TBD: These fields have to be setup properly */
-	hdr->tso_sdc_first = hdr->tso_sdc_cont = 0
-	hdr->tso_flags_first = hdr->tso_flags_last = 0;
+	hdr->tso_sdc_first	= 0;
+	hdr->tso_sdc_cont	= 0;
+	hdr->tso_flags_first	= 0;
+	hdr->tso_flags_last	= 0;
 #endif
-
 	return hdr;
 }
 
