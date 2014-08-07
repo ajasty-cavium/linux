@@ -20,7 +20,8 @@
 #define BGX_CMRX_CFG				0x00
 #define BGX_CMR_RX_DMACX_CAM			0x200
 
-extern void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
-extern void bgx_lmac_disable(uint64_t lmac);
-extern void bgx_lmac_enable(uint64_t lmac);
+void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
+void bgx_lmac_disable(uint64_t lmac);
+void bgx_lmac_enable(uint64_t lmac);
+
 #endif /* THUNDER_BGX_H */

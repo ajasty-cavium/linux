@@ -317,6 +317,7 @@ void nicvf_set_ethtool_ops(struct net_device *netdev);
 
 struct nic_mbx *nicvf_get_mbx(void);
 void nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
+void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 
 /* Debug */
 #undef	NIC_DEBUG

@@ -22,8 +22,6 @@
 
 #define  MIN_SND_QUEUE_DESC_FOR_PKT_XMIT 2
 
-extern void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
-
 static int nicvf_alloc_q_desc_mem(struct nicvf *nic,
 				struct q_desc_mem *desc_mem,
 				int q_len, int desc_size, int align_bytes)
