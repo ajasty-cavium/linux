@@ -252,7 +252,7 @@ static int nicvf_init_snd_queue(struct nicvf *nic, struct snd_queue *sq,
 		return -ENOMEM;
 	}
 
-	sq->skbuff = kzalloc(sizeof(uint64_t) * q_len, GFP_ATOMIC);
+	sq->skbuff = kcalloc(q_len, sizeof(uint64_t), GFP_ATOMIC);
 	sq->head = sq->tail = 0;
 	sq->free_cnt = q_len;
 	sq->thresh = SND_QUEUE_THRESH;
