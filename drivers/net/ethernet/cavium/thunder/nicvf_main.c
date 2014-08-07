@@ -123,8 +123,8 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
 }
 
 /* VF -> PF mailbox communication */
-static bool pf_ready_to_rcv_msg = false;
-static bool vf_pf_msg_delivered = false;
+static bool pf_ready_to_rcv_msg;
+static bool vf_pf_msg_delivered;
 
 struct nic_mbx *nicvf_get_mbx(void)
 {
