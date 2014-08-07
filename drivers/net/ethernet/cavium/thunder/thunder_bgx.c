@@ -112,7 +112,6 @@ void bgx_lmac_enable(uint64_t lmac)
 {
 	int bgx_index;
 	struct bgx *bgx;
-	//uint64_t dmac_bcast = (1ULL << 48) - 1;
 
 	bgx_index = lmac / MAX_LMAC_PER_BGX;
 	bgx = bgx_vnic[bgx_index];
@@ -124,8 +123,6 @@ void bgx_lmac_enable(uint64_t lmac)
 	lmac = lmac % MAX_LMAC_PER_BGX;
 	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG,
 			(1 << 15) | (1 << 14) | (1 << 13));
-	//bgx_add_dmac_addr(dmac_bcast, lmac +
-	//			(bgx->bgx_id * MAX_LMAC_PER_BGX));
 }
 
 void bgx_lmac_disable(uint64_t lmac)
@@ -142,7 +139,6 @@ void bgx_lmac_disable(uint64_t lmac)
 	}
 	lmac = lmac % MAX_LMAC_PER_BGX;
 	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00);
-	//bgx_flush_dmac_addrs(bgx, lmac);
 }
 
 static void bgx_init_hw(struct bgx *bgx)
@@ -196,14 +192,11 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx->bgx_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 24) & 1;
 	bgx_vnic[bgx->bgx_id] = bgx;
 
-	//pr_err("%s BGX%d CSR base %llx\n",__func__, bgx->bgx_id, bgx->reg_base);
-
 	/* Initialize BGX hardware */
 	bgx_init_hw(bgx);
 
 	goto exit;
 
-//err_unmap_resources:
 	if (bgx->reg_base)
 		iounmap((void *)bgx->reg_base);
 err_release_regions:
