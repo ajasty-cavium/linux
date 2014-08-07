@@ -258,9 +258,9 @@ struct nicvf_stats {
 		uint32_t tcp_offset_err;
 		uint32_t l4_pclp;
 		uint32_t no_rbdr;
-	}rx;
+	} rx;
 	struct {
-	}tx;
+	} tx;
 };
 
 /*
@@ -290,22 +290,22 @@ struct nic_mbx {
 		struct {			/* Qset configuration */
 			uint64_t   num;
 			uint64_t   cfg;
-		}qs;
+		} qs;
 		struct {			/* Receive queue configuration */
 			uint64_t   qs_num;
 			uint64_t   rq_num;
 			uint64_t   cfg;
-		}rq;
+		} rq;
 		struct {			/* Send queue configuration */
 			uint64_t   qs_num;
 			uint64_t   sq_num;
 			uint64_t   cfg;
-		}sq;
+		} sq;
 		struct {			/* VF's MAC address */
 			uint64_t   vnic_id;
 			uint64_t   addr;
-		}mac;
-	}data;
+		} mac;
+	} data;
 	uint64_t	   mbx4;
 	uint64_t	   mbx5;
 	uint64_t	   mbx6;
@@ -316,8 +316,8 @@ struct nic_mbx {
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 #endif
 
-struct nic_mbx *nicvf_get_mbx (void);
-void nicvf_send_msg_to_pf (struct nicvf *vf, struct nic_mbx *mbx);
+struct nic_mbx *nicvf_get_mbx(void);
+void nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
 
 /* Debug */
 #undef NIC_DEBUG

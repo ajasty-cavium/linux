@@ -53,7 +53,7 @@
 #define    CMP_QUEUE_LEN	(1ULL << (CMP_QUEUE_SIZE1 + 10))
 #define    CMP_QUEUE_THRESH	0
 
-#define    RCV_BUF_COUNT	(1ULL << (RBDR_SIZE0 + 13) )
+#define    RCV_BUF_COUNT	(1ULL << (RBDR_SIZE0 + 13))
 #define    RBDR_THRESH		2048
 #define    RCV_BUFFER_LEN	2048 /* In multiples of 128bytes */
 #define    RQ_CQ_DROP           ((CMP_QUEUE_LEN - SND_QUEUE_LEN) / 256) /* To ensure CQEs for all transmitted pkts */
@@ -152,31 +152,31 @@ struct queue_set {
 #define		CQ_ERR_MASK	(CQ_WR_FULL | CQ_WR_DISABLE | CQ_WR_FAULT)
 
 int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
-void nicvf_qset_config (struct nicvf *nic, bool enable);
+void nicvf_qset_config(struct nicvf *nic, bool enable);
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx);
 void nicvf_sq_disable(struct nicvf *nic, int qidx);
-void nicvf_put_sq_desc (struct snd_queue *sq, int desc_cnt);
-void nicvf_sq_free_used_descs (struct net_device *netdev, struct snd_queue *sq, int qidx);
-int nicvf_sq_append_skb (struct nicvf *nic, struct sk_buff *skb);
+void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt);
+void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq, int qidx);
+int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb);
 
-int nicvf_cq_check_errs (struct nicvf *nic, void *cq_desc);
-struct sk_buff *nicvf_get_rcv_skb (struct nicvf *nic, void *cq_desc);
-void nicvf_refill_rbdr (unsigned long data);
+int nicvf_cq_check_errs(struct nicvf *nic, void *cq_desc);
+struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc);
+void nicvf_refill_rbdr(unsigned long data);
 
-void nicvf_enable_intr (struct nicvf *nic, int int_type, int q_idx);
-void nicvf_disable_intr (struct nicvf *nic, int int_type, int q_idx);
-void nicvf_clear_intr (struct nicvf *nic, int int_type, int q_idx);
-int nicvf_is_intr_enabled (struct nicvf *nic, int int_type, int q_idx);
+void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx);
+void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx);
+void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx);
+int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx);
 
 /* Register access APIs */
-void nicvf_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val);
-uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset);
+void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val);
+uint64_t nicvf_reg_read(struct nicvf *nic, uint64_t offset);
 
-void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val);
-uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset);
+void nicvf_qset_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val);
+uint64_t nicvf_qset_reg_read(struct nicvf *nic, uint64_t offset);
 
-void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset,
+void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
 				uint64_t qidx, uint64_t val);
-uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx);
-void nicvf_cmp_queue_config (struct nicvf *nic, struct queue_set *qs, int qidx, bool enable);
+uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx);
+void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs, int qidx, bool enable);
 #endif /* NICVF_QUEUES_H */
