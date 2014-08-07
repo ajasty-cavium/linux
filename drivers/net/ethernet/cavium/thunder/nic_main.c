@@ -146,71 +146,70 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 /* Handle Mailbox messgaes from VF and ack the message. */
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
-	int i, ret = 0;
-	struct nic_mbx *mbx;
+	struct nic_mbx mbx = {};
 	uint64_t *mbx_data;
-	uint64_t reg_addr;
 	uint64_t mbx_addr;
+	uint64_t reg_addr;
+	int i;
+	int ret = 0;
 
 	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
 	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
-
-	mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
-	mbx_data = (uint64_t *)mbx;
+	mbx_data = (uint64_t *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
-		*mbx_data = nic_reg_read(nic, mbx_addr + (i * NIC_PF_VF_MAILBOX_SIZE));
+		*mbx_data = nic_reg_read(nic, mbx_addr);
 		mbx_data++;
+		mbx_addr += NIC_PF_VF_MAILBOX_SIZE;
 	}
 
-	mbx->msg &= 0xFF;
+	mbx.msg &= 0xFF;
 	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
-		__func__, mbx->msg, vf);
-	switch (mbx->msg) {
+		__func__, mbx.msg, vf);
+	switch (mbx.msg) {
 	case NIC_PF_VF_MSG_READY:
 		nic_mbx_send_ready(nic, vf);
 		ret = 1;
 		break;
 	case NIC_PF_VF_MSG_QS_CFG:
-		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx->data.qs.num << NIC_QS_ID_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx->data.qs.cfg);
-		nic_channel_cfg(nic, mbx->data.qs.num);
-		if (!mbx->data.qs.cfg)
-			bgx_lmac_disable(mbx->data.qs.num);
+		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx.data.qs.num << NIC_QS_ID_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
+		nic_channel_cfg(nic, mbx.data.qs.num);
+		if (!mbx.data.qs.cfg)
+			bgx_lmac_disable(mbx.data.qs.num);
 		else
-			bgx_lmac_enable(mbx->data.qs.num);
+			bgx_lmac_enable(mbx.data.qs.num);
 		break;
 	case NIC_PF_VF_MSG_RQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) |
-							  (mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx->data.rq.cfg);
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+							  (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
 	case NIC_PF_VF_MSG_RQ_DROP_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) |
-								(mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx->data.rq.cfg);
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG | (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+								(mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
 	case NIC_PF_VF_MSG_SQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG | (mbx->data.sq.qs_num << NIC_QS_ID_SHIFT) |
-							  (mbx->data.sq.sq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx->data.sq.cfg);
+		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG | (mbx.data.sq.qs_num << NIC_QS_ID_SHIFT) |
+							  (mbx.data.sq.sq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
 		break;
 	case NIC_PF_VF_MSG_SET_MAC:
-		bgx_add_dmac_addr(mbx->data.mac.addr, mbx->data.mac.vnic_id);
+		bgx_add_dmac_addr(mbx.data.mac.addr, mbx.data.mac.vnic_id);
 		break;
 	case NIC_VF_SET_MAX_FRS:
-		ret = nic_update_hw_frs(nic, mbx->data.max_frs, vf);
+		ret = nic_update_hw_frs(nic, mbx.data.max_frs, vf);
 		break;
 	default:
-		netdev_err(nic->netdev, "Invalid message from VF%d, msg 0x%llx\n", vf, mbx->msg);
+		netdev_err(nic->netdev, "Invalid message from VF%d, msg 0x%llx\n", vf, mbx.msg);
 		break;
 	}
 
 	if (!ret)
 		nic_mbx_send_ack(nic, vf);
-	else if (mbx->msg != NIC_PF_VF_MSG_READY)
+	else if (mbx.msg != NIC_PF_VF_MSG_READY)
 		nic_mbx_send_nack(nic, vf);
-	kfree(mbx);
 }
 
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)

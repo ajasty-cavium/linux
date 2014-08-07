@@ -127,13 +127,6 @@ static bool pf_ready_to_rcv_msg;
 static bool pf_acked;
 static bool pf_nacked;
 
-struct nic_mbx *nicvf_get_mbx(void)
-{
-	struct nic_mbx *mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
-
-	return mbx;
-}
-
 static void nicvf_enable_mbx_intr(struct nicvf *nic)
 {
 	nicvf_enable_intr(nic, NICVF_INTR_MBOX, 0);
@@ -210,25 +203,24 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 
 static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 {
-	int i;
-	struct nic_mbx *mbx;
+	struct nic_mbx mbx = {};
 	uint64_t *mbx_data;
 	uint64_t mbx_addr;
+	int i;
 
 	mbx_addr = NIC_VF_PF_MAILBOX_0_7;
-
-	mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
-	mbx_data = (uint64_t *)mbx;
+	mbx_data = (uint64_t *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
-		*mbx_data = nicvf_reg_read(nic, mbx_addr + (i * NIC_PF_VF_MAILBOX_SIZE));
+		*mbx_data = nicvf_reg_read(nic, mbx_addr);
 		mbx_data++;
+		mbx_addr += NIC_PF_VF_MAILBOX_SIZE;
 	}
 
-	switch (mbx->msg & 0xFF) {
+	switch (mbx.msg & 0xFF) {
 	case NIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
-		nic->vnic_id = mbx->data.vnic_id & 0x7F;
+		nic->vnic_id = mbx.data.vnic_id & 0x7F;
 		break;
 	case NIC_PF_VF_MSG_ACK:
 		pf_acked = true;
@@ -238,29 +230,23 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		break;
 	default:
 		netdev_err(nic->netdev, "Invalid message from PF, msg 0x%llx\n",
-								mbx->msg);
+								mbx.msg);
 		break;
 	}
 	nicvf_clear_intr(nic, NICVF_INTR_MBOX, 0);
-	kfree(mbx);
 }
 
 static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 {
+	struct nic_mbx mbx = {};
 	int i;
-	int ret;
-	struct  nic_mbx *mbx;
 
-	mbx = nicvf_get_mbx();
-	mbx->msg = NIC_PF_VF_MSG_SET_MAC;
-	mbx->data.mac.vnic_id = nic->vnic_id;
+	mbx.msg = NIC_PF_VF_MSG_SET_MAC;
+	mbx.data.mac.vnic_id = nic->vnic_id;
 	for (i = 0; i < ETH_ALEN; i++)
-		mbx->data.mac.addr = (mbx->data.mac.addr << 8) | netdev->dev_addr[i];
+		mbx.data.mac.addr = (mbx.data.mac.addr << 8) | netdev->dev_addr[i];
 
-	ret = nicvf_send_msg_to_pf(nic, mbx);
-	kfree(mbx);
-
-	return ret;
+	return nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 static int nicvf_is_link_active(struct nicvf *nic)
@@ -923,16 +909,12 @@ no_err:
 
 static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)
 {
-	int ret;
-	struct  nic_mbx *mbx;
+	struct nic_mbx mbx = {};
 
-	mbx = nicvf_get_mbx();
-	mbx->msg = NIC_VF_SET_MAX_FRS;
-	mbx->data.max_frs = mtu;
-	ret = nicvf_send_msg_to_pf(nic, mbx);
-	kfree(mbx);
+	mbx.msg = NIC_VF_SET_MAX_FRS;
+	mbx.data.max_frs = mtu;
 
-	return ret;
+	return nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
