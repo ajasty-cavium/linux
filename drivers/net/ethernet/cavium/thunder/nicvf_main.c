@@ -54,8 +54,8 @@ static void nicvf_dump_packet(struct sk_buff *skb)
 
 	for (i = 0; i < skb->len; i++) {
 		if (!(i % 16))
-			printk("\n");
-		printk("%02x ", (u_char)skb->data[i]);
+			pr_cont("\n");
+		pr_debug("%02x ", (u_char)skb->data[i]);
 	}
 #endif
 }
