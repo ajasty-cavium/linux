@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2014 Cavium, Inc. 
+ *
+ * Copyright (C) 2014 Cavium, Inc.
  */
 
 #include <linux/module.h>
@@ -57,21 +57,21 @@ static uint64_t nic_reg_read (struct nicpf *nic, uint64_t offset)
         return readq_relaxed((void *)addr);
 }
 
-/* 
- * PF -> VF mailbox communication APIs 
+/*
+ * PF -> VF mailbox communication APIs
  */
 static void nic_enable_mbx_intr (struct nicpf *nic)
 {
 	int	 irq;
 	uint64_t vf_mbx_intr_enable = 0;
 
-	/* TBD: Need to support runtime SRIOV VF count configuratuon */	
+	/* TBD: Need to support runtime SRIOV VF count configuratuon */
 	/* Or consider enabling all VF's interrupts, since there is no harm */
 	for (irq = 0; irq < 64; irq++)
 		if (irq < nic->num_vf_en)
 			vf_mbx_intr_enable |= (1 << irq);
 	nic_reg_write (nic, NIC_PF_MAILBOX_ENA_W1S, vf_mbx_intr_enable);
-	
+
 	if (nic->num_vf_en < 64)
 		return;
 
@@ -109,8 +109,8 @@ static void nic_mbx_send_ready (struct nicpf *nic, int vf)
 	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_READY);
 	nic_reg_write(nic, mbx_addr + 8, vf);
 	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	/* Set 1 in last MBX reg */ 
-	nic_reg_write (nic, mbx_addr, 1ULL); 
+	/* Set 1 in last MBX reg */
+	nic_reg_write (nic, mbx_addr, 1ULL);
 }
 
 static void nic_mbx_send_ack (struct nicpf *nic, int vf)
@@ -122,8 +122,8 @@ static void nic_mbx_send_ack (struct nicpf *nic, int vf)
 
 	nic_reg_write (nic, mbx_addr, NIC_PF_VF_MSG_ACK);
 	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	/* Set 1 in last MBX reg */ 
-	nic_reg_write (nic, mbx_addr, 1ULL); 
+	/* Set 1 in last MBX reg */
+	nic_reg_write (nic, mbx_addr, 1ULL);
 }
 
 /*
@@ -158,25 +158,25 @@ static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx->data.qs.num << NIC_QS_ID_SHIFT);
 		nic_reg_write (nic, reg_addr, mbx->data.qs.cfg);
 		nic_channel_cfg(nic, mbx->data.qs.num);
-		if (!mbx->data.qs.cfg) 
+		if (!mbx->data.qs.cfg)
 			bgx_lmac_disable(mbx->data.qs.num);
-		else 
+		else
 			bgx_lmac_enable(mbx->data.qs.num);
 		break;
 	case NIC_PF_VF_MSG_RQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) | 
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) |
 							  (mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg); 
+		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg);
 		break;
 	case NIC_PF_VF_MSG_RQ_DROP_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) | 
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG | (mbx->data.rq.qs_num << NIC_QS_ID_SHIFT) |
 								(mbx->data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg); 
+		nic_reg_write (nic, reg_addr, mbx->data.rq.cfg);
 		break;
 	case NIC_PF_VF_MSG_SQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG | (mbx->data.sq.qs_num << NIC_QS_ID_SHIFT) | 
+		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG | (mbx->data.sq.qs_num << NIC_QS_ID_SHIFT) |
 							  (mbx->data.sq.sq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write (nic, reg_addr, mbx->data.sq.cfg); 
+		nic_reg_write (nic, reg_addr, mbx->data.sq.cfg);
 		break;
 	case NIC_PF_VF_MSG_SET_MAC:
 		bgx_add_dmac_addr(mbx->data.mac.addr, mbx->data.mac.vnic_id);
@@ -201,17 +201,17 @@ static void nic_init_hw (struct nicpf *nic)
 	nic_reg_write (nic, NIC_PF_CFG, 1);
 
 	/* Disable TNS mode, no TNS support in simulator */
-	nic_reg_write (nic, NIC_PF_INTF_0_1_SEND_CFG, 0); 
+	nic_reg_write (nic, NIC_PF_INTF_0_1_SEND_CFG, 0);
 	nic_reg_write (nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), 0);
-	
-	/* 
+
+	/*
 	 * Simulator doesn't support padding, disable min packet check.
 	 * Max pkt size - 1536.
 	 * Enable L2 length err check.
 	 * Disable TNS receive header for now.
 	 */
-	for (i = 0; i < NIC_MAX_PKIND; i++) 
-		nic_reg_write (nic, NIC_PF_PKIND_0_15_CFG | (i << 3), 
+	for (i = 0; i < NIC_MAX_PKIND; i++)
+		nic_reg_write (nic, NIC_PF_PKIND_0_15_CFG | (i << 3),
 								0x206000000);
 	/* Disable backpressure for now */
 	for (i = 0; i < NIC_MAX_CHANS; i++)
@@ -273,7 +273,7 @@ static void nic_channel_cfg(struct nicpf *nic, int vnic)
 	}
 }
 
-static irqreturn_t nic_intr_handler (int irq, void *nic_irq) 
+static irqreturn_t nic_intr_handler (int irq, void *nic_irq)
 {
 	int vf;
 	uint64_t intr;
@@ -288,7 +288,7 @@ static irqreturn_t nic_intr_handler (int irq, void *nic_irq)
 			nic_clear_mbx_intr(nic, vf);
 		}
 	}
-	
+
 	return IRQ_HANDLED;
 }
 
@@ -304,22 +304,22 @@ static int nic_enable_msix (struct nicpf *nic)
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret < 0) {
-		netdev_err(nic->netdev, 
+		netdev_err(nic->netdev,
 			"Request for #%d msix vectors failed\n", nic->num_vec);
 		return 0;
 	} else if (ret > 0) {
-		netdev_err(nic->netdev, 
-			"Request for #%d msix vectors failed, requesting #%d\n", 
+		netdev_err(nic->netdev,
+			"Request for #%d msix vectors failed, requesting #%d\n",
 			nic->num_vec, ret);
 
 		nic->num_vec = ret;
 		ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-		if (ret) { 
+		if (ret) {
 			netdev_warn(nic->netdev, "Request for msix vectors failed\n");
 			return 0;
 		}
 	}
-	
+
 	nic->msix_enabled = 1;
 	return 1;
 }
@@ -344,22 +344,22 @@ static int nic_register_interrupts (struct nicpf *nic)
 	/* Register interrupts */
 	/* For now skip ECC interrupts, register only Mbox interrupts */
 	for (irq = 8; irq < nic->num_vec; irq++) {
-		ret = request_irq (nic->msix_entries[irq].vector, 
+		ret = request_irq (nic->msix_entries[irq].vector,
 				nic_intr_handler, 0 , "NIC PF", nic);
 		if (ret)
 			break;
 	}
 
-	if (ret) { 
+	if (ret) {
 		netdev_err(nic->netdev, "Request irq failed\n");
 		for (free = 0; free < irq; free++)
 			free_irq (nic->msix_entries[free].vector, nic);
 		return 1;
 	}
-	
+
 	/* Enable mailbox interrupt */
 	nic_enable_mbx_intr(nic);
-	
+
 	return 0;
 }
 
@@ -407,9 +407,9 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 	}
 
 	nic->num_vf_en = 0;
-	if (num_vfs_requested > MAX_NUM_VFS_SUPPORTED) 
+	if (num_vfs_requested > MAX_NUM_VFS_SUPPORTED)
 		return -EPERM;
-	
+
 	if (num_vfs_requested) {
 		if ((err = pci_enable_sriov (pdev, num_vfs_requested))) {
 			dev_err(&pdev->dev, "SRIOV, Failed to enable %d VFs\n", num_vfs_requested);
@@ -418,14 +418,14 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 		nic->num_vf_en = num_vfs_requested;
 		nic_set_sriov_enable(nic);
 	}
-	
+
 	return num_vfs_requested;
 }
 
-static int  nic_sriov_init (struct pci_dev *pdev, struct nicpf *nic) 
+static int  nic_sriov_init (struct pci_dev *pdev, struct nicpf *nic)
 {
 	int    pos = 0;
-	
+
         pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
 	if (!pos) {
 		dev_err(&pdev->dev, "SRIOV capability is not found in PCIe config space\n");
@@ -433,9 +433,9 @@ static int  nic_sriov_init (struct pci_dev *pdev, struct nicpf *nic)
 	}
 
 	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF), &nic->total_vf_cnt);
-	if (nic->total_vf_cnt < DEFAULT_NUM_VF_ENABLED) 
+	if (nic->total_vf_cnt < DEFAULT_NUM_VF_ENABLED)
 		nic->num_vf_en = nic->total_vf_cnt;
-	else 
+	else
 		nic->num_vf_en = DEFAULT_NUM_VF_ENABLED;
 
 	if(nic->total_vf_cnt && pci_enable_sriov(pdev, nic->num_vf_en)) {
@@ -468,7 +468,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
         nic->netdev = netdev;
         nic->pdev = pdev;
 
-        err = pci_enable_device(pdev); 
+        err = pci_enable_device(pdev);
         if (err) {
                 dev_err(dev, "Failed to enable PCI device\n");
                 goto exit;
@@ -490,7 +490,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	} else {
 		dev_err(dev, "Unable to get usable DMA configuration\n");
 		goto err_release_regions;
-	} 
+	}
 
 	/* MAP PF's configuration registers */
 	nic->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
@@ -498,7 +498,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
                 dev_err(dev, "Cannot map config register space, aborting\n");
                 err = -ENOMEM;
                 goto err_release_regions;
-        }       
+        }
 
 	/* Initialize hardware */
 	nic_init_hw(nic);
@@ -533,9 +533,9 @@ static void nic_remove(struct pci_dev *pdev)
 
 	if (!netdev)
 		return;
-	
+
 	nic = netdev_priv(netdev);
-	
+
 	nic_unregister_interrupts(nic);
 
 	if (nic_is_sriov_enabled(nic)) {

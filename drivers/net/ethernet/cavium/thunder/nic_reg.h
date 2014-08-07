@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2013 Cavium, Inc. 
+ *
+ * Copyright (C) 2013 Cavium, Inc.
  */
 
 #ifndef NIC_REG_H
@@ -83,7 +83,7 @@
 /* Virtual function register offsets */
 #define   NIC_VNIC_CFG				(0x000020)
 #define   NIC_VF_PF_MAILBOX_0_7			(0x000100) /* + (0..7) << 3 */
-#define   NIC_VF_INT				(0x000200) 
+#define   NIC_VF_INT				(0x000200)
 #define   NIC_VF_INT_W1S			(0x000220)
 #define   NIC_VF_ENA_W1C			(0x000240)
 #define   NIC_VF_ENA_W1S			(0x000260)

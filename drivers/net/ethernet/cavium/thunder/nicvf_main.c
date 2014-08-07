@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2014 Cavium, Inc. 
+ *
+ * Copyright (C) 2014 Cavium, Inc.
  */
 
 #include <linux/module.h>
@@ -92,7 +92,7 @@ uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset)
 }
 
 void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
-{	
+{
 	uint64_t addr = nic->reg_base + offset;
 
         writeq_relaxed(val, (void *)(addr));
@@ -104,7 +104,7 @@ uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset)
 	return readq_relaxed((void *)(addr));
 }
 
-void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset, 
+void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset,
 				uint64_t qidx, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
@@ -117,8 +117,8 @@ uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx
 	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
-/* 
- * VF -> PF mailbox communication 
+/*
+ * VF -> PF mailbox communication
  */
 static bool pf_ready_to_rcv_msg = false;
 static bool vf_pf_msg_delivered = false;
@@ -126,7 +126,7 @@ static bool vf_pf_msg_delivered = false;
 struct nic_mbx *nicvf_get_mbx (void)
 {
 	return (struct nic_mbx *)kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
-} 
+}
 
 static void nicvf_enable_mbx_intr (struct nicvf *nic)
 {
@@ -151,16 +151,16 @@ void nicvf_send_msg_to_pf (struct nicvf *nic, struct nic_mbx *mbx)
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
 	}
-	
+
 	/* Wait for previous message to be acked, timeout 5sec */
 	while (!vf_pf_msg_delivered) {
 		msleep(sleep);
 		if (vf_pf_msg_delivered)
 			break;
-		else 
+		else
 			timeout -= sleep;
 		if (!timeout) {
-			netdev_err(nic->netdev, 
+			netdev_err(nic->netdev,
 				"PF didn't ack to mailbox msg %lld from VF%d\n",
 						(mbx->msg & 0xFF), nic->vnic_id);
 			return;
@@ -187,10 +187,10 @@ static int nicvf_check_pf_ready (struct nicvf *nic)
 		msleep(sleep);
 		if (pf_ready_to_rcv_msg)
 			break;
-		else 
+		else
 			timeout -= sleep;
 		if (!timeout) {
-			netdev_err(nic->netdev, 
+			netdev_err(nic->netdev,
 				"PF didn't respond to READY msg\n");
 			return 0;
 		}
@@ -198,7 +198,7 @@ static int nicvf_check_pf_ready (struct nicvf *nic)
 	return 1;
 }
 
-static void  nicvf_handle_mbx_intr (struct nicvf *nic) 
+static void  nicvf_handle_mbx_intr (struct nicvf *nic)
 {
 	int i;
 	struct nic_mbx *mbx;
@@ -224,7 +224,7 @@ static void  nicvf_handle_mbx_intr (struct nicvf *nic)
 		nic->vnic_id = mbx->data.vnic_id & 0x7F;
 		break;
 	default:
-		netdev_err(nic->netdev, "Invalid message from PF, msg 0x%llx\n", 
+		netdev_err(nic->netdev, "Invalid message from PF, msg 0x%llx\n",
 								mbx->msg);
 		break;
 	}
@@ -236,8 +236,8 @@ static void nicvf_hw_set_mac_addr (struct nicvf *nic, struct net_device *netdev)
 {
 	int i;
 	struct  nic_mbx *mbx;
-	
-	
+
+
 	mbx = nicvf_get_mbx();
 	mbx->msg = NIC_PF_VF_MSG_SET_MAC;
 	mbx->data.mac.vnic_id = nic->vnic_id;
@@ -247,7 +247,7 @@ static void nicvf_hw_set_mac_addr (struct nicvf *nic, struct net_device *netdev)
 	nicvf_send_msg_to_pf(nic, mbx);
 }
 
-static int nicvf_is_link_active(struct nicvf *nic) 
+static int nicvf_is_link_active(struct nicvf *nic)
 {
 	return 1;
 }
@@ -256,31 +256,31 @@ static int nicvf_init_resources(struct nicvf *nic)
 {
 	int err;
 
-	nic->num_qs = 1; 
+	nic->num_qs = 1;
 
 	/* Initialize queues and HW for data transfer */
 	if ((err = nicvf_config_data_transfer(nic, true))) {
-		netdev_err(nic->netdev, 
+		netdev_err(nic->netdev,
 			"Failed to allocate/configure VF's QSet resources, err %d\n", err);
 		return err;
 	}
-	/* Enable Qset */	
+	/* Enable Qset */
 	nicvf_qset_config(nic, true);
-	
+
 	return 0;
 }
 
-void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb) 
+void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb)
 {
 	int i;
 
-	if (!skb_shinfo(skb)->nr_frags) 
+	if (!skb_shinfo(skb)->nr_frags)
 		goto free_skb;
 
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		const struct skb_frag_struct *frag;
 		frag = &skb_shinfo(skb)->frags[i];
-		pci_unmap_single(nic->pdev, (dma_addr_t)skb_frag_address(frag), 
+		pci_unmap_single(nic->pdev, (dma_addr_t)skb_frag_address(frag),
 						skb_frag_size(frag), PCI_DMA_TODEVICE);
 	}
 free_skb:
@@ -288,7 +288,7 @@ free_skb:
 	dev_kfree_skb_any(skb);
 }
 
-static void nicvf_snd_pkt_handler (struct net_device *netdev, 
+static void nicvf_snd_pkt_handler (struct net_device *netdev,
 				  void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb = NULL;
@@ -300,13 +300,13 @@ static void nicvf_snd_pkt_handler (struct net_device *netdev,
 	cqe_tx = (struct cqe_send_t *)cq_desc;
 	sq = &nic->qs->sq[cqe_tx->sq_idx];
 
-	hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base + 
+	hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base +
 				(cqe_tx->sqe_ptr * SND_QUEUE_DESC_SIZE));
 	if (hdr->subdesc_type != SQ_DESC_TYPE_HEADER)
 		return;
-	
+
 	nic_dbg(&nic->pdev->dev, "%s Qset #%d SQ #%d SQ ptr #%d Subdesc count %d\n",
-			 	__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx, 
+			 	__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx,
 					cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
@@ -316,13 +316,13 @@ static void nicvf_snd_pkt_handler (struct net_device *netdev,
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 }
 
-static void nicvf_rcv_pkt_handler (struct net_device *netdev, 
+static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 			struct napi_struct *napi, void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb;
 	struct nicvf *nic = netdev_priv(netdev);
 
-	if (!((cqe_type == CQE_TYPE_RX) || (cqe_type == CQE_TYPE_RX_SPLIT) || 
+	if (!((cqe_type == CQE_TYPE_RX) || (cqe_type == CQE_TYPE_RX_SPLIT) ||
 						(cqe_type == CQE_TYPE_RX_TCP))) {
 		atomic64_add(1, (atomic64_t *)&netdev->stats.rx_dropped);
 		return;
@@ -333,7 +333,7 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 		atomic64_add(1, (atomic64_t *)&netdev->stats.rx_errors);
 		return;
 	}
-			
+
 	skb = nicvf_get_rcv_skb(nic, cq_desc);
 	if (!skb) {
 		nic_dbg(&nic->pdev->dev, "Packet not received\n");
@@ -363,14 +363,14 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 	if (napi && (netdev->features & NETIF_F_GRO))
 		napi_gro_receive(napi, skb);
 	else
-#endif 
+#endif
 		netif_receive_skb(skb);
 #else
 	netif_rx(skb);
 #endif
 }
 
-static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx, 
+static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx,
 					struct napi_struct *napi, int budget)
 {
 	int processed_cqe = 0, work_done = 0;
@@ -392,16 +392,16 @@ static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx,
 	cqe_head &= 0xFFFF;
 
 	nic_dbg(&nic->pdev->dev, "%s cqe_count %d cqe_head %d\n", __FUNCTION__, cqe_count, cqe_head);
-	while (processed_cqe < cqe_count) {	
+	while (processed_cqe < cqe_count) {
 		/* Get the CQ descriptor */
-		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base + 
+		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base +
 				(cqe_head * CMP_QUEUE_DESC_SIZE));
 
-		if (napi && (work_done >= budget) && 
+		if (napi && (work_done >= budget) &&
 			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
 			break;
 		}
-		
+
 		nic_dbg(&nic->pdev->dev, "cq_desc->cqe_type %d\n", cq_desc->cqe_type);
 		switch (cq_desc->cqe_type) {
 		case CQE_TYPE_RX:
@@ -423,11 +423,11 @@ static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx,
 		cqe_head++;
 		cqe_head &= (cq->desc_mem.q_len - 1);
 	}
-	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n", 
+	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n",
 			__FUNCTION__, processed_cqe, work_done, budget);
 
 	/* Ring doorbell to inform H/W to reuse processed CQEs */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,  
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,
 					cq_idx, processed_cqe);
 done:
 	spin_unlock(&cq->cq_lock);
@@ -444,11 +444,11 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
 	struct netdev_queue *txq;
 
 	work_done = nicvf_cq_intr_handler (netdev, cq->cq_idx, napi, budget);
-	
+
 	txq = netdev_get_tx_queue(netdev, cq->cq_idx);
 	if (netif_tx_queue_stopped(txq))
 		netif_tx_wake_queue(txq);
-	
+
 	if (work_done < budget) {
 		/* Slow packet rate, exit polling */
 		napi_complete(napi);
@@ -474,7 +474,7 @@ void nicvf_handle_qs_err (unsigned long data)
 
 	/* Check if it is CQ err */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
-		status = nicvf_queue_reg_read(nic, 
+		status = nicvf_queue_reg_read(nic,
 					NIC_QSET_CQ_0_7_STATUS, qidx);
 		if (!(status & CQ_ERR_MASK))
 			continue;
@@ -489,12 +489,12 @@ void nicvf_handle_qs_err (unsigned long data)
 		nicvf_enable_intr (nic, NICVF_INTR_CQ, qidx);
 	}
 
-	netif_tx_start_all_queues(nic->netdev);	
+	netif_tx_start_all_queues(nic->netdev);
 	/* Re-enable Qset error interrupt */
 	nicvf_enable_intr (nic, NICVF_INTR_QS_ERR, 0);
 }
 
-static irqreturn_t nicvf_misc_intr_handler (int irq, void *nicvf_irq) 
+static irqreturn_t nicvf_misc_intr_handler (int irq, void *nicvf_irq)
 {
 	struct nicvf *nic = (struct nicvf *) nicvf_irq;
 
@@ -503,7 +503,7 @@ static irqreturn_t nicvf_misc_intr_handler (int irq, void *nicvf_irq)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq) 
+static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 {
 	uint64_t qidx, intr;
 	uint64_t cq_intr, rbdr_intr, qs_err_intr;
@@ -521,7 +521,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 		tasklet_hi_schedule(&nic->qs_err_task);
 	}
 
-#ifdef  NICVF_NAPI_ENABLE 
+#ifdef  NICVF_NAPI_ENABLE
 	{
 		struct nicvf_cq_poll *cq_poll = NULL;
 		/* Disable interrupts and start polling */
@@ -533,7 +533,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 			nicvf_disable_intr (nic, NICVF_INTR_CQ, qidx);
 			cq_poll = nic->napi[qidx];
 			/* Schedule NAPI */
-			napi_schedule(&cq_poll->napi);	
+			napi_schedule(&cq_poll->napi);
 		}
 	}
 #else
@@ -551,9 +551,9 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 
 		tasklet_hi_schedule(&nic->rbdr_task);
 	}
-		
+
 	/* Clear interrupts */
-	nicvf_qset_reg_write(nic, NIC_VF_INT, intr); 
+	nicvf_qset_reg_write(nic, NIC_VF_INT, intr);
 	return IRQ_HANDLED;
 }
 
@@ -574,17 +574,17 @@ static int nicvf_enable_msix (struct nicvf *nic)
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret < 0) {
-		netdev_err(nic->netdev, 
+		netdev_err(nic->netdev,
 			"Request for #%d msix vectors failed\n", nic->num_vec);
 		return 0;
 	} else if (ret > 0) {
-		netdev_err(nic->netdev, 
-			"Request for #%d msix vectors failed, requesting #%d\n", 
+		netdev_err(nic->netdev,
+			"Request for #%d msix vectors failed, requesting #%d\n",
 			nic->num_vec, ret);
 
 		nic->num_vec = ret;
 		ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-		if (ret) { 
+		if (ret) {
 			netdev_warn(nic->netdev, "Request for msix vectors failed\n");
 			return 0;
 		}
@@ -606,35 +606,35 @@ static int nicvf_register_interrupts (struct nicvf *nic)
 {
 	int irq, free, ret = 0;
 
-	for_each_cq_irq(irq) 
-		sprintf(nic->irq_name[irq], "%s%d CQ%d", "NICVF", 
+	for_each_cq_irq(irq)
+		sprintf(nic->irq_name[irq], "%s%d CQ%d", "NICVF",
 						nic->vnic_id, irq);
 
-	for_each_sq_irq(irq) 
-		sprintf(nic->irq_name[irq], "%s%d SQ%d", "NICVF", 
+	for_each_sq_irq(irq)
+		sprintf(nic->irq_name[irq], "%s%d SQ%d", "NICVF",
 			nic->vnic_id, irq - NICVF_SQ_INTR_ID);
 
-	for_each_rbdr_irq(irq) 
-		sprintf(nic->irq_name[irq], "%s%d RBDR%d", "NICVF", 
+	for_each_rbdr_irq(irq)
+		sprintf(nic->irq_name[irq], "%s%d RBDR%d", "NICVF",
 			nic->vnic_id, irq - NICVF_RBDR_INTR_ID);
 
 	/* Register all interrupts except mailbox */
 	for (irq = 0; irq < NICVF_MISC_INTR_ID; irq++) {
-		if ((ret = request_irq (nic->msix_entries[irq].vector, 
+		if ((ret = request_irq (nic->msix_entries[irq].vector,
 				nicvf_intr_handler, 0 , nic->irq_name[irq], nic)))
 			break;
 		nic->irq_allocated[irq] = 1;
 	}
 
-	sprintf(nic->irq_name[NICVF_QS_ERR_INTR_ID], 
+	sprintf(nic->irq_name[NICVF_QS_ERR_INTR_ID],
 				"%s%d Qset error", "VNICVF", nic->vnic_id);
 	if (!ret) {
-		if (!(ret = request_irq (nic->msix_entries[NICVF_QS_ERR_INTR_ID].vector, 
+		if (!(ret = request_irq (nic->msix_entries[NICVF_QS_ERR_INTR_ID].vector,
 				nicvf_intr_handler, 0 , nic->irq_name[NICVF_QS_ERR_INTR_ID], nic)))
 			nic->irq_allocated[NICVF_QS_ERR_INTR_ID] = 1;
 	}
 
-	if (ret) { 
+	if (ret) {
 		netdev_err(nic->netdev, "Request irq failed\n");
 		for (free = 0; free < irq; free++)
 			free_irq (nic->msix_entries[free].vector, nic);
@@ -709,7 +709,7 @@ static int nicvf_sw_tso (struct sk_buff *skb, struct net_device *netdev)
 		goto gso_err;
 
 	do {
-		nskb = segs;             
+		nskb = segs;
 		segs = segs->next;
 		nskb->next = NULL;
 		nicvf_xmit(nskb, netdev);
@@ -717,7 +717,7 @@ static int nicvf_sw_tso (struct sk_buff *skb, struct net_device *netdev)
 
 gso_err:
 	dev_kfree_skb(skb);
-                 
+
         return NETDEV_TX_OK;
 }
 #endif
@@ -738,7 +738,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 #ifdef VNIC_SW_TSO_SUPPORT
 	if (netdev->features & NETIF_F_TSO)
-		ret = nicvf_sw_tso (skb, netdev);	
+		ret = nicvf_sw_tso (skb, netdev);
 #endif
 	if (ret == NETDEV_TX_OK)
 		return NETDEV_TX_OK;
@@ -753,7 +753,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 		}
 	}
 #endif
-#ifdef VNIC_HW_TSO_SUPPORT 
+#ifdef VNIC_HW_TSO_SUPPORT
         if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
 				(ip_hdr(skb)->protocol != IPPROTO_TCP))) {
 		netdev_dbg(netdev, "Only TCP segmentation is supported, \
@@ -761,15 +761,15 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 		dev_kfree_skb_any(skb);
 		return NETDEV_TX_OK;
 	}
-#endif	
+#endif
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
 		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_dropped);
-		nic_dbg(&nic->pdev->dev, 
+		nic_dbg(&nic->pdev->dev,
 			"VF%d: TX ring full, stop transmitting packets\n", nic->vnic_id);
-		return NETDEV_TX_BUSY;	
+		return NETDEV_TX_BUSY;
 	}
-	
+
 	nicvf_update_tx_stats(nic, skb);
 	return NETDEV_TX_OK;
 }
@@ -809,11 +809,11 @@ static int nicvf_stop(struct net_device *netdev)
 		nic->napi[qidx] = NULL;
 	}
 #endif
-	/* Free resources */ 
+	/* Free resources */
 	nicvf_config_data_transfer(nic, false);
 
 	/* Free Qset */
-	kfree(qs);	
+	kfree(qs);
 
 	return 0;
 }
@@ -826,7 +826,7 @@ static int nicvf_open(struct net_device *netdev)
 	struct nicvf_cq_poll *cq_poll = NULL;
 
 	nic->mtu = netdev->mtu;
-	
+
         netif_carrier_off(netdev);
 
 	if ((err = nicvf_register_misc_interrupt(nic))) {
@@ -839,7 +839,7 @@ static int nicvf_open(struct net_device *netdev)
 	qs = nic->qs;
 
         if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
-                netdev_err(netdev, 
+                netdev_err(netdev,
 			"Failed to set real number of Tx queues: %d\n", err);
                 return err;
         }
@@ -903,7 +903,7 @@ no_err:
 
 	if (nicvf_is_link_active(nic)) {
 		netif_carrier_on(netdev);
-		netif_tx_start_all_queues(netdev);	
+		netif_tx_start_all_queues(netdev);
 	}
 
 	return 0;
@@ -912,10 +912,10 @@ no_err:
 static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
 {
 	if (new_mtu > NICVF_MAX_MTU_SUPPORTED)
-		return -EINVAL;	
+		return -EINVAL;
 
 	if (new_mtu < NICVF_MIN_MTU_SUPPORTED)
-		return -EINVAL;	
+		return -EINVAL;
 
 	netdev->mtu = new_mtu;
 	return 0;
@@ -930,7 +930,7 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 		return -EADDRNOTAVAIL;
 
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
-	if (netif_running(netdev)) 
+	if (netif_running(netdev))
 		nicvf_hw_set_mac_addr (nic, netdev);
 
 	return 0;
@@ -959,7 +959,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct nicvf *nic;
 	int    err;
 
-	netdev = alloc_etherdev_mqs(sizeof(struct nicvf), 
+	netdev = alloc_etherdev_mqs(sizeof(struct nicvf),
 			MAX_RCV_QUEUES_PER_QS, MAX_SND_QUEUES_PER_QS);
 
         if (!netdev)
@@ -972,8 +972,8 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
         nic = netdev_priv(netdev);
         nic->netdev = netdev;
         nic->pdev = pdev;
-	
-        err = pci_enable_device(pdev); 
+
+        err = pci_enable_device(pdev);
         if (err) {
                 dev_err(dev, "Failed to enable PCI device\n");
                 goto exit;
@@ -995,7 +995,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	} else {
 		dev_err(dev, "Unable to get usable DMA configuration\n");
 		goto err_release_regions;
-	} 
+	}
 
 	/* MAP VF's configuration registers */
 	nic->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
@@ -1003,22 +1003,22 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
                 dev_err(dev, "Cannot map config register space, aborting\n");
                 err = -ENOMEM;
                 goto err_release_regions;
-        }       
+        }
 
 #ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
-	netdev->hw_features |= NETIF_F_RXCSUM; 
+	netdev->hw_features |= NETIF_F_RXCSUM;
 #endif
 #ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-	netdev->hw_features |= NETIF_F_IP_CSUM; 
+	netdev->hw_features |= NETIF_F_IP_CSUM;
 #endif
 #ifdef VNIC_SG_SUPPORT
-	netdev->hw_features |= NETIF_F_SG; 
+	netdev->hw_features |= NETIF_F_SG;
 #endif
 #ifdef VNIC_TSO_SUPPORT
-	netdev->hw_features |= NETIF_F_TSO | NETIF_F_SG | NETIF_F_IP_CSUM; 
+	netdev->hw_features |= NETIF_F_TSO | NETIF_F_SG | NETIF_F_IP_CSUM;
 #endif
 #ifdef VNIC_HW_LRO_SUPPORT
-	netdev->hw_features |= NETIF_F_LRO; 
+	netdev->hw_features |= NETIF_F_LRO;
 #endif
 
 	netdev->features |= netdev->hw_features;
@@ -1052,7 +1052,7 @@ static void nicvf_remove(struct pci_dev *pdev)
 
 	if (!netdev)
 		return;
-	
+
 	nic = netdev_priv(netdev);
 	unregister_netdev(netdev);
 

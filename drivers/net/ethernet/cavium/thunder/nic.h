@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2014 Cavium, Inc. 
+ *
+ * Copyright (C) 2014 Cavium, Inc.
  */
 
 #ifndef NIC_H
@@ -29,11 +29,11 @@
 #define         NIC_SRIOV_ENABLED  (1 << 0)
 
 /* VNIC HW optimiation features */
-#undef	 	VNIC_RX_CSUM_OFFLOAD_SUPPORT 
-#undef	 	VNIC_TX_CSUM_OFFLOAD_SUPPORT 
-#define 	VNIC_SG_SUPPORT     
+#undef	 	VNIC_RX_CSUM_OFFLOAD_SUPPORT
+#undef	 	VNIC_TX_CSUM_OFFLOAD_SUPPORT
+#define 	VNIC_SG_SUPPORT
 #define 	VNIC_TSO_SUPPORT
-#define 	VNIC_LRO_SUPPORT 
+#define 	VNIC_LRO_SUPPORT
 
 /* TSO not supported in Thunder pass1 */
 #ifdef VNIC_TSO_SUPPORT
@@ -52,7 +52,7 @@
 #define 	NICVF_ETHTOOL_ENABLE
 
 /* NAPI enable or disable, undef this to disable */
-#define		NICVF_NAPI_ENABLE      
+#define		NICVF_NAPI_ENABLE
 
 /* Min/Max packet size */
 #define		NICVF_MIN_MTU_SUPPORTED    64
@@ -96,14 +96,14 @@
 #define 	NICVF_INTR_MBOX		 5
 #define 	NICVF_INTR_QS_ERR	 6
 
-#define 	NICVF_INTR_CQ_SHIFT	   0	
+#define 	NICVF_INTR_CQ_SHIFT	   0
 #define		NICVF_INTR_SQ_SHIFT   	   8
 #define		NICVF_INTR_RBDR_SHIFT      16
 #define		NICVF_INTR_PKT_DROP_SHIFT  20
 #define		NICVF_INTR_TCP_TIMER_SHIFT 21
 #define		NICVF_INTR_MBOX_SHIFT	   22
 #define		NICVF_INTR_QS_ERR_SHIFT	   23
-	
+
 #define		NICVF_INTR_CQ_MASK		(0xFF << NICVF_INTR_CQ_SHIFT)
 #define		NICVF_INTR_SQ_MASK		(0xFF << NICVF_INTR_SQ_SHIFT)
 #define		NICVF_INTR_RBDR_MASK		(0x03 << NICVF_INTR_RBDR_SHIFT)
@@ -264,7 +264,7 @@ struct nicvf_stats {
 };
 
 /*
- * PF <--> Mailbox communication 
+ * PF <--> Mailbox communication
  * Eight 64bit registers are shared between PF and VF.
  * Separate set for each VF.
  * Writing '1' into last register mbx7 means end of message.
@@ -326,7 +326,7 @@ void nicvf_send_msg_to_pf (struct nicvf *vf, struct nic_mbx *mbx);
 #define nic_dbg(dev, fmt, arg...) \
 		dev_info(dev, fmt, ##arg)
 #else
-#define nic_dbg(dev, fmt, arg...) do {} while (0) 
+#define nic_dbg(dev, fmt, arg...) do {} while (0)
 #endif
 
 #endif /* NIC_H */

@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2013 Cavium, Inc. 
+ *
+ * Copyright (C) 2013 Cavium, Inc.
  */
 
 #ifndef NICVF_QUEUES_H
@@ -17,29 +17,29 @@
 #define    MAX_SND_QUEUES_PER_QS		8
 #define    MAX_CMP_QUEUES_PER_QS		8
 
-#define    RBDR_SIZE0	 0ULL /* 8K entries */   
-#define    RBDR_SIZE1	 1ULL /* 16K entries */   
-#define    RBDR_SIZE2	 2ULL /* 32K entries */   
-#define    RBDR_SIZE3	 3ULL /* 64K entries */   
-#define    RBDR_SIZE4	 4ULL /* 126K entries */   
-#define    RBDR_SIZE5	 5ULL /* 256K entries */   
-#define    RBDR_SIZE6	 6ULL /* 512K entries */   
+#define    RBDR_SIZE0	 0ULL /* 8K entries */
+#define    RBDR_SIZE1	 1ULL /* 16K entries */
+#define    RBDR_SIZE2	 2ULL /* 32K entries */
+#define    RBDR_SIZE3	 3ULL /* 64K entries */
+#define    RBDR_SIZE4	 4ULL /* 126K entries */
+#define    RBDR_SIZE5	 5ULL /* 256K entries */
+#define    RBDR_SIZE6	 6ULL /* 512K entries */
 
-#define    SND_QUEUE_SIZE0	 0ULL /* 1K entries */   
-#define    SND_QUEUE_SIZE1	 1ULL /* 2K entries */   
-#define    SND_QUEUE_SIZE2	 2ULL /* 4K entries */   
-#define    SND_QUEUE_SIZE3	 3ULL /* 8K entries */   
-#define    SND_QUEUE_SIZE4	 4ULL /* 16K entries */   
-#define    SND_QUEUE_SIZE5	 5ULL /* 32K entries */   
-#define    SND_QUEUE_SIZE6	 6ULL /* 64K entries */   
+#define    SND_QUEUE_SIZE0	 0ULL /* 1K entries */
+#define    SND_QUEUE_SIZE1	 1ULL /* 2K entries */
+#define    SND_QUEUE_SIZE2	 2ULL /* 4K entries */
+#define    SND_QUEUE_SIZE3	 3ULL /* 8K entries */
+#define    SND_QUEUE_SIZE4	 4ULL /* 16K entries */
+#define    SND_QUEUE_SIZE5	 5ULL /* 32K entries */
+#define    SND_QUEUE_SIZE6	 6ULL /* 64K entries */
 
-#define    CMP_QUEUE_SIZE0	 0ULL /* 1K entries */   
-#define    CMP_QUEUE_SIZE1	 1ULL /* 2K entries */   
-#define    CMP_QUEUE_SIZE2	 2ULL /* 4K entries */   
-#define    CMP_QUEUE_SIZE3	 3ULL /* 8K entries */   
-#define    CMP_QUEUE_SIZE4	 4ULL /* 16K entries */   
-#define    CMP_QUEUE_SIZE5	 5ULL /* 32K entries */   
-#define    CMP_QUEUE_SIZE6	 6ULL /* 64K entries */   
+#define    CMP_QUEUE_SIZE0	 0ULL /* 1K entries */
+#define    CMP_QUEUE_SIZE1	 1ULL /* 2K entries */
+#define    CMP_QUEUE_SIZE2	 2ULL /* 4K entries */
+#define    CMP_QUEUE_SIZE3	 3ULL /* 8K entries */
+#define    CMP_QUEUE_SIZE4	 4ULL /* 16K entries */
+#define    CMP_QUEUE_SIZE5	 5ULL /* 32K entries */
+#define    CMP_QUEUE_SIZE6	 6ULL /* 64K entries */
 
 /* Default queue count per QS, its lengths and threshold values */
 #define    RBDR_CNT		1
@@ -64,8 +64,8 @@
 #define    CMP_QUEUE_DESC_SIZE		512
 
 /* Buffer / descriptor alignments */
-#define    NICVF_RCV_BUF_ALIGN		7 
-#define    NICVF_RCV_BUF_ALIGN_BYTES	(1ULL << NICVF_RCV_BUF_ALIGN) 
+#define    NICVF_RCV_BUF_ALIGN		7
+#define    NICVF_RCV_BUF_ALIGN_BYTES	(1ULL << NICVF_RCV_BUF_ALIGN)
 #define    NICVF_CQ_BASE_ALIGN_BYTES	512  /* 9 bits */
 #define    NICVF_SQ_BASE_ALIGN_BYTES	128  /* 7 bits */
 
@@ -96,7 +96,7 @@ struct rcv_queue {
 	bool	en_tcp_reassembly;
 	uint8_t cq_qs;  /* CQ's QS to which this RQ is assigned */
 	uint8_t cq_idx; /* CQ index (0 to 7) in the QS */
-	uint8_t cont_rbdr_qs;      /* Continue buffer pointers - QS num */ 
+	uint8_t cont_rbdr_qs;      /* Continue buffer pointers - QS num */
 	uint8_t cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
 	uint8_t start_rbdr_qs;     /* First buffer pointers - QS num */
 	uint8_t start_qs_rbdr_idx; /* RBDR idx in the above QS */
@@ -155,7 +155,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
 void nicvf_qset_config (struct nicvf *nic, bool enable);
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx);
 void nicvf_sq_disable(struct nicvf *nic, int qidx);
-void nicvf_put_sq_desc (struct snd_queue *sq, int desc_cnt); 
+void nicvf_put_sq_desc (struct snd_queue *sq, int desc_cnt);
 void nicvf_sq_free_used_descs (struct net_device *netdev, struct snd_queue *sq, int qidx);
 int nicvf_sq_append_skb (struct nicvf *nic, struct sk_buff *skb);
 
@@ -175,7 +175,7 @@ uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset);
 void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val);
 uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset);
 
-void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset, 
+void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset,
 				uint64_t qidx, uint64_t val);
 uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx);
 void nicvf_cmp_queue_config (struct nicvf *nic, struct queue_set *qs, int qidx, bool enable);
