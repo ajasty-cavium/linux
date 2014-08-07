@@ -104,7 +104,7 @@ static int  nicvf_init_rbdr (struct nicvf *nic, struct rbdr *rbdr,
 	rbdr->enable = true;
 	rbdr->thresh = ring_len / 2;
 
-        for (idx = 0; idx < ring_len; idx++) {
+	for (idx = 0; idx < ring_len; idx++) {
 		rbdr->desc[idx] = &((struct rbdr_entry_t *)rbdr->desc_mem.base)[idx];
 
 		if (nicvf_alloc_rcv_buffer (nic, rbdr->buf_size, &rcv_buffer))
@@ -649,8 +649,8 @@ void nicvf_sq_free_used_descs (struct net_device *netdev, struct snd_queue *sq, 
 	head = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_HEAD, qidx) >> 4;
 	tail = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_TAIL, qidx) >> 4;
 	while (sq->head != head) {
-                hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base +
-                        (sq->head * SND_QUEUE_DESC_SIZE));
+		hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base +
+			(sq->head * SND_QUEUE_DESC_SIZE));
 		if (hdr->subdesc_type != SQ_DESC_TYPE_HEADER) {
 			nicvf_put_sq_desc(sq, 1);
 			continue;
@@ -715,7 +715,7 @@ nicvf_sq_add_hdr_subdesc (struct queue_set *qs, int sq_num,
 	/* Packet to be subjected to TSO */
 	hdr->tso = 1;
 	hdr->tso_l4_offset = (int)(skb_transport_header(skb) - skb->data) +
-                                tcp_hdrlen(skb);
+				tcp_hdrlen(skb);
 	hdr->tso_max_paysize = skb_shinfo(skb)->gso_size + hdr->tso_l4_offset;
 	/* TBD: These fields have to be setup properly */
 	hdr->tso_sdc_first = hdr->tso_sdc_cont = 0
@@ -811,10 +811,10 @@ static void nicvf_sq_add_crc_subdesc (struct nicvf *nic, struct queue_set *qs,
 	if (skb->protocol != htons(ETH_P_IP))
 		return;
 
-        sq = &qs->sq[sq_num];
-        nicvf_get_sq_desc(qs, sq_num, &desc);
+	sq = &qs->sq[sq_num];
+	nicvf_get_sq_desc(qs, sq_num, &desc);
 
-        crc = (struct sq_crc_subdesc *) desc;
+	crc = (struct sq_crc_subdesc *) desc;
 
 	nicvf_fill_l3_crc_subdesc(crc, skb);
 

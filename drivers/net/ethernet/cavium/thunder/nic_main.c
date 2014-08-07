@@ -34,8 +34,8 @@ static void nic_channel_cfg(struct nicpf *nic, int vnic);
 
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
-        { PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
-        { 0, }  /* end of table */
+	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
+	{ 0, }  /* end of table */
 };
 
 MODULE_AUTHOR("Cavium Inc");
@@ -48,13 +48,13 @@ MODULE_DEVICE_TABLE(pci, nic_id_table);
 static void nic_reg_write (struct nicpf *nic, uint64_t offset, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
-        writeq_relaxed(val, (void *)addr);
+	writeq_relaxed(val, (void *)addr);
 }
 
 static uint64_t nic_reg_read (struct nicpf *nic, uint64_t offset)
 {
 	uint64_t addr = nic->reg_base + offset;
-        return readq_relaxed((void *)addr);
+	return readq_relaxed((void *)addr);
 }
 
 /*
@@ -394,7 +394,7 @@ bool nic_is_sriov_enabled (struct nicpf *nic)
 
 int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 {
-        struct net_device *netdev = pci_get_drvdata(pdev);
+	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct nicpf *nic = netdev_priv(netdev);
 	int err;
 
@@ -426,10 +426,10 @@ static int  nic_sriov_init (struct pci_dev *pdev, struct nicpf *nic)
 {
 	int    pos = 0;
 
-        pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
+	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
 	if (!pos) {
 		dev_err(&pdev->dev, "SRIOV capability is not found in PCIe config space\n");
-                return 0;
+		return 0;
 	}
 
 	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF), &nic->total_vf_cnt);
@@ -451,34 +451,34 @@ static int  nic_sriov_init (struct pci_dev *pdev, struct nicpf *nic)
 
 static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-        struct device *dev = &pdev->dev;
-        struct net_device *netdev;
+	struct device *dev = &pdev->dev;
+	struct net_device *netdev;
 	struct nicpf *nic;
 	int    err;
 
-        netdev = alloc_etherdev(sizeof(struct nicpf));
-        if (!netdev)
-                return -ENOMEM;
+	netdev = alloc_etherdev(sizeof(struct nicpf));
+	if (!netdev)
+		return -ENOMEM;
 
-        pci_set_drvdata(pdev, netdev);
+	pci_set_drvdata(pdev, netdev);
 
-        SET_NETDEV_DEV(netdev, &pdev->dev);
+	SET_NETDEV_DEV(netdev, &pdev->dev);
 
-        nic = netdev_priv(netdev);
-        nic->netdev = netdev;
-        nic->pdev = pdev;
+	nic = netdev_priv(netdev);
+	nic->netdev = netdev;
+	nic->pdev = pdev;
 
-        err = pci_enable_device(pdev);
-        if (err) {
-                dev_err(dev, "Failed to enable PCI device\n");
-                goto exit;
-        }
+	err = pci_enable_device(pdev);
+	if (err) {
+		dev_err(dev, "Failed to enable PCI device\n");
+		goto exit;
+	}
 
-        err = pci_request_regions(pdev, DRV_NAME);
-        if (err) {
-                dev_err(dev, "PCI request regions failed 0x%x\n", err);
-                goto err_disable_device;
-        }
+	err = pci_request_regions(pdev, DRV_NAME);
+	if (err) {
+		dev_err(dev, "PCI request regions failed 0x%x\n", err);
+		goto err_disable_device;
+	}
 
 	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(48));
 	if (!err) {
@@ -494,11 +494,11 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* MAP PF's configuration registers */
 	nic->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
-        if (!nic->reg_base) {
-                dev_err(dev, "Cannot map config register space, aborting\n");
-                err = -ENOMEM;
-                goto err_release_regions;
-        }
+	if (!nic->reg_base) {
+		dev_err(dev, "Cannot map config register space, aborting\n");
+		err = -ENOMEM;
+		goto err_release_regions;
+	}
 
 	/* Initialize hardware */
 	nic_init_hw(nic);
@@ -516,8 +516,8 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	goto exit;
 
 err_unmap_resources:
-        if (nic->reg_base)
-                iounmap((void *)nic->reg_base);
+	if (nic->reg_base)
+		iounmap((void *)nic->reg_base);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
@@ -528,7 +528,7 @@ exit:
 
 static void nic_remove(struct pci_dev *pdev)
 {
-        struct net_device *netdev = pci_get_drvdata(pdev);
+	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct nicpf *nic;
 
 	if (!netdev)
@@ -544,8 +544,8 @@ static void nic_remove(struct pci_dev *pdev)
 
 	pci_set_drvdata(pdev, NULL);
 
-        if (nic->reg_base)
-                iounmap((void *)nic->reg_base);
+	if (nic->reg_base)
+		iounmap((void *)nic->reg_base);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
@@ -553,23 +553,23 @@ static void nic_remove(struct pci_dev *pdev)
 }
 
 static struct pci_driver nic_driver = {
-        .name = DRV_NAME,
-        .id_table = nic_id_table,
-        .probe = nic_probe,
-        .remove = nic_remove,
-        .sriov_configure = nic_sriov_configure,
+	.name = DRV_NAME,
+	.id_table = nic_id_table,
+	.probe = nic_probe,
+	.remove = nic_remove,
+	.sriov_configure = nic_sriov_configure,
 };
 
 static int __init nic_init_module(void)
 {
-        pr_info("%s, ver %s\n", DRV_NAME, DRV_VERSION);
+	pr_info("%s, ver %s\n", DRV_NAME, DRV_VERSION);
 
-        return pci_register_driver(&nic_driver);
+	return pci_register_driver(&nic_driver);
 }
 
 static void __exit nic_cleanup_module(void)
 {
-        pci_unregister_driver(&nic_driver);
+	pci_unregister_driver(&nic_driver);
 }
 
 module_init(nic_init_module);

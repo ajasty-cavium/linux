@@ -34,8 +34,8 @@
 
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(nicvf_id_table) = {
-        { PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_VF) },
-        { 0, }  /* end of table */
+	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_VF) },
+	{ 0, }  /* end of table */
 };
 
 MODULE_AUTHOR("Cavium Inc");
@@ -82,20 +82,20 @@ static void nicvf_update_stats (struct nicvf *nic, struct sk_buff *skb)
 void nicvf_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
-        writeq_relaxed(val, (void *)addr);
+	writeq_relaxed(val, (void *)addr);
 }
 
 uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset)
 {
 	uint64_t addr = nic->reg_base + offset;
-        return readq_relaxed((void *)addr);
+	return readq_relaxed((void *)addr);
 }
 
 void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
 
-        writeq_relaxed(val, (void *)(addr));
+	writeq_relaxed(val, (void *)(addr));
 }
 
 uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset)
@@ -470,7 +470,7 @@ void nicvf_handle_qs_err (unsigned long data)
 	int qidx;
 	uint64_t status;
 
-        netif_tx_disable(nic->netdev);
+	netif_tx_disable(nic->netdev);
 
 	/* Check if it is CQ err */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
@@ -705,7 +705,7 @@ static int nicvf_sw_tso (struct sk_buff *skb, struct net_device *netdev)
 
 	/* Segment the large frame */
 	segs = skb_gso_segment(skb, netdev->features & ~NETIF_F_TSO);
-        if (IS_ERR(segs))
+	if (IS_ERR(segs))
 		goto gso_err;
 
 	do {
@@ -718,7 +718,7 @@ static int nicvf_sw_tso (struct sk_buff *skb, struct net_device *netdev)
 gso_err:
 	dev_kfree_skb(skb);
 
-        return NETDEV_TX_OK;
+	return NETDEV_TX_OK;
 }
 #endif
 
@@ -730,11 +730,11 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	int ret = 1;
 
 	/* Check for minimum packet length */
-        if (skb->len <= ETH_HLEN) {
+	if (skb->len <= ETH_HLEN) {
 		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_errors);
-                dev_kfree_skb(skb);
-                return NETDEV_TX_OK;
-        }
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
 
 #ifdef VNIC_SW_TSO_SUPPORT
 	if (netdev->features & NETIF_F_TSO)
@@ -754,7 +754,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	}
 #endif
 #ifdef VNIC_HW_TSO_SUPPORT
-        if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
+	if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
 				(ip_hdr(skb)->protocol != IPPROTO_TCP))) {
 		netdev_dbg(netdev, "Only TCP segmentation is supported, \
 							dropping packet\n");
@@ -777,11 +777,11 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 static int nicvf_stop(struct net_device *netdev)
 {
 	int qidx;
-        struct nicvf *nic = netdev_priv(netdev);
+	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
 
-        netif_carrier_off(netdev);
-        netif_tx_disable(netdev);
+	netif_carrier_off(netdev);
+	netif_tx_disable(netdev);
 
 	/* Disable HW Qset, to stop receiving packets */
 	nicvf_qset_config(nic, false);
@@ -821,13 +821,13 @@ static int nicvf_stop(struct net_device *netdev)
 static int nicvf_open(struct net_device *netdev)
 {
 	int err, qidx;
-        struct nicvf *nic = netdev_priv(netdev);
+	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
 
 	nic->mtu = netdev->mtu;
 
-        netif_carrier_off(netdev);
+	netif_carrier_off(netdev);
 
 	if ((err = nicvf_register_misc_interrupt(nic))) {
 		return -EIO;
@@ -838,16 +838,16 @@ static int nicvf_open(struct net_device *netdev)
 
 	qs = nic->qs;
 
-        if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
-                netdev_err(netdev,
+	if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
+		netdev_err(netdev,
 			"Failed to set real number of Tx queues: %d\n", err);
-                return err;
-        }
-        if ((err = netif_set_real_num_rx_queues(netdev, qs->rq_cnt))) {
-                netdev_err(netdev,
+		return err;
+	}
+	if ((err = netif_set_real_num_rx_queues(netdev, qs->rq_cnt))) {
+		netdev_err(netdev,
 			"Failed to set real number of Rx queues: %d\n", err);
-                return err;
-        }
+		return err;
+	}
 
 	if ((err = nicvf_register_interrupts(nic))) {
 		nicvf_stop(netdev);
@@ -924,7 +924,7 @@ static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
 static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 {
 	struct sockaddr *addr = p;
-        struct nicvf *nic = netdev_priv(netdev);
+	struct nicvf *nic = netdev_priv(netdev);
 
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
@@ -937,53 +937,53 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 }
 
 static const struct net_device_ops nicvf_netdev_ops = {
-        .ndo_open               = nicvf_open,
-        .ndo_stop               = nicvf_stop,
-        .ndo_start_xmit         = nicvf_xmit,
-        .ndo_change_mtu         = nicvf_change_mtu,
-        .ndo_set_mac_address    = nicvf_set_mac_address,
+	.ndo_open               = nicvf_open,
+	.ndo_stop               = nicvf_stop,
+	.ndo_start_xmit         = nicvf_xmit,
+	.ndo_change_mtu         = nicvf_change_mtu,
+	.ndo_set_mac_address    = nicvf_set_mac_address,
 #if 0
-        .ndo_get_stats64        = nicvf_get_stats,
-        .ndo_validate_addr      = eth_validate_addr,
-        .ndo_set_rx_mode        = nicvf_set_rx_mode,
-        .ndo_vlan_rx_add_vid    = nicvf_vlan_rx_add_vid,
-        .ndo_vlan_rx_kill_vid   = nicvf_vlan_rx_kill_vid,
-        .ndo_tx_timeout         = nicvf_tx_timeout,
+	.ndo_get_stats64        = nicvf_get_stats,
+	.ndo_validate_addr      = eth_validate_addr,
+	.ndo_set_rx_mode        = nicvf_set_rx_mode,
+	.ndo_vlan_rx_add_vid    = nicvf_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid   = nicvf_vlan_rx_kill_vid,
+	.ndo_tx_timeout         = nicvf_tx_timeout,
 #endif
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-        struct device *dev = &pdev->dev;
-        struct net_device *netdev;
+	struct device *dev = &pdev->dev;
+	struct net_device *netdev;
 	struct nicvf *nic;
 	int    err;
 
 	netdev = alloc_etherdev_mqs(sizeof(struct nicvf),
 			MAX_RCV_QUEUES_PER_QS, MAX_SND_QUEUES_PER_QS);
 
-        if (!netdev)
-                return -ENOMEM;
+	if (!netdev)
+		return -ENOMEM;
 
-        pci_set_drvdata(pdev, netdev);
+	pci_set_drvdata(pdev, netdev);
 
-        SET_NETDEV_DEV(netdev, &pdev->dev);
+	SET_NETDEV_DEV(netdev, &pdev->dev);
 
-        nic = netdev_priv(netdev);
-        nic->netdev = netdev;
-        nic->pdev = pdev;
+	nic = netdev_priv(netdev);
+	nic->netdev = netdev;
+	nic->pdev = pdev;
 
-        err = pci_enable_device(pdev);
-        if (err) {
-                dev_err(dev, "Failed to enable PCI device\n");
-                goto exit;
-        }
+	err = pci_enable_device(pdev);
+	if (err) {
+		dev_err(dev, "Failed to enable PCI device\n");
+		goto exit;
+	}
 
-        err = pci_request_regions(pdev, DRV_NAME);
-        if (err) {
-                dev_err(dev, "PCI request regions failed 0x%x\n", err);
-                goto err_disable_device;
-        }
+	err = pci_request_regions(pdev, DRV_NAME);
+	if (err) {
+		dev_err(dev, "PCI request regions failed 0x%x\n", err);
+		goto err_disable_device;
+	}
 
 	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(48));
 	if (!err) {
@@ -999,11 +999,11 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* MAP VF's configuration registers */
 	nic->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
-        if (!nic->reg_base) {
-                dev_err(dev, "Cannot map config register space, aborting\n");
-                err = -ENOMEM;
-                goto err_release_regions;
-        }
+	if (!nic->reg_base) {
+		dev_err(dev, "Cannot map config register space, aborting\n");
+		err = -ENOMEM;
+		goto err_release_regions;
+	}
 
 #ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
 	netdev->hw_features |= NETIF_F_RXCSUM;
@@ -1035,8 +1035,8 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	goto exit;
 
 err_unmap_resources:
-        if (nic->reg_base)
-                iounmap((void *)nic->reg_base);
+	if (nic->reg_base)
+		iounmap((void *)nic->reg_base);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
@@ -1047,7 +1047,7 @@ exit:
 
 static void nicvf_remove(struct pci_dev *pdev)
 {
-        struct net_device *netdev = pci_get_drvdata(pdev);
+	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct nicvf *nic;
 
 	if (!netdev)
@@ -1058,8 +1058,8 @@ static void nicvf_remove(struct pci_dev *pdev)
 
 	pci_set_drvdata(pdev, NULL);
 
-        if (nic->reg_base)
-                iounmap((void *)nic->reg_base);
+	if (nic->reg_base)
+		iounmap((void *)nic->reg_base);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
@@ -1067,22 +1067,22 @@ static void nicvf_remove(struct pci_dev *pdev)
 }
 
 static struct pci_driver nicvf_driver = {
-        .name = DRV_NAME,
-        .id_table = nicvf_id_table,
-        .probe = nicvf_probe,
-        .remove = nicvf_remove,
+	.name = DRV_NAME,
+	.id_table = nicvf_id_table,
+	.probe = nicvf_probe,
+	.remove = nicvf_remove,
 };
 
 static int __init nicvf_init_module(void)
 {
-        pr_info("%s, ver %s\n", DRV_NAME, DRV_VERSION);
+	pr_info("%s, ver %s\n", DRV_NAME, DRV_VERSION);
 
-        return pci_register_driver(&nicvf_driver);
+	return pci_register_driver(&nicvf_driver);
 }
 
 static void __exit nicvf_cleanup_module(void)
 {
-        pci_unregister_driver(&nicvf_driver);
+	pci_unregister_driver(&nicvf_driver);
 }
 
 module_init(nicvf_init_module);
