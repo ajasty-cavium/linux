@@ -122,9 +122,7 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
 	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
-/*
- * VF -> PF mailbox communication
- */
+/* VF -> PF mailbox communication */
 static bool pf_ready_to_rcv_msg = false;
 static bool vf_pf_msg_delivered = false;
 
@@ -465,8 +463,8 @@ static int nicvf_poll(struct napi_struct *napi, int budget)
 }
 #endif
 
-/*
- * Qset error interrupt handler
+/* Qset error interrupt handler
+ *
  * As of now only CQ errors are handled
  */
 void nicvf_handle_qs_err(unsigned long data)
