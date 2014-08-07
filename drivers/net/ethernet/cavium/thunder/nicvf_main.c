@@ -694,10 +694,7 @@ static int nicvf_register_misc_interrupt(struct nicvf *nic)
 	return 0;
 }
 
-static void nicvf_update_tx_stats(struct nicvf *nic, struct sk_buff *skb)
-{
-	return;
-}
+static void nicvf_update_tx_stats(struct nicvf *nic, struct sk_buff *skb) { }
 
 #ifdef VNIC_SW_TSO_SUPPORT
 static int nicvf_sw_tso(struct sk_buff *skb, struct net_device *netdev)
