@@ -122,12 +122,12 @@
 #define	NICVF_MISC_INTR_ID		18
 #define	NICVF_QS_ERR_INTR_ID		19
 
-#define for_each_cq_irq(irq) for (irq = NICVF_CQ_INTR_ID; \
-					irq < NICVF_SQ_INTR_ID; irq++)
-#define for_each_sq_irq(irq) for (irq = NICVF_SQ_INTR_ID; \
-					irq < NICVF_RBDR_INTR_ID; irq++)
-#define for_each_rbdr_irq(irq) for (irq = NICVF_RBDR_INTR_ID; \
-					irq < NICVF_MISC_INTR_ID; irq++)
+#define	for_each_cq_irq(irq)	\
+	for (irq = NICVF_CQ_INTR_ID; irq < NICVF_SQ_INTR_ID; irq++)
+#define	for_each_sq_irq(irq)	\
+	for (irq = NICVF_SQ_INTR_ID; irq < NICVF_RBDR_INTR_ID; irq++)
+#define	for_each_rbdr_irq(irq)	\
+	for (irq = NICVF_RBDR_INTR_ID; irq < NICVF_MISC_INTR_ID; irq++)
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
