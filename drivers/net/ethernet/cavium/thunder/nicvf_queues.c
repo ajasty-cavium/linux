@@ -874,7 +874,7 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 	rb_lens = cq_desc + (3 * sizeof(uint64_t)); /* Use offsetof */
 	rb_ptrs = cq_desc + (6 * sizeof(uint64_t));
 	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
-		__FUNCTION__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
+		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = *rb_lens;

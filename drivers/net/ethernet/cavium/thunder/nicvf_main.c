@@ -311,7 +311,7 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 		return;
 
 	nic_dbg(&nic->pdev->dev, "%s Qset #%d SQ #%d SQ ptr #%d Subdesc count %d\n",
-				__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx,
+				__func__, cqe_tx->sq_qs, cqe_tx->sq_idx,
 					cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
@@ -396,7 +396,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 	cqe_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx) >> 9;
 	cqe_head &= 0xFFFF;
 
-	nic_dbg(&nic->pdev->dev, "%s cqe_count %d cqe_head %d\n", __FUNCTION__, cqe_count, cqe_head);
+	nic_dbg(&nic->pdev->dev, "%s cqe_count %d cqe_head %d\n", __func__, cqe_count, cqe_head);
 	while (processed_cqe < cqe_count) {
 		/* Get the CQ descriptor */
 		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base +
@@ -429,7 +429,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 		cqe_head &= (cq->desc_mem.q_len - 1);
 	}
 	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n",
-			__FUNCTION__, processed_cqe, work_done, budget);
+			__func__, processed_cqe, work_done, budget);
 
 	/* Ring doorbell to inform H/W to reuse processed CQEs */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,
@@ -516,7 +516,7 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 	struct queue_set *qs = nic->qs;
 
 	intr = nicvf_qset_reg_read(nic, NIC_VF_INT);
-	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n", __FUNCTION__, intr);
+	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n", __func__, intr);
 
 	cq_intr = (intr & NICVF_INTR_CQ_MASK) >> NICVF_INTR_CQ_SHIFT;
 	qs_err_intr = intr & NICVF_INTR_QS_ERR_MASK;
