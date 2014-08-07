@@ -1045,8 +1045,8 @@ int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 		mask = NICVF_INTR_QS_ERR_MASK;
 	break;
 	default:
-		netdev_err(nic->netdev, "Failed to check interrupt enable: \
-						unknown interrupt type\n");
+		netdev_err(nic->netdev,
+			   "Failed to check interrupt enable: unknown interrupt type\n");
 	break;
 	}
 
