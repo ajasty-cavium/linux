@@ -460,24 +460,20 @@ static void nicvf_free_resources(struct nicvf *nic)
 		return;
 
 	/* Free receive buffer descriptor ring */
-	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
+	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		nicvf_free_rbdr(nic, &qs->rbdr[qidx], qidx);
-	}
 
 	/* Free receive queue */
-	for (qidx = 0; qidx < qs->rq_cnt; qidx++) {
+	for (qidx = 0; qidx < qs->rq_cnt; qidx++)
 		nicvf_free_rcv_queue(&qs->rq[qidx]);
-	}
 
 	/* Free completion queue */
-	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
 		nicvf_free_cmp_queue(nic, &qs->cq[qidx]);
-	}
 
 	/* Free send queue */
-	for (qidx = 0; qidx < qs->sq_cnt; qidx++) {
+	for (qidx = 0; qidx < qs->sq_cnt; qidx++)
 		nicvf_free_snd_queue(nic, &qs->sq[qidx]);
-	}
 }
 
 static int nicvf_init_resources(struct nicvf *nic)

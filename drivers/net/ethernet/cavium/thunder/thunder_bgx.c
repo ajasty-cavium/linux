@@ -154,15 +154,13 @@ static void bgx_init_hw(struct bgx *bgx)
 	/* Enable all LMACs */
 	/* Enable LMAC, Pkt Rx enable, Pkt Tx enable */
 	enable = (1 << 15) | (1 << 14) | (1 << 13);
-	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
+	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++)
 		bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, enable);
-	}
 
 	/* Add broadcast MAC into all LMAC's DMAC filters */
-	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
-		bgx_add_dmac_addr(dmac_bcast, lmac +
-					(bgx->bgx_id * MAX_LMAC_PER_BGX));
-	}
+	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++)
+		bgx_add_dmac_addr(dmac_bcast,
+				  lmac + bgx->bgx_id * MAX_LMAC_PER_BGX);
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)

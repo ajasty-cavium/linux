@@ -105,13 +105,15 @@ static int nicvf_set_settings(struct net_device *netdev,
 
 	/* 10G full duplex setting supported only */
 	if (cmd->autoneg == AUTONEG_ENABLE)
-		return -EOPNOTSUPP; else {
-			if ((ethtool_cmd_speed(cmd) == SPEED_10000)
-					&& (cmd->duplex == DUPLEX_FULL))
-				return 0;
-		}
+		return -EOPNOTSUPP;
 
-	return -EOPNOTSUPP;
+	if (ethtool_cmd_speed(cmd) != SPEED_10000)
+		return -EOPNOTSUPP;
+
+	if (cmd->duplex != DUPLEX_FULL)
+		return -EOPNOTSUPP;
+
+	return 0;
 }
 
 static void nicvf_get_drvinfo(struct net_device *netdev,

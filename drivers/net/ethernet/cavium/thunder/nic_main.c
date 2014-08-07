@@ -295,9 +295,8 @@ static int nic_enable_msix(struct nicpf *nic)
 
 	nic->num_vec = NIC_PF_MSIX_VECTORS;
 
-	for (i = 0; i < nic->num_vec; i++) {
+	for (i = 0; i < nic->num_vec; i++)
 		nic->msix_entries[i].entry = i;
-	}
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret < 0) {
@@ -501,14 +500,12 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic_init_hw(nic);
 
 	/* Configure SRIOV */
-	if (!nic_sriov_init(pdev, nic)) {
+	if (!nic_sriov_init(pdev, nic))
 		goto err_unmap_resources;
-	}
 
 	/* Register interrupts */
-	if (nic_register_interrupts(nic)) {
+	if (nic_register_interrupts(nic))
 		goto err_unmap_resources;
-	}
 
 	goto exit;
 
@@ -535,9 +532,8 @@ static void nic_remove(struct pci_dev *pdev)
 
 	nic_unregister_interrupts(nic);
 
-	if (nic_is_sriov_enabled(nic)) {
+	if (nic_is_sriov_enabled(nic))
 		pci_disable_sriov(pdev);
-	}
 
 	pci_set_drvdata(pdev, NULL);
 
