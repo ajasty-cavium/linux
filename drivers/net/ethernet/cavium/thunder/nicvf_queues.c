@@ -275,7 +275,7 @@ static void nicvf_free_snd_queue(struct nicvf *nic, struct snd_queue *sq)
 static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 							int qidx, bool enable)
 {
-	struct  nic_mbx *mbx;
+	struct nic_mbx mbx = {};
 	struct rcv_queue *rq;
 
 	rq = &qs->rq[qidx];
@@ -294,26 +294,23 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
 
 	/* Send a mailbox msg to PF to config RQ */
-	mbx = nicvf_get_mbx();
-	mbx->msg = NIC_PF_VF_MSG_RQ_CFG;
-	mbx->data.rq.qs_num = qs->vnic_id;
-	mbx->data.rq.rq_num = qidx;
-	mbx->data.rq.cfg = (rq->cq_qs << 19) | (rq->cq_idx << 16) |
+	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
+	mbx.data.rq.qs_num = qs->vnic_id;
+	mbx.data.rq.rq_num = qidx;
+	mbx.data.rq.cfg = (rq->cq_qs << 19) | (rq->cq_idx << 16) |
 			(rq->cont_rbdr_qs << 9) | (rq->cont_qs_rbdr_idx << 8) |
 			(rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
-	nicvf_send_msg_to_pf(nic, mbx);
+	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* RQ drop config
 	 * Enable CQ drop to reserve sufficient CQEs for all tx packets
 	 */
-	mbx->msg = NIC_PF_VF_MSG_RQ_DROP_CFG;
-	mbx->data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
-	nicvf_send_msg_to_pf(nic, mbx);
+	mbx.msg = NIC_PF_VF_MSG_RQ_DROP_CFG;
+	mbx.data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
+	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* Enable Receive queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, (1ULL << 1));
-
-	kfree(mbx);
 }
 
 void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
@@ -353,8 +350,8 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 							int qidx, bool enable)
 {
+	struct nic_mbx mbx = {};
 	struct snd_queue *sq;
-	struct nic_mbx *mbx;
 
 	sq = &qs->sq[qidx];
 	if (!enable) {
@@ -370,12 +367,11 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	sq->cq_idx = qidx;
 
 	/* Send a mailbox msg to PF to config SQ */
-	mbx = nicvf_get_mbx();
-	mbx->msg = NIC_PF_VF_MSG_SQ_CFG;
-	mbx->data.sq.qs_num = qs->vnic_id;
-	mbx->data.sq.sq_num = qidx;
-	mbx->data.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
-	nicvf_send_msg_to_pf(nic, mbx);
+	mbx.msg = NIC_PF_VF_MSG_SQ_CFG;
+	mbx.data.sq.qs_num = qs->vnic_id;
+	mbx.data.sq.sq_num = qidx;
+	mbx.data.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
+	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* Enable send queue  & set queue size */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx,
@@ -391,7 +387,6 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Set SQ's head entry */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_HEAD, qidx, 0);
-	kfree(mbx);
 }
 
 static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
@@ -432,22 +427,20 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 
 void nicvf_qset_config(struct nicvf *nic, bool enable)
 {
-	struct  nic_mbx *mbx;
+	struct  nic_mbx mbx = {};
 	struct queue_set *qs = nic->qs;
 
 	/* Send a mailbox msg to PF to config Qset */
-	mbx = nicvf_get_mbx();
-	mbx->msg = NIC_PF_VF_MSG_QS_CFG;
-	mbx->data.qs.num = qs->vnic_id;
+	mbx.msg = NIC_PF_VF_MSG_QS_CFG;
+	mbx.data.qs.num = qs->vnic_id;
 
 	if (enable) {
-		mbx->data.qs.cfg = 0x80000000 | qs->vnic_id;
-		nicvf_send_msg_to_pf(nic, mbx);
+		mbx.data.qs.cfg = 0x80000000 | qs->vnic_id;
+		nicvf_send_msg_to_pf(nic, &mbx);
 	} else {  /* disable Qset */
-		mbx->data.qs.cfg = 0;
-		nicvf_send_msg_to_pf(nic, mbx);
+		mbx.data.qs.cfg = 0;
+		nicvf_send_msg_to_pf(nic, &mbx);
 	}
-	kfree(mbx);
 }
 
 static void nicvf_free_resources(struct nicvf *nic)
