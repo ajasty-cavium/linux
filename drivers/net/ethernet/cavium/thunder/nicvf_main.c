@@ -943,18 +943,18 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 }
 
 static const struct net_device_ops nicvf_netdev_ops = {
-	.ndo_open               = nicvf_open,
-	.ndo_stop               = nicvf_stop,
-	.ndo_start_xmit         = nicvf_xmit,
-	.ndo_change_mtu         = nicvf_change_mtu,
-	.ndo_set_mac_address    = nicvf_set_mac_address,
+	.ndo_open		= nicvf_open,
+	.ndo_stop		= nicvf_stop,
+	.ndo_start_xmit		= nicvf_xmit,
+	.ndo_change_mtu		= nicvf_change_mtu,
+	.ndo_set_mac_address	= nicvf_set_mac_address,
 #if 0
-	.ndo_get_stats64        = nicvf_get_stats,
-	.ndo_validate_addr      = eth_validate_addr,
-	.ndo_set_rx_mode        = nicvf_set_rx_mode,
-	.ndo_vlan_rx_add_vid    = nicvf_vlan_rx_add_vid,
-	.ndo_vlan_rx_kill_vid   = nicvf_vlan_rx_kill_vid,
-	.ndo_tx_timeout         = nicvf_tx_timeout,
+	.ndo_get_stats64	= nicvf_get_stats,
+	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_set_rx_mode	= nicvf_set_rx_mode,
+	.ndo_vlan_rx_add_vid	= nicvf_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid	= nicvf_vlan_rx_kill_vid,
+	.ndo_tx_timeout		= nicvf_tx_timeout,
 #endif
 };
 
