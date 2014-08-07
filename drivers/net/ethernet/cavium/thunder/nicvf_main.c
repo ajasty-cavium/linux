@@ -44,10 +44,10 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nicvf_id_table);
 
-static int nicvf_enable_msix (struct nicvf *nic);
+static int nicvf_enable_msix(struct nicvf *nic);
 static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev);
 
-static void nicvf_dump_packet (struct sk_buff *skb)
+static void nicvf_dump_packet(struct sk_buff *skb)
 {
 #ifdef NICVF_DUMP_PACKET
 	int i;
@@ -60,7 +60,7 @@ static void nicvf_dump_packet (struct sk_buff *skb)
 #endif
 }
 
-static void nicvf_update_stats (struct nicvf *nic, struct sk_buff *skb)
+static void nicvf_update_stats(struct nicvf *nic, struct sk_buff *skb)
 {
 	if (skb->len <= 64)
 		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_64);
@@ -79,41 +79,46 @@ static void nicvf_update_stats (struct nicvf *nic, struct sk_buff *skb)
 }
 
 /* Register read/write APIs */
-void nicvf_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
+void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
+
 	writeq_relaxed(val, (void *)addr);
 }
 
-uint64_t nicvf_reg_read (struct nicvf *nic, uint64_t offset)
+uint64_t nicvf_reg_read(struct nicvf *nic, uint64_t offset)
 {
 	uint64_t addr = nic->reg_base + offset;
+
 	return readq_relaxed((void *)addr);
 }
 
-void nicvf_qset_reg_write (struct nicvf *nic, uint64_t offset, uint64_t val)
+void nicvf_qset_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
 
 	writeq_relaxed(val, (void *)(addr));
 }
 
-uint64_t nicvf_qset_reg_read (struct nicvf *nic, uint64_t offset)
+uint64_t nicvf_qset_reg_read(struct nicvf *nic, uint64_t offset)
 {
 	uint64_t addr = nic->reg_base + offset;
+
 	return readq_relaxed((void *)(addr));
 }
 
-void nicvf_queue_reg_write (struct nicvf *nic, uint64_t offset,
+void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
 				uint64_t qidx, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
+
 	writeq_relaxed(val, (void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
-uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx)
+uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
 {
 	uint64_t addr = nic->reg_base + offset;
+
 	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
@@ -123,22 +128,22 @@ uint64_t nicvf_queue_reg_read (struct nicvf *nic, uint64_t offset, uint64_t qidx
 static bool pf_ready_to_rcv_msg = false;
 static bool vf_pf_msg_delivered = false;
 
-struct nic_mbx *nicvf_get_mbx (void)
+struct nic_mbx *nicvf_get_mbx(void)
 {
 	return (struct nic_mbx *)kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
 }
 
-static void nicvf_enable_mbx_intr (struct nicvf *nic)
+static void nicvf_enable_mbx_intr(struct nicvf *nic)
 {
-	nicvf_enable_intr (nic, NICVF_INTR_MBOX, 0);
+	nicvf_enable_intr(nic, NICVF_INTR_MBOX, 0);
 }
 
-static void nicvf_disable_mbx_intr (struct nicvf *nic)
+static void nicvf_disable_mbx_intr(struct nicvf *nic)
 {
-	nicvf_disable_intr (nic, NICVF_INTR_MBOX, 0);
+	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
 }
 
-void nicvf_send_msg_to_pf (struct nicvf *nic, struct nic_mbx *mbx)
+void nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
 	int i, timeout = 5000, sleep = 10;
 	uint64_t *msg;
@@ -171,7 +176,7 @@ void nicvf_send_msg_to_pf (struct nicvf *nic, struct nic_mbx *mbx)
 /* Checks if VF is able to comminicate with PF
 * and also gets the VNIC number this VF is associated to.
 */
-static int nicvf_check_pf_ready (struct nicvf *nic)
+static int nicvf_check_pf_ready(struct nicvf *nic)
 {
 	int timeout = 5000, sleep = 20;
 	uint64_t mbx_addr = NIC_VF_PF_MAILBOX_0_7;
@@ -198,7 +203,7 @@ static int nicvf_check_pf_ready (struct nicvf *nic)
 	return 1;
 }
 
-static void  nicvf_handle_mbx_intr (struct nicvf *nic)
+static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 {
 	int i;
 	struct nic_mbx *mbx;
@@ -208,7 +213,7 @@ static void  nicvf_handle_mbx_intr (struct nicvf *nic)
 	mbx_addr = NIC_VF_PF_MAILBOX_0_7;
 
 	mbx_data = kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
-	mbx = (struct nic_mbx *) mbx_data;
+	mbx = (struct nic_mbx *)mbx_data;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nicvf_reg_read(nic, mbx_addr + (i * NIC_PF_VF_MAILBOX_SIZE));
@@ -228,11 +233,11 @@ static void  nicvf_handle_mbx_intr (struct nicvf *nic)
 								mbx->msg);
 		break;
 	}
-	nicvf_clear_intr (nic, NICVF_INTR_MBOX, 0);
+	nicvf_clear_intr(nic, NICVF_INTR_MBOX, 0);
 	kfree(mbx);
 }
 
-static void nicvf_hw_set_mac_addr (struct nicvf *nic, struct net_device *netdev)
+static void nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 {
 	int i;
 	struct  nic_mbx *mbx;
@@ -270,7 +275,7 @@ static int nicvf_init_resources(struct nicvf *nic)
 	return 0;
 }
 
-void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb)
+void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb)
 {
 	int i;
 
@@ -279,6 +284,7 @@ void nicvf_free_skb (struct nicvf *nic, struct sk_buff *skb)
 
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
 		const struct skb_frag_struct *frag;
+
 		frag = &skb_shinfo(skb)->frags[i];
 		pci_unmap_single(nic->pdev, (dma_addr_t)skb_frag_address(frag),
 						skb_frag_size(frag), PCI_DMA_TODEVICE);
@@ -288,7 +294,7 @@ free_skb:
 	dev_kfree_skb_any(skb);
 }
 
-static void nicvf_snd_pkt_handler (struct net_device *netdev,
+static void nicvf_snd_pkt_handler(struct net_device *netdev,
 				  void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb = NULL;
@@ -316,7 +322,7 @@ static void nicvf_snd_pkt_handler (struct net_device *netdev,
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 }
 
-static void nicvf_rcv_pkt_handler (struct net_device *netdev,
+static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 			struct napi_struct *napi, void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb;
@@ -358,8 +364,8 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 	skb_checksum_none_assert(skb);
 #endif
 
-#ifdef  NICVF_NAPI_ENABLE
-#ifdef  VNIC_SW_LRO_SUPPORT
+#ifdef	NICVF_NAPI_ENABLE
+#ifdef	VNIC_SW_LRO_SUPPORT
 	if (napi && (netdev->features & NETIF_F_GRO))
 		napi_gro_receive(napi, skb);
 	else
@@ -370,7 +376,7 @@ static void nicvf_rcv_pkt_handler (struct net_device *netdev,
 #endif
 }
 
-static int nicvf_cq_intr_handler (struct net_device *netdev, uint8_t cq_idx,
+static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 					struct napi_struct *napi, int budget)
 {
 	int processed_cqe = 0, work_done = 0;
@@ -434,8 +440,8 @@ done:
 	return work_done;
 }
 
-#ifdef  NICVF_NAPI_ENABLE
-static int nicvf_poll (struct napi_struct *napi, int budget)
+#ifdef	NICVF_NAPI_ENABLE
+static int nicvf_poll(struct napi_struct *napi, int budget)
 {
 	int  work_done = 0;
 	struct net_device *netdev = napi->dev;
@@ -443,7 +449,7 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
 	struct nicvf_cq_poll *cq = container_of(napi, struct nicvf_cq_poll, napi);
 	struct netdev_queue *txq;
 
-	work_done = nicvf_cq_intr_handler (netdev, cq->cq_idx, napi, budget);
+	work_done = nicvf_cq_intr_handler(netdev, cq->cq_idx, napi, budget);
 
 	txq = netdev_get_tx_queue(netdev, cq->cq_idx);
 	if (netif_tx_queue_stopped(txq))
@@ -453,7 +459,7 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
 		/* Slow packet rate, exit polling */
 		napi_complete(napi);
 		/* Re-enable interrupts */
-		nicvf_enable_intr (nic, NICVF_INTR_CQ, cq->cq_idx);
+		nicvf_enable_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
 	}
 	return work_done;
 }
@@ -463,7 +469,7 @@ static int nicvf_poll (struct napi_struct *napi, int budget)
  * Qset error interrupt handler
  * As of now only CQ errors are handled
  */
-void nicvf_handle_qs_err (unsigned long data)
+void nicvf_handle_qs_err(unsigned long data)
 {
 	struct nicvf *nic = (struct nicvf *)data;
 	struct queue_set *qs = nic->qs;
@@ -479,49 +485,49 @@ void nicvf_handle_qs_err (unsigned long data)
 		if (!(status & CQ_ERR_MASK))
 			continue;
 		/* Process already queued CQEs and reconfig CQ */
-		nicvf_disable_intr (nic, NICVF_INTR_CQ, qidx);
+		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
 		nicvf_sq_disable(nic, qidx);
-		nicvf_cq_intr_handler (nic->netdev, qidx, NULL, 0);
+		nicvf_cq_intr_handler(nic->netdev, qidx, NULL, 0);
 		nicvf_cmp_queue_config(nic, qs, qidx, true);
 		nicvf_sq_free_used_descs(nic->netdev, &qs->sq[qidx], qidx);
 		nicvf_sq_enable(nic, &qs->sq[qidx], qidx);
 
-		nicvf_enable_intr (nic, NICVF_INTR_CQ, qidx);
+		nicvf_enable_intr(nic, NICVF_INTR_CQ, qidx);
 	}
 
 	netif_tx_start_all_queues(nic->netdev);
 	/* Re-enable Qset error interrupt */
-	nicvf_enable_intr (nic, NICVF_INTR_QS_ERR, 0);
+	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
 }
 
-static irqreturn_t nicvf_misc_intr_handler (int irq, void *nicvf_irq)
+static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 {
-	struct nicvf *nic = (struct nicvf *) nicvf_irq;
+	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 
-	nicvf_handle_mbx_intr (nic);
+	nicvf_handle_mbx_intr(nic);
 
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
+static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 {
 	uint64_t qidx, intr;
 	uint64_t cq_intr, rbdr_intr, qs_err_intr;
-	struct nicvf *nic = (struct nicvf *) nicvf_irq;
+	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 	struct queue_set *qs = nic->qs;
 
 	intr = nicvf_qset_reg_read(nic, NIC_VF_INT);
-	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n",__FUNCTION__, intr);
+	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n", __FUNCTION__, intr);
 
 	cq_intr = (intr & NICVF_INTR_CQ_MASK) >> NICVF_INTR_CQ_SHIFT;
 	qs_err_intr = intr & NICVF_INTR_QS_ERR_MASK;
 	if (qs_err_intr) {
 		/* Disable Qset err interrupt and schedule softirq */
-		nicvf_disable_intr (nic, NICVF_INTR_QS_ERR, 0);
+		nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
 		tasklet_hi_schedule(&nic->qs_err_task);
 	}
 
-#ifdef  NICVF_NAPI_ENABLE
+#ifdef	NICVF_NAPI_ENABLE
 	{
 		struct nicvf_cq_poll *cq_poll = NULL;
 		/* Disable interrupts and start polling */
@@ -530,7 +536,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 				continue;
 			if (!nicvf_is_intr_enabled(nic, NICVF_INTR_CQ, qidx))
 				continue;
-			nicvf_disable_intr (nic, NICVF_INTR_CQ, qidx);
+			nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
 			cq_poll = nic->napi[qidx];
 			/* Schedule NAPI */
 			napi_schedule(&cq_poll->napi);
@@ -539,7 +545,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 #else
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		if (cq_intr & (1 << qidx))
-			nicvf_cq_intr_handler (nic->netdev, qidx, NULL, 0);
+			nicvf_cq_intr_handler(nic->netdev, qidx, NULL, 0);
 	}
 #endif
 	/* Handle RBDR interrupts */
@@ -547,7 +553,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 	if (rbdr_intr) {
 		/* Disable RBDR interrupt and schedule softirq */
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-			nicvf_disable_intr (nic, NICVF_INTR_RBDR, qidx);
+			nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
 
 		tasklet_hi_schedule(&nic->rbdr_task);
 	}
@@ -557,7 +563,7 @@ static irqreturn_t nicvf_intr_handler (int irq, void *nicvf_irq)
 	return IRQ_HANDLED;
 }
 
-static int nicvf_enable_msix (struct nicvf *nic)
+static int nicvf_enable_msix(struct nicvf *nic)
 {
 	int i, ret, vec;
 	struct queue_set *qs = nic->qs;
@@ -593,7 +599,7 @@ static int nicvf_enable_msix (struct nicvf *nic)
 	return 1;
 }
 
-static void nicvf_disable_msix (struct nicvf *nic)
+static void nicvf_disable_msix(struct nicvf *nic)
 {
 	if (nic->msix_enabled) {
 		pci_disable_msix(nic->pdev);
@@ -602,7 +608,7 @@ static void nicvf_disable_msix (struct nicvf *nic)
 	}
 }
 
-static int nicvf_register_interrupts (struct nicvf *nic)
+static int nicvf_register_interrupts(struct nicvf *nic)
 {
 	int irq, free, ret = 0;
 
@@ -620,7 +626,7 @@ static int nicvf_register_interrupts (struct nicvf *nic)
 
 	/* Register all interrupts except mailbox */
 	for (irq = 0; irq < NICVF_MISC_INTR_ID; irq++) {
-		if ((ret = request_irq (nic->msix_entries[irq].vector,
+		if ((ret = request_irq(nic->msix_entries[irq].vector,
 				nicvf_intr_handler, 0 , nic->irq_name[irq], nic)))
 			break;
 		nic->irq_allocated[irq] = 1;
@@ -629,7 +635,7 @@ static int nicvf_register_interrupts (struct nicvf *nic)
 	sprintf(nic->irq_name[NICVF_QS_ERR_INTR_ID],
 				"%s%d Qset error", "VNICVF", nic->vnic_id);
 	if (!ret) {
-		if (!(ret = request_irq (nic->msix_entries[NICVF_QS_ERR_INTR_ID].vector,
+		if (!(ret = request_irq(nic->msix_entries[NICVF_QS_ERR_INTR_ID].vector,
 				nicvf_intr_handler, 0 , nic->irq_name[NICVF_QS_ERR_INTR_ID], nic)))
 			nic->irq_allocated[NICVF_QS_ERR_INTR_ID] = 1;
 	}
@@ -637,21 +643,21 @@ static int nicvf_register_interrupts (struct nicvf *nic)
 	if (ret) {
 		netdev_err(nic->netdev, "Request irq failed\n");
 		for (free = 0; free < irq; free++)
-			free_irq (nic->msix_entries[free].vector, nic);
+			free_irq(nic->msix_entries[free].vector, nic);
 		return 1;
 	}
 
 	return 0;
 }
 
-static void nicvf_unregister_interrupts (struct nicvf *nic)
+static void nicvf_unregister_interrupts(struct nicvf *nic)
 {
 	int irq;
 
 	/* Free registered interrupts */
 	for (irq = 0; irq < nic->num_vec; irq++) {
 		if (nic->irq_allocated[irq])
-			free_irq (nic->msix_entries[irq].vector, nic);
+			free_irq(nic->msix_entries[irq].vector, nic);
 		nic->irq_allocated[irq] = 0;
 	}
 
@@ -659,7 +665,7 @@ static void nicvf_unregister_interrupts (struct nicvf *nic)
 	nicvf_disable_msix(nic);
 }
 
-static int nicvf_register_misc_interrupt (struct nicvf *nic)
+static int nicvf_register_misc_interrupt(struct nicvf *nic)
 {
 	int  ret = 0;
 	int irq = NICVF_MISC_INTR_ID;
@@ -673,7 +679,7 @@ static int nicvf_register_misc_interrupt (struct nicvf *nic)
 	ret = request_irq(nic->msix_entries[irq].vector, nicvf_misc_intr_handler,
 						0, nic->irq_name[irq], nic);
 
-	if(ret)
+	if (ret)
 		return 1;
 	nic->irq_allocated[irq] = 1;
 
@@ -696,7 +702,7 @@ static void nicvf_update_tx_stats(struct nicvf *nic, struct sk_buff *skb)
 }
 
 #ifdef VNIC_SW_TSO_SUPPORT
-static int nicvf_sw_tso (struct sk_buff *skb, struct net_device *netdev)
+static int nicvf_sw_tso(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct sk_buff *segs, *nskb;
 
@@ -738,7 +744,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 #ifdef VNIC_SW_TSO_SUPPORT
 	if (netdev->features & NETIF_F_TSO)
-		ret = nicvf_sw_tso (skb, netdev);
+		ret = nicvf_sw_tso(skb, netdev);
 #endif
 	if (ret == NETDEV_TX_OK)
 		return NETDEV_TX_OK;
@@ -791,16 +797,16 @@ static int nicvf_stop(struct net_device *netdev)
 
 	/* Disable interrupts */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
-		nicvf_disable_intr (nic, NICVF_INTR_CQ, qidx);
+		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-		nicvf_disable_intr (nic, NICVF_INTR_RBDR, qidx);
-	nicvf_disable_intr (nic, NICVF_INTR_QS_ERR, 0);
+		nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
+	nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
 
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
 
 	nicvf_unregister_interrupts(nic);
-#ifdef NICVF_NAPI_ENABLE
+#ifdef	NICVF_NAPI_ENABLE
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
 		napi_synchronize(&nic->napi[qidx]->napi);
 		napi_disable(&nic->napi[qidx]->napi);
@@ -854,7 +860,7 @@ static int nicvf_open(struct net_device *netdev)
 		return -EIO;
 	}
 
-#ifdef NICVF_NAPI_ENABLE
+#ifdef	NICVF_NAPI_ENABLE
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		cq_poll = NULL;
 		cq_poll = kzalloc(sizeof(struct nicvf_cq_poll), GFP_KERNEL);
@@ -867,7 +873,7 @@ static int nicvf_open(struct net_device *netdev)
 	}
 	goto no_err;
 napi_del:
-	while(qidx) {
+	while (qidx) {
 		qidx--;
 		cq_poll = nic->napi[qidx];
 		napi_disable(&cq_poll->napi);
@@ -886,20 +892,20 @@ no_err:
 	nicvf_hw_set_mac_addr(nic, netdev);
 
 	/* Init tasklet for handling Qset err interrupt */
-	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err, (unsigned long) nic);
+	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err, (unsigned long)nic);
 
 	/* Enable Qset err interrupt */
-	nicvf_enable_intr (nic, NICVF_INTR_QS_ERR, 0);
+	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
 
 	/* Enable completion queue interrupt */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
-		nicvf_enable_intr (nic, NICVF_INTR_CQ, qidx);
+		nicvf_enable_intr(nic, NICVF_INTR_CQ, qidx);
 
 	/* Init RBDR tasklet and enable RBDR threshold interrupt */
-	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr, (unsigned long) nic);
+	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr, (unsigned long)nic);
 
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-		nicvf_enable_intr (nic, NICVF_INTR_RBDR, qidx);
+		nicvf_enable_intr(nic, NICVF_INTR_RBDR, qidx);
 
 	if (nicvf_is_link_active(nic)) {
 		netif_carrier_on(netdev);
@@ -931,7 +937,7 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
 	if (netif_running(netdev))
-		nicvf_hw_set_mac_addr (nic, netdev);
+		nicvf_hw_set_mac_addr(nic, netdev);
 
 	return 0;
 }
@@ -998,7 +1004,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP VF's configuration registers */
-	nic->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	nic->reg_base = (uint64_t)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!nic->reg_base) {
 		dev_err(dev, "Cannot map config register space, aborting\n");
 		err = -ENOMEM;

@@ -25,14 +25,14 @@
 
 struct lmac {
 	int dmac;
-}lmac;
+} lmac;
 
 struct bgx {
 	uint8_t	bgx_id;
 	struct lmac lmac[MAX_LMAC_PER_BGX];
 	uint64_t reg_base;
 	struct pci_dev *pdev;
-}bgx;
+} bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_PER_CN88XX];
 
@@ -50,16 +50,18 @@ MODULE_DEVICE_TABLE(pci, bgx_id_table);
 
 /* Register read/write APIs */
 #if 0
-static uint64_t bgx_reg_read (struct bgx *bgx, uint8_t lmac, uint64_t offset)
+static uint64_t bgx_reg_read(struct bgx *bgx, uint8_t lmac, uint64_t offset)
 {
 	uint64_t addr = bgx->reg_base + (lmac << 20) + offset;
+
 	return readq_relaxed((void *)addr);
 }
 #endif
-static void bgx_reg_write (struct bgx *bgx, uint8_t lmac,
+static void bgx_reg_write(struct bgx *bgx, uint8_t lmac,
 			uint64_t offset, uint64_t val)
 {
 	uint64_t addr = bgx->reg_base + (lmac << 20) + offset;
+
 	writeq_relaxed(val, (void *)addr);
 }
 
@@ -106,7 +108,7 @@ void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 	bgx->lmac[lmac].dmac++;
 }
 
-void bgx_lmac_enable (uint64_t lmac)
+void bgx_lmac_enable(uint64_t lmac)
 {
 	int bgx_index;
 	struct bgx *bgx;
@@ -126,7 +128,7 @@ void bgx_lmac_enable (uint64_t lmac)
 	//			(bgx->bgx_id * MAX_LMAC_PER_BGX));
 }
 
-void bgx_lmac_disable (uint64_t lmac)
+void bgx_lmac_disable(uint64_t lmac)
 {
 	int bgx_index;
 	struct bgx *bgx;
@@ -143,7 +145,7 @@ void bgx_lmac_disable (uint64_t lmac)
 	//bgx_flush_dmac_addrs(bgx, lmac);
 }
 
-static void bgx_init_hw (struct bgx *bgx)
+static void bgx_init_hw(struct bgx *bgx)
 {
 	int lmac;
 	uint64_t enable = 0;
@@ -169,7 +171,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct bgx *bgx;
 	int    err;
 
-	bgx = kzalloc (sizeof (struct bgx), GFP_KERNEL);
+	bgx = kzalloc(sizeof(struct bgx), GFP_KERNEL);
 	bgx->pdev = pdev;
 
 	pci_set_drvdata(pdev, bgx);
