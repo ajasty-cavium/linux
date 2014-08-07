@@ -528,7 +528,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	int qidx;
 
 	if (enable) {
-		if (!(qs = kzalloc(sizeof(struct queue_set), GFP_ATOMIC)))
+		if (!(qs = kzalloc(sizeof(*qs), GFP_ATOMIC)))
 			return -ENOMEM;
 
 		qs->vnic_id = nic->vnic_id;

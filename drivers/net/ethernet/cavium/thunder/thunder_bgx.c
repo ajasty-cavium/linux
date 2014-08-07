@@ -165,7 +165,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct bgx *bgx;
 	int    err;
 
-	bgx = kzalloc(sizeof(struct bgx), GFP_KERNEL);
+	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
 	bgx->pdev = pdev;
 
 	pci_set_drvdata(pdev, bgx);

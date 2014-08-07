@@ -128,7 +128,9 @@ static bool vf_pf_msg_delivered = false;
 
 struct nic_mbx *nicvf_get_mbx(void)
 {
-	return (struct nic_mbx *)kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
+	struct nic_mbx *mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
+
+	return mbx;
 }
 
 static void nicvf_enable_mbx_intr(struct nicvf *nic)
@@ -210,8 +212,8 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 
 	mbx_addr = NIC_VF_PF_MAILBOX_0_7;
 
-	mbx_data = kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
-	mbx = (struct nic_mbx *)mbx_data;
+	mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
+	mbx_data = (uint64_t *)mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nicvf_reg_read(nic, mbx_addr + (i * NIC_PF_VF_MAILBOX_SIZE));
@@ -857,12 +859,12 @@ static int nicvf_open(struct net_device *netdev)
 
 #ifdef	NICVF_NAPI_ENABLE
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
-		cq_poll = NULL;
-		cq_poll = kzalloc(sizeof(struct nicvf_cq_poll), GFP_KERNEL);
+		cq_poll = kzalloc(sizeof(*cq_poll), GFP_KERNEL);
 		if (!cq_poll)
 			goto napi_del;
 		cq_poll->cq_idx = qidx;
-		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll, NAPI_POLL_WEIGHT);
+		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll,
+			       NAPI_POLL_WEIGHT);
 		napi_enable(&cq_poll->napi);
 		nic->napi[qidx] = cq_poll;
 	}

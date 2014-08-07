@@ -138,8 +138,8 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
 	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
 
-	mbx_data = kzalloc(sizeof(struct nic_mbx), GFP_KERNEL);
-	mbx = (struct nic_mbx *)mbx_data;
+	mbx = kzalloc(sizeof(*mbx), GFP_KERNEL);
+	mbx_data = (uint64_t *)mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nic_reg_read(nic, mbx_addr + (i * NIC_PF_VF_MAILBOX_SIZE));
