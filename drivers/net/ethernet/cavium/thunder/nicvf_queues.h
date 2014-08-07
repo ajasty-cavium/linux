@@ -56,8 +56,8 @@
 #define    RCV_BUF_COUNT	(1ULL << (RBDR_SIZE0 + 13))
 #define    RBDR_THRESH		2048
 #define    RCV_BUFFER_LEN	2048 /* In multiples of 128bytes */
-#define    RQ_CQ_DROP           ((CMP_QUEUE_LEN - SND_QUEUE_LEN) / 256) /* To ensure CQEs for all transmitted pkts */
-#define    RQ_RBDR_DROP         ((256) / 256) /* Drop rx pkts if free buffers fall below 256 */
+#define    RQ_CQ_DROP		((CMP_QUEUE_LEN - SND_QUEUE_LEN) / 256) /* To ensure CQEs for all transmitted pkts */
+#define    RQ_RBDR_DROP		((256) / 256) /* Drop rx pkts if free buffers fall below 256 */
 
 /* Descriptor size */
 #define    SND_QUEUE_DESC_SIZE		16   /* 128 bits */

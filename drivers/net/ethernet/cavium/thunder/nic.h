@@ -7,7 +7,7 @@
  */
 
 #ifndef NIC_H
-#define NIC_H
+#define	NIC_H
 
 #include <linux/netdevice.h>
 #include <linux/interrupt.h>
@@ -52,7 +52,7 @@
 #define	NICVF_ETHTOOL_ENABLE
 
 /* NAPI enable or disable, undef this to disable */
-#define		NICVF_NAPI_ENABLE
+#define	NICVF_NAPI_ENABLE
 
 /* Min/Max packet size */
 #define	NICVF_MIN_MTU_SUPPORTED		64
@@ -62,30 +62,30 @@
 #define	NIC_MAX_PKIND			16
 
 /* Rx Channels */
-#define		NIC_MAX_BGX		2
-#define		NIC_CHANS_PER_BGX_INF	128
-#define		NIC_MAX_CHANS		(NIC_MAX_BGX * NIC_CHANS_PER_BGX_INF)
-#define		NIC_MAX_CPI		2048 /* Channel parse index */
-#define		NIC_MAX_RSSI		4096 /* Receive side scaling index */
+#define	NIC_MAX_BGX			2
+#define	NIC_CHANS_PER_BGX_INF		128
+#define	NIC_MAX_CHANS			(NIC_MAX_BGX * NIC_CHANS_PER_BGX_INF)
+#define	NIC_MAX_CPI			2048 /* Channel parse index */
+#define	NIC_MAX_RSSI			4096 /* Receive side scaling index */
 
 /* TNS bi-pass mode: 1-1 mapping between VNIC and LMAC */
-#define		NIC_CPI_PER_BGX		(NIC_MAX_CPI / NIC_MAX_BGX)
-#define		NIC_CPI_PER_LMAC	(NIC_MAX_CPI / NIC_MAX_CHANS)
-#define		NIC_RSSI_PER_BGX	(NIC_MAX_RSSI / NIC_MAX_BGX)
-#define		NIC_RSSI_PER_LMAC	(NIC_MAX_RSSI / NIC_MAX_CHANS)
+#define	NIC_CPI_PER_BGX			(NIC_MAX_CPI / NIC_MAX_BGX)
+#define	NIC_CPI_PER_LMAC		(NIC_MAX_CPI / NIC_MAX_CHANS)
+#define	NIC_RSSI_PER_BGX		(NIC_MAX_RSSI / NIC_MAX_BGX)
+#define	NIC_RSSI_PER_LMAC		(NIC_MAX_RSSI / NIC_MAX_CHANS)
 
 /* Tx scheduling */
-#define		NIC_MAX_TL4		1024
-#define		NIC_MAX_TL4_SHAPERS	256 /* 1 shaper for 4 TL4s */
-#define		NIC_MAX_TL3		256
-#define		NIC_MAX_TL3_SHAPERS	64  /* 1 shaper for 4 TL3s */
-#define		NIC_MAX_TL2		64
-#define		NIC_MAX_TL2_SHAPERS	2  /* 1 shaper for 32 TL2s */
-#define		NIC_MAX_TL1		2
+#define	NIC_MAX_TL4			1024
+#define	NIC_MAX_TL4_SHAPERS		256 /* 1 shaper for 4 TL4s */
+#define	NIC_MAX_TL3			256
+#define	NIC_MAX_TL3_SHAPERS		64  /* 1 shaper for 4 TL3s */
+#define	NIC_MAX_TL2			64
+#define	NIC_MAX_TL2_SHAPERS		2  /* 1 shaper for 32 TL2s */
+#define	NIC_MAX_TL1			2
 
 /* TNS bi-pass mode */
-#define		NIC_TL4_PER_BGX		(NIC_MAX_TL4 / NIC_MAX_BGX)
-#define		NIC_TL4_PER_LMAC	(NIC_MAX_TL4 / NIC_CHANS_PER_BGX_INF)
+#define	NIC_TL4_PER_BGX			(NIC_MAX_TL4 / NIC_MAX_BGX)
+#define	NIC_TL4_PER_LMAC		(NIC_MAX_TL4 / NIC_CHANS_PER_BGX_INF)
 
 /* NIC VF Interrupts */
 #define	NICVF_INTR_CQ			0
@@ -200,31 +200,31 @@ struct nicvf {
 	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
 	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
 #ifdef NICVF_NAPI_ENABLE
-	struct nicvf_cq_poll *napi[8];		/* NAPI */
+	struct nicvf_cq_poll	*napi[8];	/* NAPI */
 #endif
 	/* MSI-X  */
-	bool	           msix_enabled;
-	uint16_t           num_vec;
-	struct msix_entry  msix_entries[NIC_VF_MSIX_VECTORS];
-	char		   irq_name[NIC_VF_MSIX_VECTORS][20];
-	uint8_t		   irq_allocated[NIC_VF_MSIX_VECTORS];
+	bool			msix_enabled;
+	uint16_t		num_vec;
+	struct msix_entry	msix_entries[NIC_VF_MSIX_VECTORS];
+	char			irq_name[NIC_VF_MSIX_VECTORS][20];
+	uint8_t			irq_allocated[NIC_VF_MSIX_VECTORS];
 #ifdef NICVF_ETHTOOL_ENABLE
-	struct eth_stats vstats;
+	struct eth_stats	vstats;
 #endif
 };
 
 struct nicpf {
-	struct net_device  *netdev;
-	struct pci_dev     *pdev;
-	unsigned int       flags;
-	uint16_t           total_vf_cnt;   /* Total num of VF supported */
-	uint16_t           num_vf_en;      /* No of VF enabled */
-	uint64_t           reg_base;       /* Register start address */
-	/* MSI-X  */
-	bool               msix_enabled;
-	uint16_t           num_vec;
-	struct msix_entry  msix_entries[NIC_PF_MSIX_VECTORS];
-	uint8_t		   irq_allocated[NIC_PF_MSIX_VECTORS];
+	struct net_device	*netdev;
+	struct pci_dev		*pdev;
+	unsigned int		flags;
+	uint16_t		total_vf_cnt;   /* Total num of VF supported */
+	uint16_t		num_vf_en;      /* No of VF enabled */
+	uint64_t		reg_base;       /* Register start address */
+	/* MSI-X */
+	bool			msix_enabled;
+	uint16_t		num_vec;
+	struct msix_entry	msix_entries[NIC_PF_MSIX_VECTORS];
+	uint8_t			irq_allocated[NIC_PF_MSIX_VECTORS];
 };
 
 struct nicvf_stats {
@@ -274,14 +274,14 @@ struct nicvf_stats {
 #define	NIC_PF_VF_MAILBOX_SIZE		8
 
 /* Mailbox message types */
-#define		NIC_PF_VF_MSG_CLEAR        0x00
-#define		NIC_PF_VF_MSG_READY        0x01 /* Check if PF is ready to rcv messages */
-#define		NIC_PF_VF_MSG_ACK          0x02 /* ACK the message received */
-#define		NIC_PF_VF_MSG_QS_CFG       0x03 /* Configure Qset */
-#define		NIC_PF_VF_MSG_RQ_CFG       0x04 /* Configure receive queue */
-#define		NIC_PF_VF_MSG_SQ_CFG       0x05 /* Configure Send queue */
-#define		NIC_PF_VF_MSG_RQ_DROP_CFG  0x06 /* Configure receive queue */
-#define		NIC_PF_VF_MSG_SET_MAC      0x07 /* Add VF's MAC ID into BGX's DMAC filter */
+#define	NIC_PF_VF_MSG_CLEAR		0x00
+#define	NIC_PF_VF_MSG_READY		0x01	/* Check if PF is ready to rcv messages */
+#define	NIC_PF_VF_MSG_ACK		0x02	/* ACK the message received */
+#define	NIC_PF_VF_MSG_QS_CFG		0x03	/* Configure Qset */
+#define	NIC_PF_VF_MSG_RQ_CFG		0x04	/* Configure receive queue */
+#define	NIC_PF_VF_MSG_SQ_CFG		0x05	/* Configure Send queue */
+#define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x06	/* Configure receive queue */
+#define	NIC_PF_VF_MSG_SET_MAC		0x07	/* Add VF's MAC ID into BGX's DMAC filter */
 
 struct nic_mbx {
 	uint64_t	   msg;
@@ -320,13 +320,13 @@ struct nic_mbx *nicvf_get_mbx(void);
 void nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
 
 /* Debug */
-#undef NIC_DEBUG
+#undef	NIC_DEBUG
 
-#ifdef NIC_DEBUG
-#define nic_dbg(dev, fmt, arg...) \
+#ifdef	NIC_DEBUG
+#define	nic_dbg(dev, fmt, arg...) \
 		dev_info(dev, fmt, ##arg)
 #else
-#define nic_dbg(dev, fmt, arg...) do {} while (0)
+#define	nic_dbg(dev, fmt, arg...) do {} while (0)
 #endif
 
 #endif /* NIC_H */

@@ -133,9 +133,9 @@
 #define   NIC_VF_MSIX_PBA			(0x010000)
 
 /* Offsets within registers */
-#define   NIC_MSIX_VEC_SHIFT	4
-#define   NIC_Q_NUM_SHIFT	18
-#define   NIC_QS_ID_SHIFT	21
-#define   NIC_VF_NUM_SHIFT	21
+#define   NIC_MSIX_VEC_SHIFT			4
+#define   NIC_Q_NUM_SHIFT			18
+#define   NIC_QS_ID_SHIFT			21
+#define   NIC_VF_NUM_SHIFT			21
 
 #endif /* NIC_REG_H */
