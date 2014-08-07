@@ -12,7 +12,7 @@
 #include "q_struct.h"
 
 #define    MAX_QUEUE_SET			128
-#define    MAX_RCV_QUEUES_PER_QS 		8
+#define    MAX_RCV_QUEUES_PER_QS		8
 #define    MAX_RCV_BUF_DESC_RINGS_PER_QS	2
 #define    MAX_SND_QUEUES_PER_QS		8
 #define    MAX_CMP_QUEUES_PER_QS		8
@@ -70,7 +70,7 @@
 #define    NICVF_SQ_BASE_ALIGN_BYTES	128  /* 7 bits */
 
 #define    NICVF_ALIGNED_ADDR(ADDR, ALIGN_BYTES)		ALIGN(ADDR, ALIGN_BYTES)
-#define    NICVF_ADDR_ALIGN_LEN(ADDR, BYTES) 	(NICVF_ALIGNED_ADDR(ADDR, BYTES) - BYTES)
+#define    NICVF_ADDR_ALIGN_LEN(ADDR, BYTES)	(NICVF_ALIGNED_ADDR(ADDR, BYTES) - BYTES)
 #define    NICVF_RCV_BUF_ALIGN_LEN(X)		(NICVF_ALIGNED_ADDR(X, NICVF_RCV_BUF_ALIGN_BYTES) - X)
 
 struct q_desc_mem {
@@ -143,10 +143,10 @@ struct queue_set {
 };
 
 /* CQ status bits */
-#define 	CQ_WR_FULL 	(1 << 26)
-#define 	CQ_WR_DISABLE 	(1 << 25)
-#define 	CQ_WR_FAULT 	(1 << 24)
-#define 	CQ_CQE_COUNT 	(0xFFFF << 0)
+#define	CQ_WR_FULL	(1 << 26)
+#define	CQ_WR_DISABLE	(1 << 25)
+#define	CQ_WR_FAULT	(1 << 24)
+#define	CQ_CQE_COUNT	(0xFFFF << 0)
 
 /* CQ err mask */
 #define		CQ_ERR_MASK	(CQ_WR_FULL | CQ_WR_DISABLE | CQ_WR_FAULT)

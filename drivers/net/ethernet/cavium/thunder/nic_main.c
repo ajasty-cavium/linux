@@ -27,8 +27,8 @@
 #include "nic_reg.h"
 #include "thunder_bgx.h"
 
-#define DRV_NAME  	"thunder-nic"
-#define DRV_VERSION  	"1.0"
+#define DRV_NAME	"thunder-nic"
+#define DRV_VERSION	"1.0"
 
 static void nic_channel_cfg(struct nicpf *nic, int vnic);
 

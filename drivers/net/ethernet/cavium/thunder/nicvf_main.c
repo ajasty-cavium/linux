@@ -29,8 +29,8 @@
 #include "nic_reg.h"
 #include "nicvf_queues.h"
 
-#define DRV_NAME  	"thunder-nicvf"
-#define DRV_VERSION  	"1.0"
+#define DRV_NAME	"thunder-nicvf"
+#define DRV_VERSION	"1.0"
 
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(nicvf_id_table) = {
@@ -306,7 +306,7 @@ static void nicvf_snd_pkt_handler (struct net_device *netdev,
 		return;
 
 	nic_dbg(&nic->pdev->dev, "%s Qset #%d SQ #%d SQ ptr #%d Subdesc count %d\n",
-			 	__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx,
+				__FUNCTION__, cqe_tx->sq_qs, cqe_tx->sq_idx,
 					cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];

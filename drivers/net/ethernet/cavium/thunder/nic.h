@@ -13,53 +13,53 @@
 #include <linux/interrupt.h>
 
 /* PCI device IDs */
-#define   PCI_DEVICE_ID_THUNDER_NIC_PF	    	0xA01E
-#define   PCI_DEVICE_ID_THUNDER_NIC_VF	    	0x0011
-#define   PCI_DEVICE_ID_THUNDER_BGX	    	0xA026
+#define	PCI_DEVICE_ID_THUNDER_NIC_PF	0xA01E
+#define	PCI_DEVICE_ID_THUNDER_NIC_VF	0x0011
+#define	PCI_DEVICE_ID_THUNDER_BGX	0xA026
 
 /* PCI BAR nos */
-#define   PCI_CFG_REG_BAR_NUM			0
-#define   PCI_MSIX_REG_BAR_NUM			4
+#define	PCI_CFG_REG_BAR_NUM		0
+#define	PCI_MSIX_REG_BAR_NUM		4
 
 /* NIC SRIOV VF count */
-#define 	MAX_NUM_VFS_SUPPORTED    128
-#define 	DEFAULT_NUM_VF_ENABLED   8
+#define	MAX_NUM_VFS_SUPPORTED		128
+#define	DEFAULT_NUM_VF_ENABLED		8
 
 /* NIC priv flags */
-#define         NIC_SRIOV_ENABLED  (1 << 0)
+#define	NIC_SRIOV_ENABLED		(1 << 0)
 
 /* VNIC HW optimiation features */
-#undef	 	VNIC_RX_CSUM_OFFLOAD_SUPPORT
-#undef	 	VNIC_TX_CSUM_OFFLOAD_SUPPORT
-#define 	VNIC_SG_SUPPORT
-#define 	VNIC_TSO_SUPPORT
-#define 	VNIC_LRO_SUPPORT
+#undef	VNIC_RX_CSUM_OFFLOAD_SUPPORT
+#undef	VNIC_TX_CSUM_OFFLOAD_SUPPORT
+#define	VNIC_SG_SUPPORT
+#define	VNIC_TSO_SUPPORT
+#define	VNIC_LRO_SUPPORT
 
 /* TSO not supported in Thunder pass1 */
-#ifdef VNIC_TSO_SUPPORT
-#define	 	VNIC_SW_TSO_SUPPORT
-#undef		VNIC_HW_TSO_SUPPORT
+#ifdef	VNIC_TSO_SUPPORT
+#define	VNIC_SW_TSO_SUPPORT
+#undef	VNIC_HW_TSO_SUPPORT
 #endif
 
 /* LRO not supported even in Thunder pass2 */
-#ifdef VNIC_LRO_SUPPORT
-#define	 	VNIC_SW_LRO_SUPPORT
-#undef		VNIC_HW_LRO_SUPPORT
+#ifdef	VNIC_LRO_SUPPORT
+#define	VNIC_SW_LRO_SUPPORT
+#undef	VNIC_HW_LRO_SUPPORT
 #endif
 
 
 /* ETHTOOL enable or disable, undef this to disable */
-#define 	NICVF_ETHTOOL_ENABLE
+#define	NICVF_ETHTOOL_ENABLE
 
 /* NAPI enable or disable, undef this to disable */
 #define		NICVF_NAPI_ENABLE
 
 /* Min/Max packet size */
-#define		NICVF_MIN_MTU_SUPPORTED    64
-#define		NICVF_MAX_MTU_SUPPORTED    1500
+#define	NICVF_MIN_MTU_SUPPORTED		64
+#define	NICVF_MAX_MTU_SUPPORTED		1500
 
 /* Max pkinds */
-#define 	NIC_MAX_PKIND            16
+#define	NIC_MAX_PKIND			16
 
 /* Rx Channels */
 #define		NIC_MAX_BGX		2
@@ -88,39 +88,39 @@
 #define		NIC_TL4_PER_LMAC	(NIC_MAX_TL4 / NIC_CHANS_PER_BGX_INF)
 
 /* NIC VF Interrupts */
-#define 	NICVF_INTR_CQ		 0
-#define 	NICVF_INTR_SQ		 1
-#define 	NICVF_INTR_RBDR		 2
-#define 	NICVF_INTR_PKT_DROP	 3
-#define 	NICVF_INTR_TCP_TIMER	 4
-#define 	NICVF_INTR_MBOX		 5
-#define 	NICVF_INTR_QS_ERR	 6
+#define	NICVF_INTR_CQ			0
+#define	NICVF_INTR_SQ			1
+#define	NICVF_INTR_RBDR			2
+#define	NICVF_INTR_PKT_DROP		3
+#define	NICVF_INTR_TCP_TIMER		4
+#define	NICVF_INTR_MBOX			5
+#define	NICVF_INTR_QS_ERR		6
 
-#define 	NICVF_INTR_CQ_SHIFT	   0
-#define		NICVF_INTR_SQ_SHIFT   	   8
-#define		NICVF_INTR_RBDR_SHIFT      16
-#define		NICVF_INTR_PKT_DROP_SHIFT  20
-#define		NICVF_INTR_TCP_TIMER_SHIFT 21
-#define		NICVF_INTR_MBOX_SHIFT	   22
-#define		NICVF_INTR_QS_ERR_SHIFT	   23
+#define	NICVF_INTR_CQ_SHIFT		0
+#define	NICVF_INTR_SQ_SHIFT		8
+#define	NICVF_INTR_RBDR_SHIFT		16
+#define	NICVF_INTR_PKT_DROP_SHIFT	20
+#define	NICVF_INTR_TCP_TIMER_SHIFT	21
+#define	NICVF_INTR_MBOX_SHIFT		22
+#define	NICVF_INTR_QS_ERR_SHIFT		23
 
-#define		NICVF_INTR_CQ_MASK		(0xFF << NICVF_INTR_CQ_SHIFT)
-#define		NICVF_INTR_SQ_MASK		(0xFF << NICVF_INTR_SQ_SHIFT)
-#define		NICVF_INTR_RBDR_MASK		(0x03 << NICVF_INTR_RBDR_SHIFT)
-#define		NICVF_INTR_PKT_DROP_MASK	(1 << NICVF_INTR_PKT_DROP_SHIFT)
-#define		NICVF_INTR_TCP_TIMER_MASK	(1 << NICVF_INTR_TCP_TIMER_SHIFT)
-#define		NICVF_INTR_MBOX_MASK		(1 << NICVF_INTR_MBOX_SHIFT)
-#define		NICVF_INTR_QS_ERR_MASK		(1 << NICVF_INTR_QS_ERR_SHIFT)
+#define	NICVF_INTR_CQ_MASK		(0xFF << NICVF_INTR_CQ_SHIFT)
+#define	NICVF_INTR_SQ_MASK		(0xFF << NICVF_INTR_SQ_SHIFT)
+#define	NICVF_INTR_RBDR_MASK		(0x03 << NICVF_INTR_RBDR_SHIFT)
+#define	NICVF_INTR_PKT_DROP_MASK	(1 << NICVF_INTR_PKT_DROP_SHIFT)
+#define	NICVF_INTR_TCP_TIMER_MASK	(1 << NICVF_INTR_TCP_TIMER_SHIFT)
+#define	NICVF_INTR_MBOX_MASK		(1 << NICVF_INTR_MBOX_SHIFT)
+#define	NICVF_INTR_QS_ERR_MASK		(1 << NICVF_INTR_QS_ERR_SHIFT)
 
 /* MSI-X interrupts */
-#define 	NIC_PF_MSIX_VECTORS      	10
-#define 	NIC_VF_MSIX_VECTORS      	20
+#define	NIC_PF_MSIX_VECTORS		10
+#define	NIC_VF_MSIX_VECTORS		20
 
-#define 	NICVF_CQ_INTR_ID	   	0
-#define 	NICVF_SQ_INTR_ID	   	8
-#define 	NICVF_RBDR_INTR_ID		16
-#define 	NICVF_MISC_INTR_ID	   	18
-#define 	NICVF_QS_ERR_INTR_ID		19
+#define	NICVF_CQ_INTR_ID		0
+#define	NICVF_SQ_INTR_ID		8
+#define	NICVF_RBDR_INTR_ID		16
+#define	NICVF_MISC_INTR_ID		18
+#define	NICVF_QS_ERR_INTR_ID		19
 
 #define for_each_cq_irq(irq) for (irq = NICVF_CQ_INTR_ID; \
 					irq < NICVF_SQ_INTR_ID; irq++)
@@ -188,15 +188,15 @@ struct eth_stats {
 #endif /* NICVF_ETHTOOL_ENABLE */
 
 struct nicvf {
-	struct net_device  *netdev;
-	struct pci_dev     *pdev;
-	uint16_t 	   mtu;
-	uint8_t            vnic_id;
-	struct             queue_set *qs;  /* Queue set this VNIC is pointing to */
-	uint8_t            num_qs;         /* No of QSs assigned to this VNIC */
-	void               *addnl_qs;      /* Pointer to QSs additional to default 1 QS */
-	uint16_t           vf_mtu;
-	uint64_t           reg_base;            /* Register start address */
+	struct net_device	*netdev;
+	struct pci_dev		*pdev;
+	uint16_t		mtu;
+	uint8_t			vnic_id;
+	struct queue_set	*qs;		/* Queue set this VNIC is pointing to */
+	uint8_t			num_qs;		/* No of QSs assigned to this VNIC */
+	void			*addnl_qs;	/* Pointer to QSs additional to default 1 QS */
+	uint16_t		vf_mtu;
+	uint64_t		reg_base;	/* Register start address */
 	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
 	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
 #ifdef NICVF_NAPI_ENABLE
@@ -271,7 +271,7 @@ struct nicvf_stats {
  */
 
 /* PF <--> VF mailbox communication */
-#define  	NIC_PF_VF_MAILBOX_SIZE     8
+#define	NIC_PF_VF_MAILBOX_SIZE		8
 
 /* Mailbox message types */
 #define		NIC_PF_VF_MSG_CLEAR        0x00

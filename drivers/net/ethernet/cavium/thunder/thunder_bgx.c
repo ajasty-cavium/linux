@@ -20,8 +20,8 @@
 #include "nic_reg.h"
 #include "thunder_bgx.h"
 
-#define DRV_NAME  	"thunder-BGX"
-#define DRV_VERSION  	"1.0"
+#define DRV_NAME	"thunder-BGX"
+#define DRV_VERSION	"1.0"
 
 struct lmac {
 	int dmac;
