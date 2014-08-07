@@ -55,9 +55,7 @@ enum rss_algorithm_type {
 	RSS_ALG_ROCE = 0x07,
 };
 
-/*
- * Completion queue entry types
- */
+/* Completion queue entry types */
 enum cqe_type {
 	CQE_TYPE_INVALID = 0x0,
 	CQE_TYPE_RX = 0x2,

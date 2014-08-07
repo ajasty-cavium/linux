@@ -59,9 +59,7 @@ static uint64_t nic_reg_read(struct nicpf *nic, uint64_t offset)
 	return readq_relaxed((void *)addr);
 }
 
-/*
- * PF -> VF mailbox communication APIs
- */
+/* PF -> VF mailbox communication APIs */
 static void nic_enable_mbx_intr(struct nicpf *nic)
 {
 	int	 irq;
@@ -128,9 +126,7 @@ static void nic_mbx_send_ack(struct nicpf *nic, int vf)
 	nic_reg_write(nic, mbx_addr, 1ULL);
 }
 
-/*
- * Handle Mailbox messgaes from VF and ack the message.
- */
+/* Handle Mailbox messgaes from VF and ack the message. */
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
 	int i;
@@ -206,8 +202,7 @@ static void nic_init_hw(struct nicpf *nic)
 	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, 0);
 	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), 0);
 
-	/*
-	 * Simulator doesn't support padding, disable min packet check.
+	/* Simulator doesn't support padding, disable min packet check.
 	 * Max pkt size - 1536.
 	 * Enable L2 length err check.
 	 * Disable TNS receive header for now.

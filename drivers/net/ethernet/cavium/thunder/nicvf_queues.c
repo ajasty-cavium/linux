@@ -145,8 +145,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr, int rbdr_qidx)
 	nicvf_free_q_desc_mem(nic, &rbdr->desc_mem);
 }
 
-/*
- * Refill receive buffer descriptors with new buffers.
+/* Refill receive buffer descriptors with new buffers.
  * This runs in softirq context .
  */
 void nicvf_refill_rbdr(unsigned long data)
@@ -349,8 +348,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, qidx, 0);
 }
 
-/*
- * TBD
+/* TBD
  * - Set TL3 index
  */
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
@@ -573,9 +571,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	return 0;
 }
 
-/*
- * Check for errors in the cmp.queue entry
- */
+/* Check for errors in the cmp.queue entry */
 int nicvf_cq_check_errs(struct nicvf *nic, void *cq_desc)
 {
 	uint32_t ret = false;
@@ -588,8 +584,7 @@ int nicvf_cq_check_errs(struct nicvf *nic, void *cq_desc)
 	return ret;
 }
 
-/*
- * Get a free desc from send queue
+/* Get a free desc from send queue
  * @qs:   Qset from which to get a SQ descriptor
  * @qnum: SQ number (0...7) in the Qset
  *
@@ -683,8 +678,7 @@ static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 	return subdesc_cnt;
 }
 
-/*
- * Add SQ HEADER subdescriptor.
+/* Add SQ HEADER subdescriptor.
  * First subdescriptor for every send descriptor.
  */
 struct sq_hdr_subdesc *
@@ -725,8 +719,7 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 	return hdr;
 }
 
-/*
- * SQ GATHER subdescriptor
+/* SQ GATHER subdescriptor
  * Must follow HDR descriptor
  */
 static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
@@ -793,8 +786,7 @@ static void nicvf_fill_l4_crc_subdesc(struct sq_crc_subdesc *l4,
 	l4->crc_ival = 0;
 }
 
-/*
- * SQ CRC subdescriptor
+/* SQ CRC subdescriptor
  * Must follow HDR and precede GATHER, IMM subdescriptors
  */
 static void nicvf_sq_add_crc_subdesc(struct nicvf *nic, struct queue_set *qs,
@@ -826,9 +818,7 @@ static void nicvf_sq_add_crc_subdesc(struct nicvf *nic, struct queue_set *qs,
 	}
 }
 
-/*
- * Append an skb to a SQ for packet transfer.
- */
+/* Append an skb to a SQ for packet transfer. */
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 {
 	int subdesc_cnt;
@@ -921,9 +911,7 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 	return skb;
 }
 
-/*
- * Enable interrupt
- */
+/* Enable interrupt */
 void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 {
 	uint64_t reg_val;
@@ -960,9 +948,7 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 	nicvf_qset_reg_write(nic, NIC_VF_ENA_W1S, reg_val);
 }
 
-/*
- * Disable interrupt
- */
+/* Disable interrupt */
 void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 {
 	uint64_t reg_val = 0;
@@ -997,9 +983,7 @@ void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 	nicvf_qset_reg_write(nic, NIC_VF_ENA_W1C, reg_val);
 }
 
-/*
- * Clear interrupt
- */
+/* Clear interrupt */
 void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 {
 	uint64_t reg_val = 0;
@@ -1034,9 +1018,7 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 	nicvf_qset_reg_write(nic, NIC_VF_INT, reg_val);
 }
 
-/*
- * Check if interrupt is enabled
- */
+/* Check if interrupt is enabled */
 int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 {
 	uint64_t reg_val;

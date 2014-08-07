@@ -263,8 +263,7 @@ struct nicvf_stats {
 	} tx;
 };
 
-/*
- * PF <--> Mailbox communication
+/* PF <--> Mailbox communication
  * Eight 64bit registers are shared between PF and VF.
  * Separate set for each VF.
  * Writing '1' into last register mbx7 means end of message.
