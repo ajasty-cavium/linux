@@ -523,14 +523,14 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(48));
-	if (!err) {
-		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
-		if (err) {
-			dev_err(dev, "unable to get 40-bit DMA for consistent allocations\n");
-			goto err_release_regions;
-		}
-	} else {
+	if (err) {
 		dev_err(dev, "Unable to get usable DMA configuration\n");
+		goto err_release_regions;
+	}
+
+	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
+	if (err) {
+		dev_err(dev, "unable to get 40-bit DMA for consistent allocations\n");
 		goto err_release_regions;
 	}
 
