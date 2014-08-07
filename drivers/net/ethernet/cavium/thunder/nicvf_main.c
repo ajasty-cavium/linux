@@ -151,9 +151,9 @@ void nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 	mbx->mbx_trigger_intr = 1;
 	msg = (uint64_t *)mbx;
 	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_7;
-	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
+
+	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++)
 		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
-	}
 
 	/* Wait for previous message to be acked, timeout 5sec */
 	while (!vf_pf_msg_delivered) {
@@ -244,9 +244,8 @@ static void nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 	mbx = nicvf_get_mbx();
 	mbx->msg = NIC_PF_VF_MSG_SET_MAC;
 	mbx->data.mac.vnic_id = nic->vnic_id;
-	for (i = 0; i < ETH_ALEN; i++) {
+	for (i = 0; i < ETH_ALEN; i++)
 		mbx->data.mac.addr = (mbx->data.mac.addr << 8) | netdev->dev_addr[i];
-	}
 	nicvf_send_msg_to_pf(nic, mbx);
 }
 
@@ -572,9 +571,8 @@ static int nicvf_enable_msix(struct nicvf *nic)
 	if (vec > NIC_VF_MSIX_VECTORS)
 		nic->num_vec = vec;
 
-	for (i = 0; i < nic->num_vec; i++) {
+	for (i = 0; i < nic->num_vec; i++)
 		nic->msix_entries[i].entry = i;
-	}
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret < 0) {
@@ -833,9 +831,8 @@ static int nicvf_open(struct net_device *netdev)
 
 	netif_carrier_off(netdev);
 
-	if ((err = nicvf_register_misc_interrupt(nic))) {
+	if ((err = nicvf_register_misc_interrupt(nic)))
 		return -EIO;
-	}
 
 	if ((err = nicvf_init_resources(nic)))
 		return err;
