@@ -760,8 +760,8 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 #ifdef VNIC_HW_TSO_SUPPORT
 	if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
 				(ip_hdr(skb)->protocol != IPPROTO_TCP))) {
-		netdev_dbg(netdev, "Only TCP segmentation is supported, \
-							dropping packet\n");
+		netdev_dbg(netdev,
+			   "Only TCP segmentation is supported, dropping packet\n");
 		dev_kfree_skb_any(skb);
 		return NETDEV_TX_OK;
 	}
