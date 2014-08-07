@@ -11,7 +11,7 @@
 #include <linux/pci.h>
 #include "nic.h"
 
-#define DRV_NAME  	"thunder-nicvf"
+#define DRV_NAME	"thunder-nicvf"
 #define DRV_VERSION     "1.0"
 
 struct nicvf_stat {
@@ -71,7 +71,7 @@ static const unsigned int nicvf_n_tx_stats = ARRAY_SIZE(nicvf_tx_stats);
 static const unsigned int nicvf_n_rx_stats = ARRAY_SIZE(nicvf_rx_stats);
 
 static int nicvf_get_settings(struct net_device *netdev,
-	     		     struct ethtool_cmd *cmd)
+			     struct ethtool_cmd *cmd)
 {
 	cmd->supported = (SUPPORTED_1000baseT_Full |
 			SUPPORTED_100baseT_Full |
@@ -115,7 +115,7 @@ static int nicvf_set_settings(struct net_device *netdev,
 }
 
 static void nicvf_get_drvinfo(struct net_device *netdev,
-	    		     struct ethtool_drvinfo *info)
+			     struct ethtool_drvinfo *info)
 {
 	struct nicvf *nic = netdev_priv(netdev);
 

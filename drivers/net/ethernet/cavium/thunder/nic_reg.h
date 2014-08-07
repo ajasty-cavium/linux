@@ -12,7 +12,7 @@
 /* Physical function register offsets */
 #define   NIC_PF_CFG				(0x0000)
 #define   NIC_PF_STATUS				(0x0010)
-#define   NIC_PF_INTR_TIMER_CFG 		(0x0030)
+#define   NIC_PF_INTR_TIMER_CFG			(0x0030)
 #define   NIC_PF_BIST_STATUS			(0x0040)
 #define   NIC_PF_SOFT_RESET			(0x0050)
 #define   NIC_PF_TCP_TIMER			(0x0060)
@@ -21,12 +21,12 @@
 #define   NIC_PF_CQM_CF				(0x00A0)
 #define   NIC_PF_CNM_CF				(0x00A8)
 #define   NIC_PF_CNM_STATUS			(0x00B0)
-#define   NIC_PF_CQ_AVG_CFG 			(0x00C0)
-#define   NIC_PF_RRM_AVG_CFG 			(0x00C8)
-#define   NIC_PF_INTF_0_1_SEND_CFG 		(0x0200) /* (0..1) << 8 */
-#define   NIC_PF_INTF_0_1_BP_CFG 		(0x0208)
-#define   NIC_PF_INTF_0_1_BP_DIS_0_1 		(0x0210) /* (0..1) << 8 + (0..1) << 3 */
-#define   NIC_PF_INTF_0_1_BP_SW_0_1 		(0x0220)
+#define   NIC_PF_CQ_AVG_CFG			(0x00C0)
+#define   NIC_PF_RRM_AVG_CFG			(0x00C8)
+#define   NIC_PF_INTF_0_1_SEND_CFG		(0x0200) /* (0..1) << 8 */
+#define   NIC_PF_INTF_0_1_BP_CFG		(0x0208)
+#define   NIC_PF_INTF_0_1_BP_DIS_0_1		(0x0210) /* (0..1) << 8 + (0..1) << 3 */
+#define   NIC_PF_INTF_0_1_BP_SW_0_1		(0x0220)
 #define   NIC_PF_ECC_INT			(0x0400)
 #define   NIC_PF_MAILBOX_INT			(0x0410) /* (0..1) << 3 */
 #define   NIC_PF_ECC_INT_W1S			(0x0420)
@@ -51,18 +51,18 @@
 #define   NIC_PF_TL2_0_63_CFG			(0x500000)
 #define   NIC_PF_TL2_0_63_PRI			(0x520000)
 #define   NIC_PF_TL2_0_63_SH_STATUS		(0x580000)
-#define   NIC_PF_TL3A_0_63_CFG		 	(0x5F0000)
-#define   NIC_PF_TL3_0_255_CFG		 	(0x600000)
-#define   NIC_PF_TL3_0_255_CHAN		 	(0x620000)
-#define   NIC_PF_TL3_0_255_PIR		 	(0x640000)
+#define   NIC_PF_TL3A_0_63_CFG			(0x5F0000)
+#define   NIC_PF_TL3_0_255_CFG			(0x600000)
+#define   NIC_PF_TL3_0_255_CHAN			(0x620000)
+#define   NIC_PF_TL3_0_255_PIR			(0x640000)
 #define   NIC_PF_TL3_0_255_SW_XOFF		(0x660000)
 #define   NIC_PF_TL3_0_255_CNM_RATE		(0x680000)
 #define   NIC_PF_TL3_0_255_SH_STATUS		(0x6A0000)
-#define   NIC_PF_TL4A_0_255_CFG		 	(0x6F0000)
-#define   NIC_PF_TL4_0_1023_CFG		 	(0x800000)
-#define   NIC_PF_TL4_0_1023_SW_XOFF	 	(0x820000)
-#define   NIC_PF_TL4_0_1023_SH_STATUS	 	(0x880000)
-#define   NIC_PF_TL4A_0_1023_CNM_STATUS	 	(0x8A0000)
+#define   NIC_PF_TL4A_0_255_CFG			(0x6F0000)
+#define   NIC_PF_TL4_0_1023_CFG			(0x800000)
+#define   NIC_PF_TL4_0_1023_SW_XOFF		(0x820000)
+#define   NIC_PF_TL4_0_1023_SH_STATUS		(0x880000)
+#define   NIC_PF_TL4A_0_1023_CNM_STATUS		(0x8A0000)
 #define   NIC_PF_VF_0_127_MAILBOX_0_7		(0x20002000) /* + (0..127) << 21 + (0..7) << 3 */
 #define   NIC_PF_VNIC_0_127_TX_STAT_0_4		(0x20004000) /* + (0..127) << 21 + (0..4) << 3 */
 #define   NIC_PF_VNIC_0_127_RX_STAT_0_13	(0x20004100)
@@ -130,7 +130,7 @@
 
 #define   NIC_VF_MSIX_VECTOR_0_19_ADDR		(0x000000)
 #define   NIC_VF_MSIX_VECTOR_0_19_CTL		(0x000008)
-#define   NIC_VF_MSIX_PBA 			(0x010000)
+#define   NIC_VF_MSIX_PBA			(0x010000)
 
 /* Offsets within registers */
 #define   NIC_MSIX_VEC_SHIFT	4
