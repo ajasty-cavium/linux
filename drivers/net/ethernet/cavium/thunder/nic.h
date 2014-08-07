@@ -134,8 +134,10 @@ struct nicvf_cq_poll {
 	struct napi_struct napi;
 };
 
-/* Stats  */
 #ifdef NICVF_ETHTOOL_ENABLE
+
+/* Stats */
+
 /* Tx statistics */
 struct nicvf_tx_stats {
 	u64 tx_frames_ok;
@@ -182,6 +184,9 @@ struct eth_stats {
 	struct nicvf_tx_stats tx;
 	struct nicvf_rx_stats rx;
 };
+
+#endif /* NICVF_ETHTOOL_ENABLE */
+
 struct nicvf {
 	struct net_device  *netdev;
 	struct pci_dev     *pdev;
@@ -307,7 +312,7 @@ struct nic_mbx {
 	uint64_t	   mbx_trigger_intr;
 };
 
-
+#ifdef NICVF_ETHTOOL_ENABLE
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 #endif
 
