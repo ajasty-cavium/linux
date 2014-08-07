@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2013 Cavium, Inc. 
+ *
+ * Copyright (C) 2013 Cavium, Inc.
  */
 
 #ifndef Q_STRUCT_H
@@ -198,9 +198,9 @@ struct cqe_rx_t {
 	uint64_t   l3_type:4;
 	uint64_t   l2_present:1;
 	uint64_t   err_level:3;
-	uint64_t   err_opcode:8; 
+	uint64_t   err_opcode:8;
 #else /* LITTLE_ENDIAN */
-	uint64_t   err_opcode:8; 
+	uint64_t   err_opcode:8;
 	uint64_t   err_level:3;
 	uint64_t   l2_present:1;
 	uint64_t   l3_type:4;
@@ -284,42 +284,42 @@ struct cqe_rx_tcp_t {
 	uint64_t   rsvd2:8;
 	uint64_t   tcp_err_bytes:16;
 	uint64_t   cqe_type:4;
-	uint64_t   rsvd0:52; 
+	uint64_t   rsvd0:52;
 	uint64_t   cq_tcp_status:8;
 #else /* LITTLE ENDIAN */
 	uint64_t   cq_tcp_status:8;
-	uint64_t   rsvd0:52; 
+	uint64_t   rsvd0:52;
 	uint64_t   cqe_type:4;
 	uint64_t   tcp_err_bytes:16;
 	uint64_t   rsvd2:8;
 	uint64_t   tcp_cntx_bytes:8;
 	uint64_t   rsvd1:32;
-#endif	
+#endif
 };
 
 struct cqe_send_t {
 #ifdef BIG_ENDIAN
-	uint64_t   ptp_timestamp:64; 
+	uint64_t   ptp_timestamp:64;
 	uint64_t   cqe_type:4;
-	uint64_t   rsvd0:4; 
-	uint64_t   sqe_ptr:16; 
-	uint64_t   rsvd1:4; 
-	uint64_t   rsvd2:10; 
-	uint64_t   sq_qs:7; 
-	uint64_t   sq_idx:3; 
-	uint64_t   rsvd3:8; 
-	uint64_t   send_status:8; 
+	uint64_t   rsvd0:4;
+	uint64_t   sqe_ptr:16;
+	uint64_t   rsvd1:4;
+	uint64_t   rsvd2:10;
+	uint64_t   sq_qs:7;
+	uint64_t   sq_idx:3;
+	uint64_t   rsvd3:8;
+	uint64_t   send_status:8;
 #else /* LITTLE ENDIAN */
-	uint64_t   send_status:8; 
-	uint64_t   rsvd3:8; 
-	uint64_t   sq_idx:3; 
-	uint64_t   sq_qs:7; 
-	uint64_t   rsvd2:10; 
-	uint64_t   rsvd1:4; 
-	uint64_t   sqe_ptr:16; 
-	uint64_t   rsvd0:4; 
+	uint64_t   send_status:8;
+	uint64_t   rsvd3:8;
+	uint64_t   sq_idx:3;
+	uint64_t   sq_qs:7;
+	uint64_t   rsvd2:10;
+	uint64_t   rsvd1:4;
+	uint64_t   sqe_ptr:16;
+	uint64_t   rsvd0:4;
 	uint64_t   cqe_type:4;
-	uint64_t   ptp_timestamp:64; 
+	uint64_t   ptp_timestamp:64;
 #endif
 };
 
@@ -351,7 +351,7 @@ struct rbe_tcp_cnxt_t {
 	uint64_t   align_hdr_bytes:4;
 	uint64_t   align_ptr_bytes:4;
 	uint64_t   ptr_bytes:16;
-	uint64_t   rsvd2:24; 
+	uint64_t   rsvd2:24;
 	uint64_t   cqe_type:4;
 	uint64_t   rsvd0:54;
 	uint64_t   tcp_end_reason:2;
@@ -361,7 +361,7 @@ struct rbe_tcp_cnxt_t {
 	uint64_t   tcp_end_reason:2;
 	uint64_t   rsvd0:54;
 	uint64_t   cqe_type:4;
-	uint64_t   rsvd2:24; 
+	uint64_t   rsvd2:24;
 	uint64_t   ptr_bytes:16;
 	uint64_t   align_ptr_bytes:4;
 	uint64_t   align_hdr_bytes:4;
@@ -373,7 +373,7 @@ struct rbe_tcp_cnxt_t {
 /* Always Big endian */
 struct rx_hdr_t {
 	uint64_t   opaque:32;
-	uint64_t   rss_flow:8; 
+	uint64_t   rss_flow:8;
 	uint64_t   skip_length:6;
 	uint64_t   disable_rss:1;
 	uint64_t   disable_tcp_reassembly:1;

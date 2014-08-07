@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2014 Cavium, Inc. 
+ *
+ * Copyright (C) 2014 Cavium, Inc.
  */
 
 #include <linux/module.h>
@@ -56,27 +56,27 @@ static uint64_t bgx_reg_read (struct bgx *bgx, uint8_t lmac, uint64_t offset)
         return readq_relaxed((void *)addr);
 }
 #endif
-static void bgx_reg_write (struct bgx *bgx, uint8_t lmac, 
+static void bgx_reg_write (struct bgx *bgx, uint8_t lmac,
 			uint64_t offset, uint64_t val)
 {
 	uint64_t addr = bgx->reg_base + (lmac << 20) + offset;
         writeq_relaxed(val, (void *)addr);
 }
 
-static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac) 
+static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
 {
 	uint64_t dmac = 0x00;
 	uint64_t offset, addr;
-	
+
 	while (bgx->lmac[lmac].dmac > 0) {
-		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) + 
+		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) +
 					(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
 		addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
 		writeq_relaxed(dmac, (void *)addr);
-		bgx->lmac[lmac].dmac--;	
+		bgx->lmac[lmac].dmac--;
 	}
 }
-void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac) 
+void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 {
 	int bgx_index;
 	uint64_t offset, addr;
@@ -96,14 +96,14 @@ void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 		return;
 	}
 	/* Simulator supports only TNS by pass mode */
-	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE) 
-		bgx->lmac[lmac].dmac = 1;	
+	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE)
+		bgx->lmac[lmac].dmac = 1;
 
-	offset = (bgx->lmac[lmac].dmac * sizeof(dmac)) + 
+	offset = (bgx->lmac[lmac].dmac * sizeof(dmac)) +
 					(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
 	addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
 	writeq_relaxed(dmac, (void *)addr);
-	bgx->lmac[lmac].dmac++;	
+	bgx->lmac[lmac].dmac++;
 }
 
 void bgx_lmac_enable (uint64_t lmac)
@@ -120,9 +120,9 @@ void bgx_lmac_enable (uint64_t lmac)
 		return;
 	}
 	lmac = lmac % MAX_LMAC_PER_BGX;
-	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 
-			(1 << 15) | (1 << 14) | (1 << 13)); 
-	//bgx_add_dmac_addr(dmac_bcast, lmac + 
+	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG,
+			(1 << 15) | (1 << 14) | (1 << 13));
+	//bgx_add_dmac_addr(dmac_bcast, lmac +
 	//			(bgx->bgx_id * MAX_LMAC_PER_BGX));
 }
 
@@ -139,11 +139,11 @@ void bgx_lmac_disable (uint64_t lmac)
 		return;
 	}
 	lmac = lmac % MAX_LMAC_PER_BGX;
-	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00); 
-	//bgx_flush_dmac_addrs(bgx, lmac);	
+	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00);
+	//bgx_flush_dmac_addrs(bgx, lmac);
 }
 
-static void bgx_init_hw (struct bgx *bgx) 
+static void bgx_init_hw (struct bgx *bgx)
 {
 	int lmac;
 	uint64_t enable = 0;
@@ -153,12 +153,12 @@ static void bgx_init_hw (struct bgx *bgx)
 	/* Enable LMAC, Pkt Rx enable, Pkt Tx enable */
 	enable = (1 << 15) | (1 << 14) | (1 << 13);
 	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
-		bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, enable); 
+		bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, enable);
 	}
-	
+
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
-		bgx_add_dmac_addr(dmac_bcast, lmac + 
+		bgx_add_dmac_addr(dmac_bcast, lmac +
 					(bgx->bgx_id * MAX_LMAC_PER_BGX));
 	}
 }
@@ -174,7 +174,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
         pci_set_drvdata(pdev, bgx);
 
-        err = pci_enable_device(pdev); 
+        err = pci_enable_device(pdev);
         if (err) {
                 dev_err(dev, "Failed to enable PCI device\n");
                 goto exit;
@@ -192,10 +192,10 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
                 dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
                 err = -ENOMEM;
                 goto err_release_regions;
-        }      
+        }
 	bgx->bgx_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 24) & 1;
 	bgx_vnic[bgx->bgx_id] = bgx;
-	
+
 	//pr_err("%s BGX%d CSR base %llx\n",__func__, bgx->bgx_id, bgx->reg_base);
 
 	/* Initialize BGX hardware */
@@ -220,7 +220,7 @@ static void bgx_remove(struct pci_dev *pdev)
 
 	if (!bgx)
 		return;
-	
+
 	pci_set_drvdata(pdev, NULL);
 
         if (bgx->reg_base)

@@ -2,8 +2,8 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- * 
- * Copyright (C) 2013 Cavium, Inc. 
+ *
+ * Copyright (C) 2013 Cavium, Inc.
  ******************************************************************************/
 
 /* ETHTOOL Support for VNIC_VF Device*/
@@ -70,7 +70,7 @@ static const struct nicvf_stat nicvf_rx_stats[] = {
 static const unsigned int nicvf_n_tx_stats = ARRAY_SIZE(nicvf_tx_stats);
 static const unsigned int nicvf_n_rx_stats = ARRAY_SIZE(nicvf_rx_stats);
 
-static int nicvf_get_settings(struct net_device *netdev, 
+static int nicvf_get_settings(struct net_device *netdev,
 	     		     struct ethtool_cmd *cmd)
 {
 	cmd->supported = (SUPPORTED_1000baseT_Full |
@@ -80,7 +80,7 @@ static int nicvf_get_settings(struct net_device *netdev,
 
 	cmd->advertising = (ADVERTISED_1000baseT_Full |
 			ADVERTISED_100baseT_Full |
-			ADVERTISED_10baseT_Full | 
+			ADVERTISED_10baseT_Full |
 			ADVERTISED_10000baseT_Full | ADVERTISED_FIBRE);
 
 	cmd->port = PORT_FIBRE;
@@ -94,7 +94,7 @@ static int nicvf_get_settings(struct net_device *netdev,
 	}
 
 	cmd->autoneg = AUTONEG_DISABLE;
-	ethtool_cmd_speed_set(cmd, SPEED_1000);  
+	ethtool_cmd_speed_set(cmd, SPEED_1000);
 	return 0;
 }
 
@@ -124,7 +124,7 @@ static void nicvf_get_drvinfo(struct net_device *netdev,
 	strlcpy(info->bus_info, pci_name(nic->pdev), sizeof(info->bus_info));
 }
 
-static void nicvf_get_strings(struct net_device *netdev, u32 stringset, 
+static void nicvf_get_strings(struct net_device *netdev, u32 stringset,
 			     u8 *data)
 {
 	int stats;
@@ -144,7 +144,7 @@ static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 	return nicvf_n_tx_stats + nicvf_n_rx_stats;
 }
 
-static void nicvf_get_ethtool_stats(struct net_device *netdev, 
+static void nicvf_get_ethtool_stats(struct net_device *netdev,
 				   struct ethtool_stats *stats, u64 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
@@ -179,7 +179,7 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 	.get_sset_count		= nicvf_get_sset_count,
 	.get_ethtool_stats	= nicvf_get_ethtool_stats,
 	.get_ts_info		= ethtool_op_get_ts_info
-#if 0	
+#if 0
 	.get_coalesce		= nicvf_get_coalesce,
 	.set_coalesce		= nicvf_set_coalesce,
 	.get_ringparam		= nicvf_get_ringparam,
