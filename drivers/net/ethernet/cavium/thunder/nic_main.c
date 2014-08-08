@@ -23,15 +23,14 @@
 #include <linux/ethtool.h>
 #include <linux/aer.h>
 
-#include "nic_reg.h"
 #include "nic.h"
+#include "nic_reg.h"
 #include "thunder_bgx.h"
 
 #define DRV_NAME  	"thunder-nic"
 #define DRV_VERSION  	"1.0"
 
 static void nic_channel_cfg(struct nicpf *nic, int vnic);
-static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
 
 /* Supported devices */
 static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
@@ -99,48 +98,32 @@ static void nic_clear_mbx_intr (struct nicpf *nic, int vf)
 		nic_reg_write (nic, NIC_PF_MAILBOX_INT + (1 << 3), (1ULL << (vf - 64)));
 }
 
-static uint64_t nic_get_mbx_addr(int vf)
-{
-	return NIC_PF_VF_0_127_MAILBOX_0_7 + (vf << NIC_VF_NUM_SHIFT);
-}
-
-static void nic_mbx_done(struct nicpf *nic, uint64_t mbx_addr)
-{
-	/* write 1 to last MBX reg */
-	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	nic_reg_write(nic, mbx_addr, 1ULL);
-}
-
 static void nic_mbx_send_ready (struct nicpf *nic, int vf)
 {
 	uint64_t mbx_addr;
 
-	mbx_addr = nic_get_mbx_addr(vf);
+	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
+	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
 
 	/* Respond with VNIC ID */
 	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_READY);
 	nic_reg_write(nic, mbx_addr + 8, vf);
-	nic_mbx_done(nic, mbx_addr);
+	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
+	/* Set 1 in last MBX reg */ 
+	nic_reg_write (nic, mbx_addr, 1ULL); 
 }
 
 static void nic_mbx_send_ack (struct nicpf *nic, int vf)
 {
 	uint64_t mbx_addr;
 
-	mbx_addr = nic_get_mbx_addr(vf);
+	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
+	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
 
 	nic_reg_write (nic, mbx_addr, NIC_PF_VF_MSG_ACK);
-	nic_mbx_done(nic, mbx_addr);
-}
-
-static void nic_mbx_send_nack(struct nicpf *nic, int vf)
-{
-	uint64_t mbx_addr;
-
-	mbx_addr = nic_get_mbx_addr(vf);
-
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_NACK);
-	nic_mbx_done(nic, mbx_addr);
+	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
+	/* Set 1 in last MBX reg */ 
+	nic_reg_write (nic, mbx_addr, 1ULL); 
 }
 
 /*
@@ -148,7 +131,7 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
  */
 static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 {
-	int i, ret = 0;
+	int i;
 	struct nic_mbx *mbx;
 	uint64_t *mbx_data;
 	uint64_t reg_addr;
@@ -165,13 +148,11 @@ static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 		mbx_data++;
 	}
 
-	mbx->msg &= 0xFF;
-	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
-		__func__, mbx->msg, vf);
-	switch (mbx->msg) {
+	switch (mbx->msg & 0xFF) {
 	case NIC_PF_VF_MSG_READY:
+		nic_dbg(&nic->pdev->dev, "NIC_PF_VF_MSG_READY\n");
 		nic_mbx_send_ready(nic, vf);
-		ret = 1;
+		goto exit;
 		break;
 	case NIC_PF_VF_MSG_QS_CFG:
 		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx->data.qs.num << NIC_QS_ID_SHIFT);
@@ -200,37 +181,13 @@ static void nic_handle_mbx_intr (struct nicpf *nic, int vf)
 	case NIC_PF_VF_MSG_SET_MAC:
 		bgx_add_dmac_addr(mbx->data.mac.addr, mbx->data.mac.vnic_id);
 		break;
-	case NIC_VF_SET_MAX_FRS:
-		ret = nic_update_hw_frs(nic, mbx->data.max_frs, vf);
-		break;
 	default:
 		netdev_err(nic->netdev, "Invalid message from VF%d, msg 0x%llx\n", vf, mbx->msg);
 		break;
 	}
-
-	if (!ret)
-		nic_mbx_send_ack(nic, vf);
-	else if (mbx->msg != NIC_PF_VF_MSG_READY)
-		nic_mbx_send_nack(nic, vf);
+	nic_mbx_send_ack(nic, vf);
+exit:
 	kfree(mbx);
-}
-
-static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
-{
-	if ((new_frs > NIC_HW_MAX_FRS) || (new_frs < NIC_HW_MIN_FRS)) {
-		netdev_err(nic->netdev,
-			   "Invalid MTU setting from VF%d rejected"
-			   "should be between %d and %d\n", vf,
-			   NIC_HW_MIN_FRS, NIC_HW_MAX_FRS);
-		return 1;
-	}
-	new_frs += ETH_HLEN;
-	if (new_frs <= nic->pkind.maxlen)
-		return 0;
-
-	nic->pkind.maxlen = new_frs;
-	nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG, *(uint64_t *)&nic->pkind);
-	return 0;
 }
 
 static void nic_init_hw (struct nicpf *nic)
@@ -243,21 +200,19 @@ static void nic_init_hw (struct nicpf *nic)
 	/* Enable NIC HW block */
 	nic_reg_write (nic, NIC_PF_CFG, 1);
 
-	/* Disable TNS mode */
+	/* Disable TNS mode, no TNS support in simulator */
 	nic_reg_write (nic, NIC_PF_INTF_0_1_SEND_CFG, 0); 
 	nic_reg_write (nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), 0);
-
-	/* PKIND configuration */
-	nic->pkind.minlen = 0;
-	nic->pkind.maxlen = NIC_HW_MAX_FRS + ETH_HLEN;
-	nic->pkind.lenerr_en = 1;
-	nic->pkind.rx_hdr = 0;
-	nic->pkind.hdr_sl = 0;
-
+	
+	/* 
+	 * Simulator doesn't support padding, disable min packet check.
+	 * Max pkt size - 1536.
+	 * Enable L2 length err check.
+	 * Disable TNS receive header for now.
+	 */
 	for (i = 0; i < NIC_MAX_PKIND; i++) 
 		nic_reg_write (nic, NIC_PF_PKIND_0_15_CFG | (i << 3), 
-			       *(uint64_t *)&nic->pkind);
-
+								0x206000000);
 	/* Disable backpressure for now */
 	for (i = 0; i < NIC_MAX_CHANS; i++)
 		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 0);

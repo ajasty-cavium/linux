@@ -9,8 +9,6 @@
 /* ETHTOOL Support for VNIC_VF Device*/
 
 #include <linux/pci.h>
-
-#include "nic_reg.h"
 #include "nic.h"
 
 #define DRV_NAME  	"thunder-nicvf"

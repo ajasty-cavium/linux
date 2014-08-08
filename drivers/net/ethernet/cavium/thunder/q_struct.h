@@ -9,6 +9,9 @@
 #ifndef Q_STRUCT_H
 #define Q_STRUCT_H
 
+#undef	 BIG_ENDIAN
+#define  LITTLE_ENDIAN   1
+
 enum ether_type_algorithm {
 	ETYPE_ALG_NONE = 0x0,
 	ETYPE_ALG_SKIP = 0x1,
@@ -141,7 +144,7 @@ enum cqe_rx_err_opcode {
 };
 
 struct cqe_rx_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   rb11_ptr:64;
 	uint64_t   rb10_ptr:64;
 	uint64_t   rb9_ptr:64;
@@ -196,7 +199,7 @@ struct cqe_rx_t {
 	uint64_t   l2_present:1;
 	uint64_t   err_level:3;
 	uint64_t   err_opcode:8; 
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE_ENDIAN */
 	uint64_t   err_opcode:8; 
 	uint64_t   err_level:3;
 	uint64_t   l2_present:1;
@@ -255,7 +258,7 @@ struct cqe_rx_t {
 };
 
 struct cqe_rx_tcp_err_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   rsvd1:4;
 	uint64_t   partial_first:1;
 	uint64_t   rsvd2:27;
@@ -263,7 +266,7 @@ struct cqe_rx_tcp_err_t {
 	uint64_t   rsvd3:24;
 	uint64_t   cqe_type:4;
 	uint64_t   rsvd0:60;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t   rsvd0:60;
 	uint64_t   cqe_type:4;
 	uint64_t   rsvd3:24;
@@ -275,7 +278,7 @@ struct cqe_rx_tcp_err_t {
 };
 
 struct cqe_rx_tcp_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   rsvd1:32;
 	uint64_t   tcp_cntx_bytes:8;
 	uint64_t   rsvd2:8;
@@ -283,7 +286,7 @@ struct cqe_rx_tcp_t {
 	uint64_t   cqe_type:4;
 	uint64_t   rsvd0:52; 
 	uint64_t   cq_tcp_status:8;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t   cq_tcp_status:8;
 	uint64_t   rsvd0:52; 
 	uint64_t   cqe_type:4;
@@ -295,7 +298,7 @@ struct cqe_rx_tcp_t {
 };
 
 struct cqe_send_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   ptp_timestamp:64; 
 	uint64_t   cqe_type:4;
 	uint64_t   rsvd0:4; 
@@ -306,7 +309,7 @@ struct cqe_send_t {
 	uint64_t   sq_idx:3; 
 	uint64_t   rsvd3:8; 
 	uint64_t   send_status:8; 
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t   send_status:8; 
 	uint64_t   rsvd3:8; 
 	uint64_t   sq_idx:3; 
@@ -329,11 +332,11 @@ union cq_desc_t {
 };
 
 struct rbdr_entry_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   rsvd0:15;
 	uint64_t   buf_addr:42;
 	uint64_t   cache_align:7;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t   cache_align:7;
 	uint64_t   buf_addr:42;
 	uint64_t   rsvd0:15;
@@ -342,7 +345,7 @@ struct rbdr_entry_t {
 
 /* TCP reassembly context */
 struct rbe_tcp_cnxt_t {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t   tcp_pkt_cnt:12;
 	uint64_t   rsvd1:4;
 	uint64_t   align_hdr_bytes:4;
@@ -353,7 +356,7 @@ struct rbe_tcp_cnxt_t {
 	uint64_t   rsvd0:54;
 	uint64_t   tcp_end_reason:2;
 	uint64_t   tcp_status:4;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t   tcp_status:4;
 	uint64_t   tcp_end_reason:2;
 	uint64_t   rsvd0:54;
@@ -423,7 +426,7 @@ enum sq_subdesc_type {
 };
 
 struct sq_crc_subdesc {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t    rsvd1:32;
 	uint64_t    crc_ival:32;
 	uint64_t    subdesc_type:4;
@@ -432,7 +435,7 @@ struct sq_crc_subdesc {
 	uint64_t    crc_insert_pos:16;
 	uint64_t    hdr_start:16;
 	uint64_t    crc_len:16;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t    crc_len:16;
 	uint64_t    hdr_start:16;
 	uint64_t    crc_insert_pos:16;
@@ -445,14 +448,14 @@ struct sq_crc_subdesc {
 };
 
 struct sq_gather_subdesc {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t    rsvd1:15;
 	uint64_t    addr:49;
 	uint64_t    subdesc_type:4;
 	uint64_t    ld_type:2;
 	uint64_t    rsvd0:42;
 	uint64_t    size:16;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t    size:16;
 	uint64_t    rsvd0:42;
 	uint64_t    ld_type:2;
@@ -464,12 +467,12 @@ struct sq_gather_subdesc {
 
 /* SQ immediate subdescriptor */
 struct sq_imm_subdesc {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t    data:64;
 	uint64_t    subdesc_type:4;
 	uint64_t    rsvd0:46;
 	uint64_t    len:14;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t    len:14;
 	uint64_t    rsvd0:46;
 	uint64_t    subdesc_type:4;
@@ -478,7 +481,7 @@ struct sq_imm_subdesc {
 };
 
 struct sq_mem_subdesc {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t    rsvd1:15;
 	uint64_t    addr:49;
 	uint64_t    subdesc_type:4;
@@ -487,7 +490,7 @@ struct sq_mem_subdesc {
 	uint64_t    wmem:1;
 	uint64_t    rsvd0:21;
 	uint64_t    offset:32;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t    offset:32;
 	uint64_t    rsvd0:21;
 	uint64_t    wmem:1;
@@ -500,7 +503,7 @@ struct sq_mem_subdesc {
 };
 
 struct sq_hdr_subdesc {
-#if defined(__BIG_ENDIAN_BITFIELD)
+#ifdef BIG_ENDIAN
 	uint64_t    tso_sdc_cont:8;
 	uint64_t    tso_sdc_first:8;
 	uint64_t    tso_l4_offset:8;
@@ -521,7 +524,7 @@ struct sq_hdr_subdesc {
 	uint64_t    l3_offset:8;
 	uint64_t    rsvd1:4;
 	uint64_t    tot_len:20;
-#elif defined(__LITTLE_ENDIAN_BITFIELD)
+#else /* LITTLE ENDIAN */
 	uint64_t    tot_len:20;
 	uint64_t    rsvd1:4;
 	uint64_t    l3_offset:8;
