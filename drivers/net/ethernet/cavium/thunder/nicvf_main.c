@@ -60,23 +60,25 @@ static void nicvf_dump_packet(struct sk_buff *skb)
 #endif
 }
 
-static void nicvf_update_stats(struct nicvf *nic, struct sk_buff *skb)
+#ifdef NICVF_ETHTOOL_ENABLE
+static void nicvf_set_rx_frame_cnt(struct nicvf *nic, struct sk_buff *skb)
 {
 	if (skb->len <= 64)
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_64);
+		nic->drv_stats.rx_frames_64++;
 	else if ((skb->len > 64) && (skb->len <= 127))
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_127);
+		nic->drv_stats.rx_frames_127++;
 	else if ((skb->len > 127) && (skb->len <= 255))
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_255);
+		nic->drv_stats.rx_frames_255++;
 	else if ((skb->len > 255) && (skb->len <= 511))
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_511);
+		nic->drv_stats.rx_frames_511++;
 	else if ((skb->len > 511) && (skb->len <= 1023))
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_1023);
+		nic->drv_stats.rx_frames_1023++;
 	else if ((skb->len > 1023) && (skb->len <= 1518))
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_1518);
+		nic->drv_stats.rx_frames_1518++;
 	else if (skb->len > 1518)
-		atomic64_add(1, (atomic64_t *)&nic->vstats.rx.rx_frames_jumbo);
+		nic->drv_stats.rx_frames_jumbo++;
 }
+#endif
 
 /* Register read/write APIs */
 void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val)
@@ -292,6 +294,7 @@ free_skb:
 }
 
 static void nicvf_snd_pkt_handler(struct net_device *netdev,
+				  struct cmp_queue *cq,
 				  void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb = NULL;
@@ -313,29 +316,25 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 					cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
-	atomic64_add(1, (atomic64_t *)&netdev->stats.tx_packets);
-	atomic64_add(hdr->tot_len, (atomic64_t *)&netdev->stats.tx_bytes);
 	nicvf_free_skb(nic, skb);
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
+	nicvf_check_cqe_tx_errs(nic, cq, cq_desc);
 }
 
 static void nicvf_rcv_pkt_handler(struct net_device *netdev,
-			struct napi_struct *napi, void *cq_desc, int cqe_type)
+				  struct napi_struct *napi,
+				  struct cmp_queue *cq,
+				  void *cq_desc, int cqe_type)
 {
 	struct sk_buff *skb;
 	struct nicvf *nic = netdev_priv(netdev);
-
-	if (!((cqe_type == CQE_TYPE_RX) || (cqe_type == CQE_TYPE_RX_SPLIT) ||
-						(cqe_type == CQE_TYPE_RX_TCP))) {
-		atomic64_add(1, (atomic64_t *)&netdev->stats.rx_dropped);
-		return;
-	}
+	struct cqe_rx_t *cqe_rx = (struct cqe_rx_t *)cq_desc;
+	int err = 0;
 
 	/* Check for errors */
-	if (nicvf_cq_check_errs(nic, cq_desc)) {
-		atomic64_add(1, (atomic64_t *)&netdev->stats.rx_errors);
+	err = nicvf_check_cqe_rx_errs(nic, cq, cq_desc);
+	if (err && !cqe_rx->rb_cnt)
 		return;
-	}
 
 	skb = nicvf_get_rcv_skb(nic, cq_desc);
 	if (!skb) {
@@ -345,12 +344,8 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 
 	nicvf_dump_packet(skb);
 
-	/* Update stats */
-	atomic64_add(1, (atomic64_t *)&netdev->stats.rx_packets);
-	atomic64_add(skb->len, (atomic64_t *)&netdev->stats.rx_bytes);
-
 #ifdef NICVF_ETHTOOL_ENABLE
-	nicvf_update_stats(nic, skb);
+	nicvf_set_rx_frame_cnt(nic, skb);
 #endif
 
 	skb->protocol = eth_type_trans(skb, netdev);
@@ -405,14 +400,17 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 			break;
 		}
 
-		nic_dbg(&nic->pdev->dev, "cq_desc->cqe_type %d\n", cq_desc->cqe_type);
+		nic_dbg(&nic->pdev->dev, "cq_desc->cqe_type %d\n",
+			cq_desc->cqe_type);
 		switch (cq_desc->cqe_type) {
 		case CQE_TYPE_RX:
-			nicvf_rcv_pkt_handler(netdev, napi, cq_desc, CQE_TYPE_RX);
+			nicvf_rcv_pkt_handler(netdev, napi, cq,
+					      cq_desc, CQE_TYPE_RX);
 			work_done++;
 		break;
 		case CQE_TYPE_SEND:
-			nicvf_snd_pkt_handler(netdev, cq_desc, CQE_TYPE_SEND);
+			nicvf_snd_pkt_handler(netdev, cq,
+					      cq_desc, CQE_TYPE_SEND);
 		break;
 		case CQE_TYPE_INVALID:
 		case CQE_TYPE_RX_SPLIT:
@@ -698,10 +696,12 @@ static void nicvf_update_tx_stats(struct nicvf *nic, struct sk_buff *skb) { }
 static int nicvf_sw_tso(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct sk_buff *segs, *nskb;
+	struct nicvf *nic = netdev_priv(netdev);
 
 	if (!skb_shinfo(skb)->gso_size)
 		return 1;
 
+	nic->drv_stats.tx_tso++;
 	/* Segment the large frame */
 	segs = skb_gso_segment(skb, netdev->features & ~NETIF_F_TSO);
 	if (IS_ERR(segs))
@@ -730,7 +730,6 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 	/* Check for minimum packet length */
 	if (skb->len <= ETH_HLEN) {
-		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_errors);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -763,9 +762,9 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 #endif
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
-		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_dropped);
-		nic_dbg(&nic->pdev->dev,
-			"VF%d: TX ring full, stop transmitting packets\n", nic->vnic_id);
+		nic->drv_stats.tx_busy++;
+		netdev_err(netdev, "VF%d: TX ring full, stopping queue%d\n",
+			   nic->vnic_id, qid);
 		return NETDEV_TX_BUSY;
 	}
 
@@ -838,12 +837,12 @@ static int nicvf_open(struct net_device *netdev)
 
 	if ((err = netif_set_real_num_tx_queues(netdev, qs->sq_cnt))) {
 		netdev_err(netdev,
-			"Failed to set real number of Tx queues: %d\n", err);
+			"Failed to set real no of Tx queues: %d\n", qs->sq_cnt);
 		return err;
 	}
 	if ((err = netif_set_real_num_rx_queues(netdev, qs->rq_cnt))) {
 		netdev_err(netdev,
-			"Failed to set real number of Rx queues: %d\n", err);
+			"Failed to set real no of Rx queues: %d\n", qs->rq_cnt);
 		return err;
 	}
 
@@ -950,14 +949,82 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 	return 0;
 }
 
+void nicvf_update_stats(struct nicvf *nic)
+{
+	int qidx;
+	struct nicvf_hw_stats *stats = &nic->stats;
+	struct nicvf_drv_stats *drv_stats = &nic->drv_stats;
+	struct queue_set *qs = nic->qs;
+
+#define GET_RX_STATS(reg) \
+	nicvf_reg_read(nic, NIC_VNIC_RX_STAT_0_13 | (reg << 3))
+#define GET_TX_STATS(reg) \
+	nicvf_reg_read(nic, NIC_VNIC_TX_STAT_0_4 | (reg << 3))
+
+	stats->rx_bytes_ok = GET_RX_STATS(RX_OCTS);
+	stats->rx_ucast_frames_ok = GET_RX_STATS(RX_UCAST);
+	stats->rx_bcast_frames_ok = GET_RX_STATS(RX_BCAST);
+	stats->rx_mcast_frames_ok = GET_RX_STATS(RX_MCAST);
+	stats->rx_fcs_errors = GET_RX_STATS(RX_FCS);
+	stats->rx_l2_errors = GET_RX_STATS(RX_L2ERR);
+	stats->rx_drop_red = GET_RX_STATS(RX_RED);
+	stats->rx_drop_overrun = GET_RX_STATS(RX_ORUN);
+	stats->rx_drop_bcast = GET_RX_STATS(RX_DRP_BCAST);
+	stats->rx_drop_mcast = GET_RX_STATS(RX_DRP_MCAST);
+	stats->rx_drop_l3_bcast = GET_RX_STATS(RX_DRP_L3BCAST);
+	stats->rx_drop_l3_mcast = GET_RX_STATS(RX_DRP_L3MCAST);
+
+	stats->tx_bytes_ok = GET_TX_STATS(TX_OCTS);
+	stats->tx_ucast_frames_ok = GET_TX_STATS(TX_UCAST);
+	stats->tx_bcast_frames_ok = GET_TX_STATS(TX_BCAST);
+	stats->tx_mcast_frames_ok = GET_TX_STATS(TX_MCAST);
+	stats->tx_drops = GET_RX_STATS(TX_DROP);
+
+	drv_stats->rx_frames_ok = stats->rx_ucast_frames_ok +
+				  stats->rx_bcast_frames_ok +
+				  stats->rx_mcast_frames_ok;
+	drv_stats->tx_frames_ok = stats->tx_ucast_frames_ok +
+				  stats->tx_bcast_frames_ok +
+				  stats->tx_mcast_frames_ok;
+	drv_stats->rx_drops = stats->rx_drop_red +
+			      stats->rx_drop_overrun;
+	drv_stats->rx_drops = stats->tx_drops;
+
+	/* Update RQ and SQ stats */
+	for (qidx = 0; qidx < qs->rq_cnt; qidx++)
+		nicvf_update_rq_stats(nic, qidx);
+	for (qidx = 0; qidx < qs->sq_cnt; qidx++)
+		nicvf_update_sq_stats(nic, qidx);
+}
+
+struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
+					    struct rtnl_link_stats64 *stats)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+	struct nicvf_hw_stats *hw_stats = &nic->stats;
+	struct nicvf_drv_stats *drv_stats = &nic->drv_stats;
+
+	nicvf_update_stats(nic);
+
+	stats->rx_bytes = hw_stats->rx_bytes_ok;
+	stats->rx_packets = drv_stats->rx_frames_ok;
+	stats->rx_dropped = drv_stats->rx_drops;
+
+	stats->tx_bytes = hw_stats->tx_bytes_ok;
+	stats->tx_packets = drv_stats->tx_frames_ok;
+	stats->tx_dropped = drv_stats->tx_drops;
+
+	return stats;
+}
+
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
 	.ndo_stop		= nicvf_stop,
 	.ndo_start_xmit		= nicvf_xmit,
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
+	.ndo_get_stats64	= nicvf_get_stats64,
 #if 0
-	.ndo_get_stats64	= nicvf_get_stats,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_rx_mode	= nicvf_set_rx_mode,
 	.ndo_vlan_rx_add_vid	= nicvf_vlan_rx_add_vid,
@@ -1018,6 +1085,10 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		err = -ENOMEM;
 		goto err_release_regions;
 	}
+
+	err = nicvf_set_qset_resources(nic);
+	if (err)
+		goto err_unmap_resources;
 
 #ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
 	netdev->hw_features |= NETIF_F_RXCSUM;
@@ -1101,4 +1172,3 @@ static void __exit nicvf_cleanup_module(void)
 
 module_init(nicvf_init_module);
 module_exit(nicvf_cleanup_module);
-

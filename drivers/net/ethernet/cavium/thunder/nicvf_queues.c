@@ -118,6 +118,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr, int rbdr_qidx)
 {
 	int head, tail;
 	struct sk_buff *skb;
+	uint64_t buf_addr;
 
 	if (!rbdr)
 		return;
@@ -132,9 +133,10 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr, int rbdr_qidx)
 							rbdr_qidx) >> 3;
 	/* Free SKBs */
 	while (head != tail) {
-		skb = nicvf_rb_ptr_to_skb(rbdr->desc[head]->buf_addr << NICVF_RCV_BUF_ALIGN);
-		pci_unmap_single(nic->pdev, (dma_addr_t)skb->data,
-				rbdr->buf_size, PCI_DMA_FROMDEVICE);
+		buf_addr = rbdr->desc[head]->buf_addr << NICVF_RCV_BUF_ALIGN;
+		skb = nicvf_rb_ptr_to_skb(buf_addr);
+		pci_unmap_single(nic->pdev, (dma_addr_t)buf_addr,
+				 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		dev_kfree_skb(skb);
 		head++;
 		head &= (rbdr->desc_mem.q_len - 1);
@@ -468,21 +470,10 @@ static void nicvf_free_resources(struct nicvf *nic)
 		nicvf_free_snd_queue(nic, &qs->sq[qidx]);
 }
 
-static int nicvf_init_resources(struct nicvf *nic)
+static int nicvf_alloc_resources(struct nicvf *nic)
 {
 	int qidx;
 	struct queue_set *qs = nic->qs;
-
-	/* Set queue count */
-	qs->rbdr_cnt = RBDR_CNT;
-	qs->rq_cnt = RCV_QUEUE_CNT;
-	qs->sq_cnt = SND_QUEUE_CNT;
-	qs->cq_cnt = CMP_QUEUE_CNT;
-
-	/* Set queue lengths */
-	qs->rbdr_len = RCV_BUF_COUNT;
-	qs->sq_len = SND_QUEUE_LEN;
-	qs->cq_len = CMP_QUEUE_LEN;
 
 	/* Alloc receive buffer descriptor ring */
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
@@ -515,20 +506,39 @@ alloc_fail:
 	return -ENOMEM;
 }
 
+int nicvf_set_qset_resources(struct nicvf *nic)
+{
+	struct queue_set *qs;
+
+	qs = kzalloc(sizeof(*qs), GFP_ATOMIC);
+	if (!qs)
+		return -ENOMEM;
+	nic->qs = qs;
+
+	/* Set count of each queue */
+	qs->rbdr_cnt = RBDR_CNT;
+	qs->rq_cnt = RCV_QUEUE_CNT;
+	qs->sq_cnt = SND_QUEUE_CNT;
+	qs->cq_cnt = CMP_QUEUE_CNT;
+
+	/* Set queue lengths */
+	qs->rbdr_len = RCV_BUF_COUNT;
+	qs->sq_len = SND_QUEUE_LEN;
+	qs->cq_len = CMP_QUEUE_LEN;
+	return 0;
+}
+
 int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 {
 	bool disable = false;
-	struct queue_set *qs;
+	struct queue_set *qs = nic->qs;
 	int qidx;
 
 	if (enable) {
-		if (!(qs = kzalloc(sizeof(*qs), GFP_ATOMIC)))
-			return -ENOMEM;
-
 		qs->vnic_id = nic->vnic_id;
 		nic->qs = qs;
 
-		if (nicvf_init_resources(nic))
+		if (nicvf_alloc_resources(nic))
 			return -ENOMEM;
 
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
@@ -557,19 +567,6 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	}
 
 	return 0;
-}
-
-/* Check for errors in the cmp.queue entry */
-int nicvf_cq_check_errs(struct nicvf *nic, void *cq_desc)
-{
-	uint32_t ret = false;
-	struct cqe_rx_t *cqe_rx;
-
-	cqe_rx = (struct cqe_rx_t *)cq_desc;
-	if (cqe_rx->err_level || cqe_rx->err_opcode)
-		ret = true;
-
-	return ret;
 }
 
 /* Get a free desc from send queue
@@ -872,14 +869,16 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = *rb_lens;
 		if (!frag) {
+			/* First fragment */
+			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
+					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 			skb = nicvf_rb_ptr_to_skb(*rb_ptrs);
 			skb_put(skb, payload_len);
-			/* First fragment */
-			pci_unmap_single(nic->pdev, (dma_addr_t)skb->data, rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		} else {
 			/* Add fragments */
+			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
+					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 			skb_frag = nicvf_rb_ptr_to_skb(*rb_ptrs);
-			pci_unmap_single(nic->pdev, (dma_addr_t)skb_frag->data, rbdr->buf_size, PCI_DMA_FROMDEVICE);
 
 			if (!skb_shinfo(skb)->frag_list)
 				skb_shinfo(skb)->frag_list = skb_frag;
@@ -1042,4 +1041,211 @@ int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 	}
 
 	return (reg_val & mask);
+}
+
+void nicvf_update_rq_stats(struct nicvf *nic, int rq_idx)
+{
+	struct rcv_queue *rq;
+
+#define GET_RQ_STATS(reg) \
+	nicvf_reg_read(nic, NIC_QSET_RQ_0_7_STAT_0_1 |\
+			    (rq_idx << NIC_Q_NUM_SHIFT) | (reg << 3))
+
+	rq = &nic->qs->rq[rq_idx];
+	rq->stats.bytes = GET_RQ_STATS(RQ_SQ_STATS_OCTS);
+	rq->stats.pkts = GET_RQ_STATS(RQ_SQ_STATS_PKTS);
+}
+
+void nicvf_update_sq_stats(struct nicvf *nic, int sq_idx)
+{
+	struct snd_queue *sq;
+
+#define GET_SQ_STATS(reg) \
+	nicvf_reg_read(nic, NIC_QSET_SQ_0_7_STAT_0_1 |\
+			    (sq_idx << NIC_Q_NUM_SHIFT) | (reg << 3))
+
+	sq = &nic->qs->sq[sq_idx];
+	sq->stats.bytes = GET_SQ_STATS(RQ_SQ_STATS_OCTS);
+	sq->stats.pkts = GET_SQ_STATS(RQ_SQ_STATS_PKTS);
+}
+
+/* Check for errors in the receive cmp.queue entry */
+int nicvf_check_cqe_rx_errs(struct nicvf *nic,
+			    struct cmp_queue *cq, void *cq_desc)
+{
+	struct cqe_rx_t *cqe_rx;
+	struct cmp_queue_stats *stats = &cq->stats;
+
+	cqe_rx = (struct cqe_rx_t *)cq_desc;
+	if (!cqe_rx->err_level && !cqe_rx->err_opcode) {
+		stats->rx.errop.good++;
+		return 0;
+	}
+
+	switch (cqe_rx->err_level) {
+	case CQ_ERRLVL_MAC:
+		stats->rx.errlvl.mac_errs++;
+	break;
+	case CQ_ERRLVL_L2:
+		stats->rx.errlvl.l2_errs++;
+	break;
+	case CQ_ERRLVL_L3:
+		stats->rx.errlvl.l3_errs++;
+	break;
+	case CQ_ERRLVL_L4:
+		stats->rx.errlvl.l4_errs++;
+	break;
+	}
+
+	switch (cqe_rx->err_opcode) {
+	case CQ_RX_ERROP_RE_PARTIAL:
+		stats->rx.errop.partial_pkts++;
+	break;
+	case CQ_RX_ERROP_RE_JABBER:
+		stats->rx.errop.jabber_errs++;
+	break;
+	case CQ_RX_ERROP_RE_FCS:
+		stats->rx.errop.fcs_errs++;
+	break;
+	case CQ_RX_ERROP_RE_TERMINATE:
+		stats->rx.errop.terminate_errs++;
+	break;
+	case CQ_RX_ERROP_RE_RX_CTL:
+		stats->rx.errop.bgx_rx_errs++;
+	break;
+	case CQ_RX_ERROP_PREL2_ERR:
+		stats->rx.errop.prel2_errs++;
+	break;
+	case CQ_RX_ERROP_L2_FRAGMENT:
+		stats->rx.errop.l2_frags++;
+	break;
+	case CQ_RX_ERROP_L2_OVERRUN:
+		stats->rx.errop.l2_overruns++;
+	break;
+	case CQ_RX_ERROP_L2_PFCS:
+		stats->rx.errop.l2_pfcs++;
+	break;
+	case CQ_RX_ERROP_L2_PUNY:
+		stats->rx.errop.l2_puny++;
+	break;
+	case CQ_RX_ERROP_L2_MAL:
+		stats->rx.errop.l2_hdr_malformed++;
+	break;
+	case CQ_RX_ERROP_L2_OVERSIZE:
+		stats->rx.errop.l2_oversize++;
+	break;
+	case CQ_RX_ERROP_L2_UNDERSIZE:
+		stats->rx.errop.l2_undersize++;
+	break;
+	case CQ_RX_ERROP_L2_LENMISM:
+		stats->rx.errop.l2_len_mismatch++;
+	break;
+	case CQ_RX_ERROP_L2_PCLP:
+		stats->rx.errop.l2_pclp++;
+	break;
+	case CQ_RX_ERROP_IP_NOT:
+		stats->rx.errop.non_ip++;
+	break;
+	case CQ_RX_ERROP_IP_CSUM_ERR:
+		stats->rx.errop.ip_csum_err++;
+	break;
+	case CQ_RX_ERROP_IP_MAL:
+		stats->rx.errop.ip_hdr_malformed++;
+	break;
+	case CQ_RX_ERROP_IP_MALD:
+		stats->rx.errop.ip_payload_malformed++;
+	break;
+	case CQ_RX_ERROP_IP_HOP:
+		stats->rx.errop.ip_hop_errs++;
+	break;
+	case CQ_RX_ERROP_L3_ICRC:
+		stats->rx.errop.l3_icrc_errs++;
+	break;
+	case CQ_RX_ERROP_L3_PCLP:
+		stats->rx.errop.l3_pclp++;
+	break;
+	case CQ_RX_ERROP_L4_MAL:
+		stats->rx.errop.l4_malformed++;
+	break;
+	case CQ_RX_ERROP_L4_CHK:
+		stats->rx.errop.l4_csum_errs++;
+	break;
+	case CQ_RX_ERROP_UDP_LEN:
+		stats->rx.errop.udp_len_err++;
+	break;
+	case CQ_RX_ERROP_L4_PORT:
+		stats->rx.errop.bad_l4_port++;
+	break;
+	case CQ_RX_ERROP_TCP_FLAG:
+		stats->rx.errop.bad_tcp_flag++;
+	break;
+	case CQ_RX_ERROP_TCP_OFFSET:
+		stats->rx.errop.tcp_offset_errs++;
+	break;
+	case CQ_RX_ERROP_L4_PCLP:
+		stats->rx.errop.l4_pclp++;
+	break;
+	case CQ_RX_ERROP_RBDR_TRUNC:
+		stats->rx.errop.pkt_truncated++;
+	break;
+	}
+
+	return 1;
+}
+
+/* Check for errors in the send cmp.queue entry */
+int nicvf_check_cqe_tx_errs(struct nicvf *nic,
+			    struct cmp_queue *cq, void *cq_desc)
+{
+	struct cqe_send_t *cqe_tx;
+	struct cmp_queue_stats *stats = &cq->stats;
+
+	cqe_tx = (struct cqe_send_t *)cq_desc;
+	switch (cqe_tx->send_status) {
+	case CQ_TX_ERROP_GOOD:
+		stats->tx.good++;
+		return 0;
+	break;
+	case CQ_TX_ERROP_DESC_FAULT:
+		stats->tx.desc_fault++;
+	break;
+	case CQ_TX_ERROP_HDR_CONS_ERR:
+		stats->tx.hdr_cons_err++;
+	break;
+	case CQ_TX_ERROP_SUBDC_ERR:
+		stats->tx.subdesc_err++;
+	break;
+	case CQ_TX_ERROP_IMM_SIZE_OFLOW:
+		stats->tx.imm_size_oflow++;
+	break;
+	case CQ_TX_ERROP_DATA_SEQUENCE_ERR:
+		stats->tx.data_seq_err++;
+	break;
+	case CQ_TX_ERROP_MEM_SEQUENCE_ERR:
+		stats->tx.mem_seq_err++;
+	break;
+	case CQ_TX_ERROP_LOCK_VIOL:
+		stats->tx.lock_viol++;
+	break;
+	case CQ_TX_ERROP_DATA_FAULT:
+		stats->tx.data_fault++;
+	break;
+	case CQ_TX_ERROP_TSTMP_CONFLICT:
+		stats->tx.tstmp_conflict++;
+	break;
+	case CQ_TX_ERROP_TSTMP_TIMEOUT:
+		stats->tx.tstmp_timeout++;
+	break;
+	case CQ_TX_ERROP_MEM_FAULT:
+		stats->tx.mem_fault++;
+	break;
+	case CQ_TX_ERROP_CK_OVERLAP:
+		stats->tx.csum_overlap++;
+	break;
+	case CQ_TX_ERROP_CK_OFLOW:
+		stats->tx.csum_overflow++;
+	break;
+	}
+
+	return 1;
 }

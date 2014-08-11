@@ -90,7 +90,7 @@
 
 #define   NIC_VNIC_RSS_CFG			(0x0020E0)
 #define   NIC_VNIC_RSS_KEY_0_4			(0x002200) /* + (0..4) << 3*/
-#define   NIC_VNIC_TX_STAT_0_5			(0x004000)
+#define   NIC_VNIC_TX_STAT_0_4			(0x004000)
 #define   NIC_VNIC_RX_STAT_0_13			(0x004100)
 
 #define   NIC_QSET_CQ_0_7_CFG			(0x010400)
