@@ -73,6 +73,140 @@
 #define    NICVF_ADDR_ALIGN_LEN(ADDR, BYTES)	(NICVF_ALIGNED_ADDR(ADDR, BYTES) - BYTES)
 #define    NICVF_RCV_BUF_ALIGN_LEN(X)		(NICVF_ALIGNED_ADDR(X, NICVF_RCV_BUF_ALIGN_BYTES) - X)
 
+enum CQ_RX_ERRLVL_E {
+	CQ_ERRLVL_MAC,
+	CQ_ERRLVL_L2,
+	CQ_ERRLVL_L3,
+	CQ_ERRLVL_L4,
+};
+
+enum CQ_RX_ERROP_E {
+	CQ_RX_ERROP_RE_NONE = 0x0,
+	CQ_RX_ERROP_RE_PARTIAL = 0x1,
+	CQ_RX_ERROP_RE_JABBER = 0x2,
+	CQ_RX_ERROP_RE_FCS = 0x7,
+	CQ_RX_ERROP_RE_TERMINATE = 0x9,
+	CQ_RX_ERROP_RE_RX_CTL = 0xb,
+	CQ_RX_ERROP_PREL2_ERR = 0x1f,
+	CQ_RX_ERROP_L2_FRAGMENT = 0x20,
+	CQ_RX_ERROP_L2_OVERRUN = 0x21,
+	CQ_RX_ERROP_L2_PFCS = 0x22,
+	CQ_RX_ERROP_L2_PUNY = 0x23,
+	CQ_RX_ERROP_L2_MAL = 0x24,
+	CQ_RX_ERROP_L2_OVERSIZE = 0x25,
+	CQ_RX_ERROP_L2_UNDERSIZE = 0x26,
+	CQ_RX_ERROP_L2_LENMISM = 0x27,
+	CQ_RX_ERROP_L2_PCLP = 0x28,
+	CQ_RX_ERROP_IP_NOT = 0x41,
+	CQ_RX_ERROP_IP_CSUM_ERR = 0x42,
+	CQ_RX_ERROP_IP_MAL = 0x43,
+	CQ_RX_ERROP_IP_MALD = 0x44,
+	CQ_RX_ERROP_IP_HOP = 0x45,
+	CQ_RX_ERROP_L3_ICRC = 0x46,
+	CQ_RX_ERROP_L3_PCLP = 0x47,
+	CQ_RX_ERROP_L4_MAL = 0x61,
+	CQ_RX_ERROP_L4_CHK = 0x62,
+	CQ_RX_ERROP_UDP_LEN = 0x63,
+	CQ_RX_ERROP_L4_PORT = 0x64,
+	CQ_RX_ERROP_TCP_FLAG = 0x65,
+	CQ_RX_ERROP_TCP_OFFSET = 0x66,
+	CQ_RX_ERROP_L4_PCLP = 0x67,
+	CQ_RX_ERROP_RBDR_TRUNC = 0x70,
+};
+
+enum CQ_TX_ERROP_E {
+	CQ_TX_ERROP_GOOD = 0x0,
+	CQ_TX_ERROP_DESC_FAULT = 0x10,
+	CQ_TX_ERROP_HDR_CONS_ERR = 0x11,
+	CQ_TX_ERROP_SUBDC_ERR = 0x12,
+	CQ_TX_ERROP_IMM_SIZE_OFLOW = 0x80,
+	CQ_TX_ERROP_DATA_SEQUENCE_ERR = 0x81,
+	CQ_TX_ERROP_MEM_SEQUENCE_ERR = 0x82,
+	CQ_TX_ERROP_LOCK_VIOL = 0x83,
+	CQ_TX_ERROP_DATA_FAULT = 0x84,
+	CQ_TX_ERROP_TSTMP_CONFLICT = 0x85,
+	CQ_TX_ERROP_TSTMP_TIMEOUT = 0x86,
+	CQ_TX_ERROP_MEM_FAULT = 0x87,
+	CQ_TX_ERROP_CK_OVERLAP = 0x88,
+	CQ_TX_ERROP_CK_OFLOW = 0x89,
+	CQ_TX_ERROP_ENUM_LAST = 0x8a,
+};
+
+struct cmp_queue_stats {
+	struct rx_stats {
+		struct {
+			u64 mac_errs;
+			u64 l2_errs;
+			u64 l3_errs;
+			u64 l4_errs;
+		} errlvl;
+		struct {
+			u64 good;
+			u64 partial_pkts;
+			u64 jabber_errs;
+			u64 fcs_errs;
+			u64 terminate_errs;
+			u64 bgx_rx_errs;
+			u64 prel2_errs;
+			u64 l2_frags;
+			u64 l2_overruns;
+			u64 l2_pfcs;
+			u64 l2_puny;
+			u64 l2_hdr_malformed;
+			u64 l2_oversize;
+			u64 l2_undersize;
+			u64 l2_len_mismatch;
+			u64 l2_pclp;
+			u64 non_ip;
+			u64 ip_csum_err;
+			u64 ip_hdr_malformed;
+			u64 ip_payload_malformed;
+			u64 ip_hop_errs;
+			u64 l3_icrc_errs;
+			u64 l3_pclp;
+			u64 l4_malformed;
+			u64 l4_csum_errs;
+			u64 udp_len_err;
+			u64 bad_l4_port;
+			u64 bad_tcp_flag;
+			u64 tcp_offset_errs;
+			u64 l4_pclp;
+			u64 pkt_truncated;
+		} errop;
+	} rx;
+	struct tx_stats {
+		u64 good;
+		u64 desc_fault;
+		u64 hdr_cons_err;
+		u64 subdesc_err;
+		u64 imm_size_oflow;
+		u64 data_seq_err;
+		u64 mem_seq_err;
+		u64 lock_viol;
+		u64 data_fault;
+		u64 tstmp_conflict;
+		u64 tstmp_timeout;
+		u64 mem_fault;
+		u64 csum_overlap;
+		u64 csum_overflow;
+	} tx;
+};
+
+enum RQ_SQ_STATS {
+	RQ_SQ_STATS_OCTS,
+	RQ_SQ_STATS_PKTS,
+};
+
+struct rcv_queue_stats {
+	u64	bytes;
+	u64	pkts;
+};
+
+struct snd_queue_stats {
+	u64	bytes;
+	u64	pkts;
+};
+
 struct q_desc_mem {
 	dma_addr_t	dma;
 	uint64_t	size;
@@ -100,6 +234,7 @@ struct rcv_queue {
 	uint8_t cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
 	uint8_t start_rbdr_qs;     /* First buffer pointers - QS num */
 	uint8_t start_qs_rbdr_idx; /* RBDR idx in the above QS */
+	struct rcv_queue_stats stats;
 };
 
 struct cmp_queue {
@@ -107,6 +242,7 @@ struct cmp_queue {
 	uint8_t    intr_timer_thresh;
 	uint16_t   thresh;
 	spinlock_t cq_lock;  /* lock to serialize processing CQEs */
+	struct cmp_queue_stats	stats;
 };
 
 struct sq_desc {
@@ -123,6 +259,7 @@ struct snd_queue {
 	uint64_t  head;
 	uint64_t  tail;
 	uint64_t  *skbuff;
+	struct    snd_queue_stats stats;
 };
 
 struct queue_set {
@@ -151,15 +288,17 @@ struct queue_set {
 /* CQ err mask */
 #define		CQ_ERR_MASK	(CQ_WR_FULL | CQ_WR_DISABLE | CQ_WR_FAULT)
 
+int nicvf_set_qset_resources(struct nicvf *nic);
 int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
 void nicvf_qset_config(struct nicvf *nic, bool enable);
+void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
+			    int qidx, bool enable);
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx);
 void nicvf_sq_disable(struct nicvf *nic, int qidx);
 void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt);
 void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq, int qidx);
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb);
 
-int nicvf_cq_check_errs(struct nicvf *nic, void *cq_desc);
 struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc);
 void nicvf_refill_rbdr(unsigned long data);
 
@@ -178,5 +317,11 @@ uint64_t nicvf_qset_reg_read(struct nicvf *nic, uint64_t offset);
 void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
 				uint64_t qidx, uint64_t val);
 uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx);
-void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs, int qidx, bool enable);
+/* Stats */
+void nicvf_update_rq_stats(struct nicvf *nic, int rq_idx);
+void nicvf_update_sq_stats(struct nicvf *nic, int sq_idx);
+int nicvf_check_cqe_rx_errs(struct nicvf *nic,
+			    struct cmp_queue *cq, void *cq_desc);
+int nicvf_check_cqe_tx_errs(struct nicvf *nic,
+			    struct cmp_queue *cq, void *cq_desc);
 #endif /* NICVF_QUEUES_H */

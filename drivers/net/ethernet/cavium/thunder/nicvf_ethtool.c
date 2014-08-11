@@ -21,56 +21,55 @@ struct nicvf_stat {
 	unsigned int index;
 };
 
-#define NICVF_TX_STAT(stat) { \
+#define NICVF_HW_STAT(stat) { \
 	.name = #stat, \
-	.index = offsetof(struct nicvf_tx_stats, stat) / sizeof(u64) \
+	.index = offsetof(struct nicvf_hw_stats, stat) / sizeof(u64) \
 }
 
-#define NICVF_RX_STAT(stat) { \
+#define NICVF_DRV_STAT(stat) { \
 	.name = #stat, \
-	.index = offsetof(struct nicvf_rx_stats, stat) / sizeof(u64) \
+	.index = offsetof(struct nicvf_drv_stats, stat) / sizeof(u64) \
 }
 
-static const struct nicvf_stat nicvf_tx_stats[] = {
-	NICVF_TX_STAT(tx_frames_ok),
-	NICVF_TX_STAT(tx_unicast_frames_ok),
-	NICVF_TX_STAT(tx_multicast_frames_ok),
-	NICVF_TX_STAT(tx_broadcast_frames_ok),
-	NICVF_TX_STAT(tx_bytes_ok),
-	NICVF_TX_STAT(tx_unicast_bytes_ok),
-	NICVF_TX_STAT(tx_multicast_bytes_ok),
-	NICVF_TX_STAT(tx_broadcast_bytes_ok),
-	NICVF_TX_STAT(tx_drops),
-	NICVF_TX_STAT(tx_errors),
-	NICVF_TX_STAT(tx_tso),
+static const struct nicvf_stat nicvf_hw_stats[] = {
+	NICVF_HW_STAT(rx_bytes_ok),
+	NICVF_HW_STAT(rx_ucast_frames_ok),
+	NICVF_HW_STAT(rx_bcast_frames_ok),
+	NICVF_HW_STAT(rx_mcast_frames_ok),
+	NICVF_HW_STAT(rx_fcs_errors),
+	NICVF_HW_STAT(rx_l2_errors),
+	NICVF_HW_STAT(rx_drop_red),
+	NICVF_HW_STAT(rx_drop_red_bytes),
+	NICVF_HW_STAT(rx_drop_overrun),
+	NICVF_HW_STAT(rx_drop_overrun_bytes),
+	NICVF_HW_STAT(rx_drop_bcast),
+	NICVF_HW_STAT(rx_drop_mcast),
+	NICVF_HW_STAT(rx_drop_l3_bcast),
+	NICVF_HW_STAT(rx_drop_l3_mcast),
+	NICVF_HW_STAT(tx_bytes_ok),
+	NICVF_HW_STAT(tx_ucast_frames_ok),
+	NICVF_HW_STAT(tx_bcast_frames_ok),
+	NICVF_HW_STAT(tx_mcast_frames_ok),
 };
 
-static const struct nicvf_stat nicvf_rx_stats[] = {
-	NICVF_RX_STAT(rx_frames_ok),
-	NICVF_RX_STAT(rx_frames_total),
-	NICVF_RX_STAT(rx_unicast_frames_ok),
-	NICVF_RX_STAT(rx_multicast_frames_ok),
-	NICVF_RX_STAT(rx_broadcast_frames_ok),
-	NICVF_RX_STAT(rx_bytes_ok),
-	NICVF_RX_STAT(rx_unicast_bytes_ok),
-	NICVF_RX_STAT(rx_multicast_bytes_ok),
-	NICVF_RX_STAT(rx_broadcast_bytes_ok),
-	NICVF_RX_STAT(rx_drop),
-	NICVF_RX_STAT(rx_no_bufs),
-	NICVF_RX_STAT(rx_errors),
-	NICVF_RX_STAT(rx_rss),
-	NICVF_RX_STAT(rx_crc_errors),
-	NICVF_RX_STAT(rx_frames_64),
-	NICVF_RX_STAT(rx_frames_127),
-	NICVF_RX_STAT(rx_frames_255),
-	NICVF_RX_STAT(rx_frames_511),
-	NICVF_RX_STAT(rx_frames_1023),
-	NICVF_RX_STAT(rx_frames_1518),
-	NICVF_RX_STAT(rx_frames_jumbo),
+static const struct nicvf_stat nicvf_drv_stats[] = {
+	NICVF_DRV_STAT(rx_frames_ok),
+	NICVF_DRV_STAT(rx_frames_64),
+	NICVF_DRV_STAT(rx_frames_127),
+	NICVF_DRV_STAT(rx_frames_255),
+	NICVF_DRV_STAT(rx_frames_511),
+	NICVF_DRV_STAT(rx_frames_1023),
+	NICVF_DRV_STAT(rx_frames_1518),
+	NICVF_DRV_STAT(rx_frames_jumbo),
+	NICVF_DRV_STAT(rx_drops),
+	NICVF_DRV_STAT(tx_frames_ok),
+	NICVF_DRV_STAT(tx_busy),
+	NICVF_DRV_STAT(tx_tso),
+	NICVF_DRV_STAT(tx_drops),
 };
 
-static const unsigned int nicvf_n_tx_stats = ARRAY_SIZE(nicvf_tx_stats);
-static const unsigned int nicvf_n_rx_stats = ARRAY_SIZE(nicvf_rx_stats);
+static const unsigned int nicvf_n_hw_stats = ARRAY_SIZE(nicvf_hw_stats);
+static const unsigned int nicvf_n_drv_stats = ARRAY_SIZE(nicvf_drv_stats);
 
 static int nicvf_get_settings(struct net_device *netdev,
 			     struct ethtool_cmd *cmd)
@@ -133,45 +132,35 @@ static void nicvf_get_strings(struct net_device *netdev, u32 stringset,
 {
 	int stats;
 
-	for (stats = 0; stats < nicvf_n_tx_stats; stats++) {
-		memcpy(data, nicvf_tx_stats[stats].name, ETH_GSTRING_LEN);
+	for (stats = 0; stats < nicvf_n_hw_stats; stats++) {
+		memcpy(data, nicvf_hw_stats[stats].name, ETH_GSTRING_LEN);
 		data += ETH_GSTRING_LEN;
 	}
-	for (stats = 0; stats < nicvf_n_rx_stats; stats++) {
-		memcpy(data, nicvf_rx_stats[stats].name, ETH_GSTRING_LEN);
+	for (stats = 0; stats < nicvf_n_drv_stats; stats++) {
+		memcpy(data, nicvf_drv_stats[stats].name, ETH_GSTRING_LEN);
 		data += ETH_GSTRING_LEN;
 	}
 }
 
 static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 {
-	return nicvf_n_tx_stats + nicvf_n_rx_stats;
+	return nicvf_n_hw_stats + nicvf_n_drv_stats;
 }
 
 static void nicvf_get_ethtool_stats(struct net_device *netdev,
 				   struct ethtool_stats *stats, u64 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
-	struct eth_stats vstats = nic->vstats;
 	int stat;
 
-	memset(&vstats, 0, sizeof(struct eth_stats));
+	nicvf_update_stats(nic);
 
-	nic->vstats.tx.tx_frames_ok = netdev->stats.tx_packets;
-	nic->vstats.tx.tx_bytes_ok = netdev->stats.tx_bytes;
-	nic->vstats.tx.tx_errors = netdev->stats.tx_errors;
-	nic->vstats.tx.tx_drops = netdev->stats.tx_dropped;
-	nic->vstats.rx.rx_frames_ok = netdev->stats.rx_packets;
-	nic->vstats.rx.rx_bytes_ok = netdev->stats.rx_bytes;
-	nic->vstats.rx.rx_errors = netdev->stats.rx_errors;
-	nic->vstats.rx.rx_drop = netdev->stats.rx_dropped;
-
-	for (stat = 0; stat < nicvf_n_tx_stats; stat++)
-		*(data++) = ((u64 *)&nic->vstats.tx)
-				[nicvf_tx_stats[stat].index];
-	for (stat = 0; stat < nicvf_n_rx_stats; stat++)
-		*(data++) = ((u64 *)&nic->vstats.rx)
-				[nicvf_rx_stats[stat].index];
+	for (stat = 0; stat < nicvf_n_hw_stats; stat++)
+		*(data++) = ((u64 *)&nic->stats)
+				[nicvf_hw_stats[stat].index];
+	for (stat = 0; stat < nicvf_n_drv_stats; stat++)
+		*(data++) = ((u64 *)&nic->drv_stats)
+				[nicvf_drv_stats[stat].index];
 }
 
 static const struct ethtool_ops nicvf_ethtool_ops = {
