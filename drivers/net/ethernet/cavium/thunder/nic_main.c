@@ -1,9 +1,10 @@
 /*
- * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file "COPYING" in the main directory of this archive
- * for more details.
- *
  * Copyright (C) 2014 Cavium, Inc.
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
  */
 
 #include <linux/module.h>
@@ -40,8 +41,8 @@ static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
 };
 
 MODULE_AUTHOR("Cavium Inc");
-MODULE_DESCRIPTION("Cavium Thunder Physical Function Driver");
-MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Cavium Thunder NIC Physical Function Driver");
+MODULE_LICENSE("GPLv2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nic_id_table);
 
