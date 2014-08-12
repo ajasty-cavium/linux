@@ -64,40 +64,19 @@ static uint64_t nic_reg_read(struct nicpf *nic, uint64_t offset)
 /* PF -> VF mailbox communication APIs */
 static void nic_enable_mbx_intr(struct nicpf *nic)
 {
-	int	 irq;
-	uint64_t vf_mbx_intr_enable = 0;
-
-	/* TBD: Need to support runtime SRIOV VF count configuratuon */
-	/* Or consider enabling all VF's interrupts, since there is no harm */
-	for (irq = 0; irq < 64; irq++)
-		if (irq < nic->num_vf_en)
-			vf_mbx_intr_enable |= (1 << irq);
-	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S, vf_mbx_intr_enable);
-
-	if (nic->num_vf_en < 64)
-		return;
-
-	vf_mbx_intr_enable = 0;
-	for (irq = 0; irq < 64; irq++)
-		if (irq < (nic->num_vf_en - 64))
-			vf_mbx_intr_enable |= (1 << irq);
-	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + (1 << 3), vf_mbx_intr_enable);
+	/* Enable mailbox interrupt for all 128 VFs */
+	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S, ~0x00ull);
+	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + (1 << 3), ~0x00ull);
 }
 
 static uint64_t nic_get_mbx_intr_status(struct nicpf *nic, int mbx_reg)
 {
-	if (!mbx_reg)	/* first 64 VFs */
-		return nic_reg_read(nic, NIC_PF_MAILBOX_INT);
-	else		/* Next 64 VFs */
-		return nic_reg_read(nic, NIC_PF_MAILBOX_INT + (1 << 3));
+	return nic_reg_read(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3));
 }
 
-static void nic_clear_mbx_intr(struct nicpf *nic, int vf)
+static void nic_clear_mbx_intr(struct nicpf *nic, int vf, int mbx_reg)
 {
-	if (!(vf / 64))	/* first 64 VFs */
-		nic_reg_write(nic, NIC_PF_MAILBOX_INT, (1ULL << vf));
-	else		/* Next 64 VFs */
-		nic_reg_write(nic, NIC_PF_MAILBOX_INT + (1 << 3), (1ULL << (vf - 64)));
+	nic_reg_write(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3), (1ULL << vf));
 }
 
 static uint64_t nic_get_mbx_addr(int vf)
@@ -154,8 +133,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	int i;
 	int ret = 0;
 
-	mbx_addr = NIC_PF_VF_0_127_MAILBOX_0_7;
-	mbx_addr += (vf << NIC_VF_NUM_SHIFT);
+	mbx_addr = nic_get_mbx_addr(vf);
 	mbx_data = (uint64_t *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
@@ -303,7 +281,6 @@ static void nic_channel_cfg(struct nicpf *nic, int vnic)
 	tl4 = (lmac * NIC_TL4_PER_LMAC) + (bgx * NIC_TL4_PER_BGX);
 
 	for (sq_idx = 0; sq_idx < 8; sq_idx++) {
-		tl4 = tl4 + sq_idx;
 		tl3 = tl4 / (NIC_MAX_TL4 / NIC_MAX_TL3);
 		nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
 					(vnic << NIC_QS_ID_SHIFT) |
@@ -313,22 +290,40 @@ static void nic_channel_cfg(struct nicpf *nic, int vnic)
 		nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
 		nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3),
 			      (lmac << 4));
+		tl4++;
 	}
 }
 
 static irqreturn_t nic_intr_handler (int irq, void *nic_irq)
 {
 	int vf;
+	uint16_t vf_per_mbx_reg = 64;
 	uint64_t intr;
 	struct nicpf *nic = (struct nicpf *)nic_irq;
 
-	intr = nic_get_mbx_intr_status(nic, 0); /* Mbox 0 */
-	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt 0x%llx\n", intr);
-	for (vf = 0; vf < nic->num_vf_en; vf++) {
-		if (intr & (1 << vf)) {
+	/* MBOX reg 0 */
+	intr = nic_get_mbx_intr_status(nic, 0);
+	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt MBX0 0x%llx\n", intr);
+	for (vf = 0; vf < min(nic->num_vf_en, vf_per_mbx_reg); vf++) {
+		if (intr & (1ULL << vf)) {
 			nic_dbg(&nic->pdev->dev, "Intr from VF %d\n", vf);
 			nic_handle_mbx_intr(nic, vf);
-			nic_clear_mbx_intr(nic, vf);
+			nic_clear_mbx_intr(nic, vf, 0);
+		}
+	}
+
+	if (nic->num_vf_en <= vf_per_mbx_reg)
+		return IRQ_HANDLED;
+
+	/* MBOX reg 1 */
+	intr = nic_get_mbx_intr_status(nic, 1);
+	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt MBX1 0x%llx\n", intr);
+	for (vf = 0; vf < (nic->num_vf_en - vf_per_mbx_reg); vf++) {
+		if (intr & (1ULL << vf)) {
+			nic_dbg(&nic->pdev->dev,
+				"Intr from VF %d\n", vf + vf_per_mbx_reg);
+			nic_handle_mbx_intr(nic, vf + vf_per_mbx_reg);
+			nic_clear_mbx_intr(nic, vf, 1);
 		}
 	}
 
@@ -345,21 +340,10 @@ static int nic_enable_msix(struct nicpf *nic)
 		nic->msix_entries[i].entry = i;
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-	if (ret < 0) {
+	if (ret) {
 		netdev_err(nic->netdev,
 			"Request for #%d msix vectors failed\n", nic->num_vec);
 		return 0;
-	} else if (ret > 0) {
-		netdev_err(nic->netdev,
-			"Request for #%d msix vectors failed, requesting #%d\n",
-			nic->num_vec, ret);
-
-		nic->num_vec = ret;
-		ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-		if (ret) {
-			netdev_warn(nic->netdev, "Request for msix vectors failed\n");
-			return 0;
-		}
 	}
 
 	nic->msix_enabled = 1;
@@ -530,7 +514,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
 	if (err) {
-		dev_err(dev, "unable to get 40-bit DMA for consistent allocations\n");
+		dev_err(dev, "unable to get 48-bit DMA for consistent allocations\n");
 		goto err_release_regions;
 	}
 
@@ -545,12 +529,12 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Initialize hardware */
 	nic_init_hw(nic);
 
-	/* Configure SRIOV */
-	if (!nic_sriov_init(pdev, nic))
-		goto err_unmap_resources;
-
 	/* Register interrupts */
 	if (nic_register_interrupts(nic))
+		goto err_unmap_resources;
+
+	/* Configure SRIOV */
+	if (!nic_sriov_init(pdev, nic))
 		goto err_unmap_resources;
 
 	goto exit;

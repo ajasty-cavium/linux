@@ -746,6 +746,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 	}
 }
 
+#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
 static void nicvf_fill_l3_crc_subdesc(struct sq_crc_subdesc *l3,
 					struct sk_buff *skb)
 {
@@ -804,6 +805,7 @@ static void nicvf_sq_add_crc_subdesc(struct nicvf *nic, struct queue_set *qs,
 		nicvf_fill_l4_crc_subdesc(crc, skb);
 	}
 }
+#endif
 
 /* Append an skb to a SQ for packet transfer. */
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
