@@ -788,9 +788,6 @@ static int nicvf_stop(struct net_device *netdev)
 	/* Free resources */
 	nicvf_config_data_transfer(nic, false);
 
-	/* Free Qset */
-	kfree(qs);
-
 	return 0;
 }
 
@@ -1116,6 +1113,9 @@ static void nicvf_remove(struct pci_dev *pdev)
 
 	if (nic->reg_base)
 		iounmap((void *)nic->reg_base);
+
+	/* Free Qset */
+	kfree(nic->qs);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
