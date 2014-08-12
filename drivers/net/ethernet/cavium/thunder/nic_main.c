@@ -8,21 +8,10 @@
  */
 
 #include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/string.h>
-#include <linux/errno.h>
-#include <linux/types.h>
-#include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/workqueue.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
-#include <linux/if.h>
-#include <linux/if_ether.h>
-#include <linux/if_vlan.h>
-#include <linux/ethtool.h>
-#include <linux/aer.h>
 
 #include "nic_reg.h"
 #include "nic.h"
