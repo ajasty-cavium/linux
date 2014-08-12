@@ -7,14 +7,8 @@
  * the License, or (at your option) any later version.
  */
 
-#include <linux/kernel.h>
-#include <linux/errno.h>
-#include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
-#include <linux/if_vlan.h>
-#include <linux/ip.h>
-#include <net/checksum.h>
 
 #include "nic_reg.h"
 #include "nic.h"
