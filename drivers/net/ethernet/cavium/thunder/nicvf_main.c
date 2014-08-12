@@ -574,21 +574,10 @@ static int nicvf_enable_msix(struct nicvf *nic)
 		nic->msix_entries[i].entry = i;
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-	if (ret < 0) {
+	if (ret) {
 		netdev_err(nic->netdev,
 			"Request for #%d msix vectors failed\n", nic->num_vec);
 		return 0;
-	} else if (ret > 0) {
-		netdev_err(nic->netdev,
-			"Request for #%d msix vectors failed, requesting #%d\n",
-			nic->num_vec, ret);
-
-		nic->num_vec = ret;
-		ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
-		if (ret) {
-			netdev_warn(nic->netdev, "Request for msix vectors failed\n");
-			return 0;
-		}
 	}
 	nic->msix_enabled = 1;
 	return 1;
@@ -1025,13 +1014,6 @@ static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
 	.ndo_get_stats64	= nicvf_get_stats64,
-#if 0
-	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_set_rx_mode	= nicvf_set_rx_mode,
-	.ndo_vlan_rx_add_vid	= nicvf_vlan_rx_add_vid,
-	.ndo_vlan_rx_kill_vid	= nicvf_vlan_rx_kill_vid,
-	.ndo_tx_timeout		= nicvf_tx_timeout,
-#endif
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1068,14 +1050,14 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	err = pci_set_dma_mask(pdev, DMA_BIT_MASK(48));
-	if (!err) {
-		err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
-		if (err) {
-			dev_err(dev, "unable to get 48-bit DMA for consistent allocations\n");
-			goto err_release_regions;
-		}
-	} else {
+	if (err) {
 		dev_err(dev, "Unable to get usable DMA configuration\n");
+		goto err_release_regions;
+	}
+
+	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
+	if (err) {
+		dev_err(dev, "unable to get 48-bit DMA for consistent allocations\n");
 		goto err_release_regions;
 	}
 
