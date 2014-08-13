@@ -29,7 +29,7 @@ static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
 	{ 0, }  /* end of table */
 };
 
-MODULE_AUTHOR("Cavium Inc");
+MODULE_AUTHOR("Sunil Goutham");
 MODULE_DESCRIPTION("Cavium Thunder NIC Physical Function Driver");
 MODULE_LICENSE("GPLv2");
 MODULE_VERSION(DRV_VERSION);

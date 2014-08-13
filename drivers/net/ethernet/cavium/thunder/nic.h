@@ -34,7 +34,7 @@
 #undef	VNIC_TX_CSUM_OFFLOAD_SUPPORT
 #define	VNIC_SG_SUPPORT
 #define	VNIC_TSO_SUPPORT
-#define	VNIC_LRO_SUPPORT
+#undef	VNIC_LRO_SUPPORT
 
 /* TSO not supported in Thunder pass1 */
 #ifdef	VNIC_TSO_SUPPORT
@@ -42,18 +42,8 @@
 #undef	VNIC_HW_TSO_SUPPORT
 #endif
 
-/* LRO not supported even in Thunder pass2 */
-#ifdef	VNIC_LRO_SUPPORT
-#define	VNIC_SW_LRO_SUPPORT
-#undef	VNIC_HW_LRO_SUPPORT
-#endif
-
-
 /* ETHTOOL enable or disable, undef this to disable */
 #define	NICVF_ETHTOOL_ENABLE
-
-/* NAPI enable or disable, undef this to disable */
-#define	NICVF_NAPI_ENABLE
 
 /* Min/Max packet size */
 #define	NIC_HW_MIN_FRS			64
@@ -212,9 +202,7 @@ struct nicvf {
 	uint64_t		reg_base;	/* Register start address */
 	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
 	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
-#ifdef NICVF_NAPI_ENABLE
 	struct nicvf_cq_poll	*napi[8];	/* NAPI */
-#endif
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
 
