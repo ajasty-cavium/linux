@@ -295,8 +295,7 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 	cqe_tx = (struct cqe_send_t *)cq_desc;
 	sq = &nic->qs->sq[cqe_tx->sq_idx];
 
-	hdr  = (struct sq_hdr_subdesc *)(sq->desc_mem.base +
-				(cqe_tx->sqe_ptr * SND_QUEUE_DESC_SIZE));
+	hdr = (struct sq_hdr_subdesc *)GET_SQ_DESC(sq, cqe_tx->sqe_ptr);
 	if (hdr->subdesc_type != SQ_DESC_TYPE_HEADER)
 		return;
 
@@ -381,8 +380,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 	nic_dbg(&nic->pdev->dev, "%s cqe_count %d cqe_head %d\n", __func__, cqe_count, cqe_head);
 	while (processed_cqe < cqe_count) {
 		/* Get the CQ descriptor */
-		cq_desc = (struct cqe_rx_t *)(cq->desc_mem.base +
-				(cqe_head * CMP_QUEUE_DESC_SIZE));
+		cq_desc = (struct cqe_rx_t *)GET_CQ_DESC(cq, cqe_head);
 
 		if (napi && (work_done >= budget) &&
 			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
@@ -411,7 +409,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 		cq_desc->cqe_type = CQE_TYPE_INVALID;
 		processed_cqe++;
 		cqe_head++;
-		cqe_head &= (cq->desc_mem.q_len - 1);
+		cqe_head &= (cq->dmem.q_len - 1);
 	}
 	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n",
 			__func__, processed_cqe, work_done, budget);
