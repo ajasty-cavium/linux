@@ -60,6 +60,80 @@ static void kvm_vfio_group_put_external_user(struct vfio_group *vfio_group)
 	symbol_put(vfio_group_put_external_user);
 }
 
+static struct vfio_device *kvm_vfio_device_get_external_user(struct file *filep)
+{
+	struct vfio_device *vdev;
+	struct vfio_device *(*fn)(struct file *);
+
+	fn = symbol_get(vfio_device_get_external_user);
+	if (!fn)
+		return ERR_PTR(-EINVAL);
+
+	vdev = fn(filep);
+
+	symbol_put(vfio_device_get_external_user);
+
+	return vdev;
+}
+
+static void kvm_vfio_device_put_external_user(struct vfio_device *vdev)
+{
+	void (*fn)(struct vfio_device *);
+
+	fn = symbol_get(vfio_device_put_external_user);
+	if (!fn)
+		return;
+
+	fn(vdev);
+
+	symbol_put(vfio_device_put_external_user);
+}
+
+static struct device *kvm_vfio_external_base_device(struct vfio_device *vdev)
+{
+	struct device *(*fn)(struct vfio_device *);
+	struct device *dev;
+
+	fn = symbol_get(vfio_external_base_device);
+	if (!fn)
+		return NULL;
+
+	dev = fn(vdev);
+
+	symbol_put(vfio_external_base_device);
+
+	return dev;
+}
+
+/**
+ * kvm_vfio_get_vfio_device - Returns a handle to a vfio-device
+ *
+ * Checks it is a valid vfio device and increments its reference counter
+ * @fd: file descriptor of the vfio platform device
+ */
+static struct vfio_device *kvm_vfio_get_vfio_device(int fd)
+{
+	struct fd f = fdget(fd);
+	struct vfio_device *vdev;
+
+	if (!f.file)
+		return ERR_PTR(-EINVAL);
+	vdev = kvm_vfio_device_get_external_user(f.file);
+	fdput(f);
+	return vdev;
+}
+
+/**
+ * kvm_vfio_put_vfio_device: decrements the reference counter of the
+ * vfio platform * device
+ *
+ * @vdev: vfio_device handle to release
+ */
+static void kvm_vfio_put_vfio_device(struct vfio_device *vdev)
+{
+	kvm_vfio_device_put_external_user(vdev);
+}
+
 static bool kvm_vfio_group_is_coherent(struct vfio_group *vfio_group)
 {
 	long (*fn)(struct vfio_group *, unsigned long);
