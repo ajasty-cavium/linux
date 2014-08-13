@@ -102,9 +102,13 @@ void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 	addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
 	writeq_relaxed(dmac, (void *)addr);
 	bgx->lmac[lmac].dmac++;
+
+	bgx_reg_write(bgx, lmac, BGX_CMRX_RX_DMAC_CTL,
+		      (CAM_ACCEPT << 3) | (MCAST_MODE_CAM_FILTER << 1)
+		      | (BCAST_ACCEPT << 0));
 }
 
-void bgx_lmac_enable(uint64_t lmac)
+void bgx_lmac_enable(uint8_t lmac)
 {
 	int bgx_index;
 	struct bgx *bgx;
@@ -121,7 +125,7 @@ void bgx_lmac_enable(uint64_t lmac)
 			(1 << 15) | (1 << 14) | (1 << 13));
 }
 
-void bgx_lmac_disable(uint64_t lmac)
+void bgx_lmac_disable(uint8_t lmac)
 {
 	int bgx_index;
 	struct bgx *bgx;

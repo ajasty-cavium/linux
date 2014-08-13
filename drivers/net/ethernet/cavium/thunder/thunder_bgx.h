@@ -19,10 +19,21 @@
 
 /* Registers */
 #define BGX_CMRX_CFG				0x00
+#define BGX_CMRX_RX_DMAC_CTL			0x0E8
 #define BGX_CMR_RX_DMACX_CAM			0x200
 
+/*  RX_DMAC_CTL configuration*/
+enum MCAST_MODE {
+		MCAST_MODE_REJECT,
+		MCAST_MODE_ACCEPT,
+		MCAST_MODE_CAM_FILTER,
+		RSVD
+};
+#define BCAST_ACCEPT	1
+#define CAM_ACCEPT	1
+
 void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
-void bgx_lmac_disable(uint64_t lmac);
-void bgx_lmac_enable(uint64_t lmac);
+void bgx_lmac_disable(uint8_t lmac);
+void bgx_lmac_enable(uint8_t lmac);
 
 #endif /* THUNDER_BGX_H */
