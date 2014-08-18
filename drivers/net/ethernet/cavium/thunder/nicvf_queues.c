@@ -215,9 +215,11 @@ next_rbdr:
 /* TBD: how to handle full packets received in CQ
  * i.e conversion of buffers into SKBs
  */
-static int nicvf_init_cmp_queue(struct nicvf *nic, struct cmp_queue *cq,
-								int q_len)
+static int nicvf_init_cmp_queue(struct nicvf *nic,
+				struct cmp_queue *cq, int q_len)
 {
+	int time;
+
 	if (nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len,
 				   CMP_QUEUE_DESC_SIZE,
 				   NICVF_CQ_BASE_ALIGN_BYTES)) {
@@ -226,8 +228,11 @@ static int nicvf_init_cmp_queue(struct nicvf *nic, struct cmp_queue *cq,
 		return -ENOMEM;
 	}
 	cq->desc = cq->dmem.base;
-	cq->intr_timer_thresh = 0;
-	cq->thresh = CMP_QUEUE_THRESH;
+	cq->thresh = CMP_QUEUE_CQE_THRESH;
+
+	time = NIC_NS_PER_100_SYETEM_CLK / 100;
+	time = CMP_QUEUE_TIMER_THRESH / (NICPF_CLK_PER_INT_TICK * time);
+	cq->intr_timer_thresh = time;
 
 	return 0;
 }
@@ -337,6 +342,8 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_THRESH, qidx, cq->thresh);
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2,
+			      qidx, cq->intr_timer_thresh);
 
 	/* Set completion queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,

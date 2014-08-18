@@ -226,6 +226,9 @@ static void nic_init_hw(struct nicpf *nic)
 	/* Disable backpressure for now */
 	for (i = 0; i < NIC_MAX_CHANS; i++)
 		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 0);
+
+	/* Timer config */
+	nic_reg_write(nic, NIC_PF_INTR_TIMER_CFG, NICPF_CLK_PER_INT_TICK);
 }
 
 static void nic_channel_cfg(struct nicpf *nic, int vnic)
