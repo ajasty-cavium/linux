@@ -124,7 +124,6 @@
 #define NIC_NS_PER_100_SYETEM_CLK	125
 #define NICPF_CLK_PER_INT_TICK		100
 
-
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
 	struct napi_struct napi;

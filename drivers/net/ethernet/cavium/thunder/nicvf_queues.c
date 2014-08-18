@@ -284,10 +284,12 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 {
 	struct nic_mbx mbx = {};
 	struct rcv_queue *rq;
+	struct rq_cfg rq_cfg;
 
 	rq = &qs->rq[qidx];
+	rq->enable = enable;
 
-	if (!enable) {
+	if (!rq->enable) {
 		/* Disable receive queue */
 		nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
 		return;
@@ -318,27 +320,31 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* Enable Receive queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, (1ULL << 1));
+	rq_cfg.ena = 1;
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, *(u64 *)&rq_cfg);
 }
 
 void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 			    int qidx, bool enable)
 {
 	struct cmp_queue *cq;
+	struct cq_cfg cq_cfg;
 
 	cq = &qs->cq[qidx];
-	if (!enable) {
+	cq->enable = enable;
+	if (!cq->enable) {
 		/* Disable completion queue */
 		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, 0);
 		return;
 	}
 
 	/* Reset completion queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, (1ULL << 41));
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, NICVF_CQ_RESET);
 
 	/* Enable Completion queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx,
-			      (1ULL << 42) | (((qs->cq_len >> 10) - 1) << 32));
+	cq_cfg.ena = 1;
+	cq_cfg.qsize = (qs->cq_len >> 10) - 1;
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, *(u64 *)&cq_cfg);
 
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_THRESH, qidx, cq->thresh);
@@ -361,16 +367,18 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 {
 	struct nic_mbx mbx = {};
 	struct snd_queue *sq;
+	struct sq_cfg sq_cfg;
 
 	sq = &qs->sq[qidx];
-	if (!enable) {
+	sq->enable = enable;
+	if (!sq->enable) {
 		/* Disable send queue */
 		nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, 0);
 		return;
 	}
 
 	/* Reset send queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, (1ULL << 17));
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, NICVF_SQ_RESET);
 
 	sq->cq_qs = qs->vnic_id;
 	sq->cq_idx = qidx;
@@ -383,8 +391,9 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* Enable send queue  & set queue size */
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx,
-			      (1ULL << 19) | (((qs->sq_len >> 10) - 1) << 8));
+	sq_cfg.ena = 1;
+	sq_cfg.qsize = (qs->sq_len >> 10) - 1;
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, *(u64 *)&sq_cfg);
 
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_THRESH, qidx, sq->thresh);
@@ -401,6 +410,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 			      int qidx, bool enable)
 {
 	struct rbdr *rbdr;
+	struct rbdr_cfg rbdr_cfg;
 
 	rbdr = &qs->rbdr[qidx];
 	if (!enable) {
@@ -410,13 +420,16 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	}
 
 	/* Reset RBDR */
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, (1ULL << 43));
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
+			      qidx, NICVF_RBDR_RESET);
 
 	/* Enable RBDR  & set queue size */
 	/* Buffer size should be in multiples of 128 bytes */
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, (1ULL << 44) |
-			      (((qs->rbdr_len >> 13) - 1) << 32) |
-			      (rbdr->buf_size / 128));
+	rbdr_cfg.ena = 1;
+	rbdr_cfg.qsize = (qs->rbdr_len >> 13) - 1;
+	rbdr_cfg.lines = rbdr->buf_size / 128;
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
+			      qidx, *(u64 *)&rbdr_cfg);
 
 	/* Set descriptor base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_BASE,
@@ -438,18 +451,22 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 {
 	struct  nic_mbx mbx = {};
 	struct queue_set *qs = nic->qs;
+	struct qs_cfg *qs_cfg;
+
+	qs->enable = enable;
 
 	/* Send a mailbox msg to PF to config Qset */
 	mbx.msg = NIC_PF_VF_MSG_QS_CFG;
 	mbx.data.qs.num = qs->vnic_id;
 
-	if (enable) {
-		mbx.data.qs.cfg = 0x80000000 | qs->vnic_id;
-		nicvf_send_msg_to_pf(nic, &mbx);
-	} else {  /* disable Qset */
+	qs_cfg = (struct qs_cfg *)&mbx.data.qs.cfg;
+	if (qs->enable) {
+		qs_cfg->ena = 1;
+		qs_cfg->vnic = qs->vnic_id;
+	} else {
 		mbx.data.qs.cfg = 0;
-		nicvf_send_msg_to_pf(nic, &mbx);
 	}
+	nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 static void nicvf_free_resources(struct nicvf *nic)
@@ -598,22 +615,22 @@ void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt)
 
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx)
 {
-	uint64_t reg_val;
+	uint64_t sq_cfg;
 
-	reg_val = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
-	reg_val |= (1ULL << 19);
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, reg_val);
+	sq_cfg = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
+	sq_cfg |= NICVF_SQ_EN;
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, sq_cfg);
 	/* Ring doorbell so that H/W restarts processing SQEs */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_DOOR, qidx, 0);
 }
 
 void nicvf_sq_disable(struct nicvf *nic, int qidx)
 {
-	uint64_t reg_val;
+	uint64_t sq_cfg;
 
-	reg_val = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
-	reg_val &= ~(1ULL << 19);
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, reg_val);
+	sq_cfg = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
+	sq_cfg &= ~NICVF_SQ_EN;
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, sq_cfg);
 }
 
 void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq, int qidx)
@@ -833,7 +850,7 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 
 	/* Inform HW to xmit new packet */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_DOOR,
-						sq_num, subdesc_cnt);
+			      sq_num, subdesc_cnt);
 	return 1;
 
 append_fail:
