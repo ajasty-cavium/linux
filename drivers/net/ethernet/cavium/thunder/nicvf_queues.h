@@ -75,6 +75,14 @@
 #define NICVF_RCV_BUF_ALIGN_LEN(X)\
 	(NICVF_ALIGNED_ADDR(X, NICVF_RCV_BUF_ALIGN_BYTES) - X)
 
+/* Queue enable/disable */
+#define NICVF_SQ_EN            (1ULL << 19)
+
+/* Queue reset */
+#define NICVF_CQ_RESET		(1ULL << 41)
+#define NICVF_SQ_RESET		(1ULL << 17)
+#define NICVF_RBDR_RESET	(1ULL << 43)
+
 enum CQ_RX_ERRLVL_E {
 	CQ_ERRLVL_MAC,
 	CQ_ERRLVL_L2,
@@ -227,6 +235,7 @@ struct rbdr {
 };
 
 struct rcv_queue {
+	bool		enable;
 	struct	rbdr	*rbdr_start;
 	struct	rbdr	*rbdr_cont;
 	bool		en_tcp_reassembly;
@@ -240,6 +249,7 @@ struct rcv_queue {
 };
 
 struct cmp_queue {
+	bool		enable;
 	uint8_t		intr_timer_thresh;
 	uint16_t	thresh;
 	spinlock_t	cq_lock;  /* lock to serialize processing CQEs */
@@ -249,6 +259,7 @@ struct cmp_queue {
 };
 
 struct snd_queue {
+	bool		enable;
 	uint8_t		cq_qs;  /* CQ's QS to which this SQ is pointing */
 	uint8_t		cq_idx; /* CQ index (0 to 7) in the above QS */
 	uint16_t	thresh;
@@ -262,7 +273,7 @@ struct snd_queue {
 };
 
 struct queue_set {
-	bool		enabled;
+	bool		enable;
 	bool		be_en;
 	uint8_t		vnic_id;
 	uint8_t		rq_cnt;

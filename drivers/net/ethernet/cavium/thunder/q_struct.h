@@ -544,4 +544,119 @@ struct sq_hdr_subdesc {
 #endif
 };
 
+/* Queue config register formats */
+struct rq_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_2_63:62;
+	uint64_t ena:1;
+	uint64_t tcp_ena:1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t tcp_ena:1;
+	uint64_t ena:1;
+	uint64_t reserved_2_63:62;
+#endif
+};
+
+struct cq_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_43_63:21;
+	uint64_t ena:1;
+	uint64_t reset:1;
+	uint64_t caching:1;
+	uint64_t reserved_35_39:5;
+	uint64_t qsize:3;
+	uint64_t reserved_25_31:7;
+	uint64_t avg_con:9;
+	uint64_t reserved_0_15:16;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t reserved_0_15:16;
+	uint64_t avg_con:9;
+	uint64_t reserved_25_31:7;
+	uint64_t qsize:3;
+	uint64_t reserved_35_39:5;
+	uint64_t caching:1;
+	uint64_t reset:1;
+	uint64_t ena:1;
+	uint64_t reserved_43_63:21;
+#endif
+};
+
+struct sq_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_20_63:44;
+	uint64_t ena:1;
+	uint64_t reserved_18_18:1;
+	uint64_t reset:1;
+	uint64_t ldwb:1;
+	uint64_t reserved_11_15:5;
+	uint64_t qsize:3;
+	uint64_t reserved_3_7:5;
+	uint64_t tstmp_bgx_intf:3;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t tstmp_bgx_intf:3;
+	uint64_t reserved_3_7:5;
+	uint64_t qsize:3;
+	uint64_t reserved_11_15:5;
+	uint64_t ldwb:1;
+	uint64_t reset:1;
+	uint64_t reserved_18_18:1;
+	uint64_t ena:1;
+	uint64_t reserved_20_63:44;
+#endif
+};
+
+struct rbdr_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_45_63:19;
+	uint64_t ena:1;
+	uint64_t reset:1;
+	uint64_t ldwb:1;
+	uint64_t reserved_36_41:6;
+	uint64_t qsize:4;
+	uint64_t reserved_25_31:7;
+	uint64_t avg_con:9;
+	uint64_t reserved_12_15:4;
+	uint64_t lines:12;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t lines:12;
+	uint64_t reserved_12_15:4;
+	uint64_t avg_con:9;
+	uint64_t reserved_25_31:7;
+	uint64_t qsize:4;
+	uint64_t reserved_36_41:6;
+	uint64_t ldwb:1;
+	uint64_t reset:1;
+	uint64_t ena: 1;
+	uint64_t reserved_45_63:19;
+#endif
+};
+
+struct qs_cfg {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	uint64_t reserved_32_63:32;
+	uint64_t ena:1;
+	uint64_t reserved_27_30:4;
+	uint64_t sq_ins_ena:1;
+	uint64_t sq_ins_pos:6;
+	uint64_t lock_ena:1;
+	uint64_t lock_viol_cqe_ena:1;
+	uint64_t send_tstmp_ena:1;
+	uint64_t be:1;
+	uint64_t reserved_7_15:9;
+	uint64_t vnic:7;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	uint64_t vnic:7;
+	uint64_t reserved_7_15:9;
+	uint64_t be:1;
+	uint64_t send_tstmp_ena:1;
+	uint64_t lock_viol_cqe_ena:1;
+	uint64_t lock_ena:1;
+	uint64_t sq_ins_pos:6;
+	uint64_t sq_ins_ena:1;
+	uint64_t reserved_27_30:4;
+	uint64_t ena:1;
+	uint64_t reserved_32_63:32;
+#endif
+};
+
 #endif /* Q_STRUCT_H */
