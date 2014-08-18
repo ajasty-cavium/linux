@@ -795,8 +795,11 @@ static int nicvf_open(struct net_device *netdev)
 		return err;
 
 	err = nicvf_init_resources(nic);
-	if (err)
+	if (err) {
+		nicvf_disable_mbx_intr(nic);
+		nicvf_unregister_interrupts(nic);
 		return err;
+	}
 
 	err = nicvf_register_interrupts(nic);
 	if (err) {
