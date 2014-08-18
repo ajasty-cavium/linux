@@ -120,6 +120,11 @@
 #define	for_each_rbdr_irq(irq)	\
 	for (irq = NICVF_RBDR_INTR_ID; irq < NICVF_MISC_INTR_ID; irq++)
 
+/* For CQ timer threshold interrupt */
+#define NIC_NS_PER_100_SYETEM_CLK	125
+#define NICPF_CLK_PER_INT_TICK		100
+
+
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
 	struct napi_struct napi;
