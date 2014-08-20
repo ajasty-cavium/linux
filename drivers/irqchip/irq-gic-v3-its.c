@@ -920,6 +920,7 @@ static int its_alloc_tables(struct its_node *its)
 	int i;
 	int psz = PAGE_SIZE;
 	u64 shr = GITS_BASER_InnerShareable;
+	u64 typer = readq_relaxed(its->base + GITS_TYPER);
 
 	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
 		u64 val = readq_relaxed(its->base + GITS_BASER + i * 8);
@@ -927,12 +928,16 @@ static int its_alloc_tables(struct its_node *its)
 		int type = (val >> 56) & 7;
 		int entry_size = ((val >> 48) & 0xff) + 1;
 		void *base;
+		u64 max_devices, max_ittsize;
 
 		if (!type)
 			continue;
 
-		/* We're lazy and only allocate a single page for now */
-		base = (void *)get_zeroed_page(GFP_KERNEL);
+		max_devices = 1ULL << (((typer >> 13) & 0x1f) + 1);
+		max_ittsize = ((typer >> 4) & 0xf) + 1;
+		max_ittsize *= max_devices;
+
+		base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, get_order(max_ittsize));
 		if (!base) {
 			err = -ENOMEM;
 			goto out_free;
@@ -960,7 +965,7 @@ retry_baser:
 			break;
 		}
 
-		val |= (PAGE_SIZE / psz) - 1;
+		val |= (max_ittsize / psz) - 1;
 
 		writeq_relaxed(val, its->base + GITS_BASER + i * 8);
 		tmp = readq_relaxed(its->base + GITS_BASER + i * 8);
