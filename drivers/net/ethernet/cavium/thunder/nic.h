@@ -213,6 +213,7 @@ struct nicvf {
 	struct nicvf_cq_poll	*napi[8];	/* NAPI */
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
+	struct work_struct	reset_task;
 
 	/* MSI-X  */
 	bool			msix_enabled;
