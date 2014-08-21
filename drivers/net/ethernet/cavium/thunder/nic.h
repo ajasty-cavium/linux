@@ -26,6 +26,11 @@
 #define	MAX_NUM_VFS_SUPPORTED		128
 #define	DEFAULT_NUM_VF_ENABLED		8
 
+/* TNS present or not */
+#undef  NIC_TNS_ENABLE
+#define NIC_TNS_BYPASS_MODE		0
+#define NIC_TNS_MODE			1
+
 /* NIC priv flags */
 #define	NIC_SRIOV_ENABLED		(1 << 0)
 
@@ -107,18 +112,16 @@
 #define	NIC_PF_MSIX_VECTORS		10
 #define	NIC_VF_MSIX_VECTORS		20
 
-#define	NICVF_CQ_INTR_ID		0
-#define	NICVF_SQ_INTR_ID		8
-#define	NICVF_RBDR_INTR_ID		16
-#define	NICVF_MISC_INTR_ID		18
-#define	NICVF_QS_ERR_INTR_ID		19
-
-#define	for_each_cq_irq(irq)	\
-	for (irq = NICVF_CQ_INTR_ID; irq < NICVF_SQ_INTR_ID; irq++)
-#define	for_each_sq_irq(irq)	\
-	for (irq = NICVF_SQ_INTR_ID; irq < NICVF_RBDR_INTR_ID; irq++)
-#define	for_each_rbdr_irq(irq)	\
-	for (irq = NICVF_RBDR_INTR_ID; irq < NICVF_MISC_INTR_ID; irq++)
+#define NIC_PF_INTR_ID_ECC0_SBE		0
+#define NIC_PF_INTR_ID_ECC0_DBE		1
+#define NIC_PF_INTR_ID_ECC1_SBE		2
+#define NIC_PF_INTR_ID_ECC1_DBE		3
+#define NIC_PF_INTR_ID_ECC2_SBE		4
+#define NIC_PF_INTR_ID_ECC2_DBE		5
+#define NIC_PF_INTR_ID_ECC3_SBE		6
+#define NIC_PF_INTR_ID_ECC3_DBE		7
+#define NIC_PF_INTR_ID_MBOX0		8
+#define NIC_PF_INTR_ID_MBOX1		9
 
 /* For CQ timer threshold interrupt */
 #define NIC_NS_PER_100_SYETEM_CLK	125
@@ -197,8 +200,9 @@ struct nicvf_drv_stats {
 struct nicvf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
+	uint8_t			vf_id;
+	uint8_t			tns_mode;
 	uint16_t		mtu;
-	uint8_t			vnic_id;
 	struct queue_set	*qs;		/* Queue set this VNIC is pointing to */
 	uint8_t			num_qs;		/* No of QSs assigned to this VNIC */
 	void			*addnl_qs;	/* Pointer to QSs additional to default 1 QS */
@@ -241,6 +245,8 @@ struct nicpf {
 
 /* PF <--> VF mailbox communication */
 #define	NIC_PF_VF_MAILBOX_SIZE		8
+#define	NIC_PF_VF_MBX_LOCK_OFFSET	48
+#define	NIC_PF_VF_MBX_TIMEOUT		5000 /* ms */
 
 /* Mailbox message types */
 #define	NIC_PF_VF_MSG_READY		0x01	/* Is PF ready to rcv msgs */
@@ -253,33 +259,56 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to BGX's DMAC filter */
 #define	NIC_VF_SET_MAX_FRS		0x09	/* Set max frame size */
 
+struct nic_cfg_msg {
+	uint64_t   vf_id;
+	uint64_t   tns_mode;
+	uint64_t   mac_addr;
+};
+
+/* Qset configuration */
+struct qs_cfg_msg {
+	uint64_t   num;
+	uint64_t   cfg;
+};
+
+/* Receive queue configuration */
+struct rq_cfg_msg {
+	uint64_t   qs_num;
+	uint64_t   rq_num;
+	uint64_t   cfg;
+};
+/* Send queue configuration */
+struct sq_cfg_msg {
+	uint64_t   qs_num;
+	uint64_t   sq_num;
+	uint64_t   cfg;
+};
+
+/* Set VF's MAC address */
+struct set_mac_msg {
+	uint64_t   vf_id;
+	uint64_t   addr;
+};
+
+/* Set Maximum frame size */
+struct set_frs_msg {
+	uint64_t   vf_id;
+	uint64_t   max_frs;
+};
+
+/* Maximum 8 64bit locations */
 struct nic_mbx {
 	uint64_t	   msg;
 	union	{
-		uint64_t	vnic_id;
-		struct {			/* Qset configuration */
-			uint64_t   num;
-			uint64_t   cfg;
-		} qs;
-		struct {			/* Receive queue configuration */
-			uint64_t   qs_num;
-			uint64_t   rq_num;
-			uint64_t   cfg;
-		} rq;
-		struct {			/* Send queue configuration */
-			uint64_t   qs_num;
-			uint64_t   sq_num;
-			uint64_t   cfg;
-		} sq;
-		struct {			/* VF's MAC address */
-			uint64_t   vnic_id;
-			uint64_t   addr;
-		} mac;
-		uint64_t	max_frs; /* Max frame size */
+		struct nic_cfg_msg nic_cfg;
+		struct qs_cfg_msg  qs;
+		struct rq_cfg_msg  rq;
+		struct sq_cfg_msg  sq;
+		struct set_mac_msg mac;
+		struct set_frs_msg frs;
 	} data;
-	uint64_t	   mbx4;
-	uint64_t	   mbx5;
-	uint64_t	   mbx6;
+	uint64_t	   mbx[2];
+	uint64_t	   mbx_lock;
 	uint64_t	   mbx_trigger_intr;
 };
 
