@@ -17,6 +17,20 @@
 #define MAX_SND_QUEUES_PER_QS		8
 #define MAX_CMP_QUEUES_PER_QS		8
 
+/* VF's queue interrupt ranges */
+#define	NICVF_INTR_ID_CQ		0
+#define	NICVF_INTR_ID_SQ		8
+#define	NICVF_INTR_ID_RBDR		16
+#define	NICVF_INTR_ID_MISC		18
+#define	NICVF_INTR_ID_QS_ERR		19
+
+#define	for_each_cq_irq(irq)	\
+	for (irq = NICVF_INTR_ID_CQ; irq < NICVF_INTR_ID_SQ; irq++)
+#define	for_each_sq_irq(irq)	\
+	for (irq = NICVF_INTR_ID_SQ; irq < NICVF_INTR_ID_RBDR; irq++)
+#define	for_each_rbdr_irq(irq)	\
+	for (irq = NICVF_INTR_ID_RBDR; irq < NICVF_INTR_ID_MISC; irq++)
+
 #define RBDR_SIZE0		0ULL /* 8K entries */
 #define RBDR_SIZE1		1ULL /* 16K entries */
 #define RBDR_SIZE2		2ULL /* 32K entries */

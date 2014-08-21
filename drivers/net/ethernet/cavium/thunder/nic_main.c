@@ -73,43 +73,86 @@ static uint64_t nic_get_mbx_addr(int vf)
 	return NIC_PF_VF_0_127_MAILBOX_0_7 + (vf << NIC_VF_NUM_SHIFT);
 }
 
-static void nic_mbx_done(struct nicpf *nic, uint64_t mbx_addr)
+static int nic_lock_mbox(struct nicpf *nic, int vf)
 {
-	/* write 1 to last MBX reg */
-	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	nic_reg_write(nic, mbx_addr, 1ULL);
+	int timeout = NIC_PF_VF_MBX_TIMEOUT;
+	int sleep = 10;
+	uint64_t lock, mbx_addr;
+
+	mbx_addr = nic_get_mbx_addr(vf) + NIC_PF_VF_MBX_LOCK_OFFSET;
+	lock = nic_reg_read(nic, mbx_addr);
+	while (lock) {
+		msleep(sleep);
+		lock = nic_reg_read(nic, mbx_addr);
+		timeout -= sleep;
+		if (!timeout) {
+			netdev_err(nic->netdev, "PF couldn't lock mailbox\n");
+			return 0;
+		}
+	}
+	nic_reg_write(nic, mbx_addr, 1);
+	return 1;
+}
+
+void nic_release_mbx(struct nicpf *nic, int vf)
+{
+	uint64_t mbx_addr;
+
+	mbx_addr = nic_get_mbx_addr(vf) + NIC_PF_VF_MBX_LOCK_OFFSET;
+	nic_reg_write(nic, mbx_addr, 0);
+}
+
+static int nic_send_msg_to_vf(struct nicpf *nic, int vf,
+			      struct nic_mbx *mbx, bool lock_needed)
+{
+	int i;
+	uint64_t *msg;
+	uint64_t mbx_addr;
+
+	if (lock_needed && (!nic_lock_mbox(nic, vf)))
+		return -EBUSY;
+
+	mbx->mbx_trigger_intr = 1;
+	msg = (uint64_t *)mbx;
+	mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
+
+	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++)
+		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
+
+	if (lock_needed)
+		nic_release_mbx(nic, vf);
+	return 0;
 }
 
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 {
-	uint64_t mbx_addr;
-
-	mbx_addr = nic_get_mbx_addr(vf);
+	struct nic_mbx mbx = {};
 
 	/* Respond with VNIC ID */
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_READY);
-	nic_reg_write(nic, mbx_addr + 8, vf);
-	nic_mbx_done(nic, mbx_addr);
+	mbx.msg = NIC_PF_VF_MSG_READY;
+	mbx.data.nic_cfg.vf_id = vf;
+#ifndef NIC_TNS_ENABLE
+	mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
+#else
+	mbx.data.nic_cfg.tns_mode = NIC_TNS_MODE;
+#endif
+	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
 
 static void nic_mbx_send_ack(struct nicpf *nic, int vf)
 {
-	uint64_t mbx_addr;
+	struct nic_mbx mbx = {};
 
-	mbx_addr = nic_get_mbx_addr(vf);
-
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_ACK);
-	nic_mbx_done(nic, mbx_addr);
+	mbx.msg = NIC_PF_VF_MSG_ACK;
+	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
 
 static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 {
-	uint64_t mbx_addr;
+	struct nic_mbx mbx = {};
 
-	mbx_addr = nic_get_mbx_addr(vf);
-
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_NACK);
-	nic_mbx_done(nic, mbx_addr);
+	mbx.msg = NIC_PF_VF_MSG_NACK;
+	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
 
 /* Handle Mailbox messgaes from VF and ack the message. */
@@ -164,10 +207,13 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
 		break;
 	case NIC_PF_VF_MSG_SET_MAC:
-		bgx_add_dmac_addr(mbx.data.mac.addr, mbx.data.mac.vnic_id);
+#ifndef NIC_TNS_ENABLE
+		bgx_add_dmac_addr(mbx.data.mac.addr, mbx.data.mac.vf_id);
+#endif
 		break;
 	case NIC_VF_SET_MAX_FRS:
-		ret = nic_update_hw_frs(nic, mbx.data.max_frs, vf);
+		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
+					mbx.data.frs.vf_id);
 		break;
 	default:
 		netdev_err(nic->netdev, "Invalid message from VF%d, msg 0x%llx\n", vf, mbx.msg);
@@ -201,6 +247,7 @@ static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 static void nic_init_hw(struct nicpf *nic)
 {
 	int i;
+	uint64_t reg;
 
 	/* Reset NIC, incase if driver is repeatedly inserted and removed */
 	nic_reg_write(nic, NIC_PF_SOFT_RESET, 1);
@@ -208,9 +255,24 @@ static void nic_init_hw(struct nicpf *nic)
 	/* Enable NIC HW block */
 	nic_reg_write(nic, NIC_PF_CFG, 1);
 
-	/* Disable TNS mode */
-	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, 0);
-	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), 0);
+#ifndef NIC_TNS_ENABLE
+	/* Disable TNS mode on both interfaces */
+	nic->flags |= NIC_TNS_BYPASS_MODE;
+	reg = NIC_TNS_BYPASS_MODE << 7;
+	reg |= 0x08; /* Block identifier */
+	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, reg);
+	reg &= ~0xFull;
+	reg |= 0x09;
+	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), reg);
+#else
+	nic->flags |= NIC_TNS_MODE;
+	reg = NIC_TNS_MODE << 7;
+	reg |= 0x06;
+	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, reg);
+	reg &= ~0xFull;
+	reg |= 0x07;
+	nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), reg);
+#endif
 
 	/* PKIND configuration */
 	nic->pkind.minlen = 0;
@@ -286,16 +348,15 @@ static void nic_channel_cfg(struct nicpf *nic, int vnic)
 	}
 }
 
-static irqreturn_t nic_intr_handler (int irq, void *nic_irq)
+static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
 {
 	int vf;
 	uint16_t vf_per_mbx_reg = 64;
 	uint64_t intr;
 	struct nicpf *nic = (struct nicpf *)nic_irq;
 
-	/* MBOX reg 0 */
 	intr = nic_get_mbx_intr_status(nic, 0);
-	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt MBX0 0x%llx\n", intr);
+	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt Mbox0 0x%llx\n", intr);
 	for (vf = 0; vf < min(nic->num_vf_en, vf_per_mbx_reg); vf++) {
 		if (intr & (1ULL << vf)) {
 			nic_dbg(&nic->pdev->dev, "Intr from VF %d\n", vf);
@@ -304,12 +365,21 @@ static irqreturn_t nic_intr_handler (int irq, void *nic_irq)
 		}
 	}
 
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t nic_mbx1_intr_handler (int irq, void *nic_irq)
+{
+	int vf;
+	uint16_t vf_per_mbx_reg = 64;
+	uint64_t intr;
+	struct nicpf *nic = (struct nicpf *)nic_irq;
+
 	if (nic->num_vf_en <= vf_per_mbx_reg)
 		return IRQ_HANDLED;
 
-	/* MBOX reg 1 */
 	intr = nic_get_mbx_intr_status(nic, 1);
-	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt MBX1 0x%llx\n", intr);
+	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt Mbox1 0x%llx\n", intr);
 	for (vf = 0; vf < (nic->num_vf_en - vf_per_mbx_reg); vf++) {
 		if (intr & (1ULL << vf)) {
 			nic_dbg(&nic->pdev->dev,
@@ -353,32 +423,38 @@ static void nic_disable_msix(struct nicpf *nic)
 
 static int nic_register_interrupts(struct nicpf *nic)
 {
-	int irq, free, ret = 0;
+	int irq, ret = 0;
 
 	/* Enable MSI-X */
 	if (!nic_enable_msix(nic))
 		return 1;
 
-	/* Register interrupts */
-	/* For now skip ECC interrupts, register only Mbox interrupts */
-	for (irq = 8; irq < nic->num_vec; irq++) {
-		ret = request_irq(nic->msix_entries[irq].vector,
-				nic_intr_handler, 0 , "NIC PF", nic);
-		if (ret)
-			break;
-	}
+	/* Register mailbox interrupt handlers */
+	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX0].vector,
+			  nic_mbx0_intr_handler, 0 , "NIC Mbox0", nic);
+	if (ret)
+		goto fail;
+	else
+		nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = 1;
 
-	if (ret) {
-		netdev_err(nic->netdev, "Request irq failed\n");
-		for (free = 0; free < irq; free++)
-			free_irq(nic->msix_entries[free].vector, nic);
-		return 1;
-	}
+	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX1].vector,
+			  nic_mbx1_intr_handler, 0 , "NIC Mbox1", nic);
+	if (ret)
+		goto fail;
+	else
+		nic->irq_allocated[NIC_PF_INTR_ID_MBOX1] = 1;
 
 	/* Enable mailbox interrupt */
 	nic_enable_mbx_intr(nic);
-
 	return 0;
+fail:
+	netdev_err(nic->netdev, "Request irq failed\n");
+	for (irq = 0; irq < nic->num_vec; irq++) {
+		if (nic->irq_allocated[irq])
+			free_irq(nic->msix_entries[irq].vector, nic);
+		nic->irq_allocated[irq] = 0;
+	}
+	return 1;
 }
 
 static void nic_unregister_interrupts(struct nicpf *nic)
@@ -386,8 +462,11 @@ static void nic_unregister_interrupts(struct nicpf *nic)
 	int irq;
 
 	/* Free registered interrupts */
-	for (irq = 0; irq < nic->num_vec; irq++)
-		free_irq(nic->msix_entries[irq].vector, nic);
+	for (irq = 0; irq < nic->num_vec; irq++) {
+		if (nic->irq_allocated[irq])
+			free_irq(nic->msix_entries[irq].vector, nic);
+		nic->irq_allocated[irq] = 0;
+	}
 
 	/* Disable MSI-X */
 	nic_disable_msix(nic);
@@ -589,4 +668,3 @@ static void __exit nic_cleanup_module(void)
 
 module_init(nic_init_module);
 module_exit(nic_cleanup_module);
-

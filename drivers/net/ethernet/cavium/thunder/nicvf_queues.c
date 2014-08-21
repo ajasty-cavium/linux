@@ -549,7 +549,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	int qidx;
 
 	if (enable) {
-		qs->vnic_id = nic->vnic_id;
+		qs->vnic_id = nic->vf_id;
 		nic->qs = qs;
 
 		if (nicvf_alloc_resources(nic))
@@ -694,7 +694,7 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 
 	hdr = (struct sq_hdr_subdesc *)desc;
 
-	memset(hdr, 0, SND_QUEUE_DESC_SIZE); /* TBD: Need to remove these memset */
+	memset(hdr, 0, SND_QUEUE_DESC_SIZE);
 	hdr->subdesc_type = SQ_DESC_TYPE_HEADER;
 	hdr->post_cqe = 1;
 	hdr->subdesc_cnt = subdesc_cnt;
