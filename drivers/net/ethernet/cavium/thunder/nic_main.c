@@ -244,6 +244,24 @@ static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 	return 0;
 }
 
+/* Set minimum transmit packet size */
+static void nic_set_tx_pkt_pad(struct nicpf *nic, int size)
+{
+	int lmac;
+	uint64_t lmac_cfg;
+
+	/* Max value that can be set is 60 */
+	if (size > 60)
+		size = 60;
+
+	for (lmac = 0; lmac < (MAX_BGX_PER_CN88XX * MAX_LMAC_PER_BGX); lmac++) {
+		lmac_cfg = nic_reg_read(nic, NIC_PF_LMAC_0_7_CFG | (lmac << 3));
+		lmac_cfg &= ~(0xF << 2);
+		lmac_cfg |= ((size / 4) << 2);
+		nic_reg_write(nic, NIC_PF_LMAC_0_7_CFG | (lmac << 3), lmac_cfg);
+	}
+}
+
 static void nic_init_hw(struct nicpf *nic)
 {
 	int i;
@@ -284,6 +302,8 @@ static void nic_init_hw(struct nicpf *nic)
 	for (i = 0; i < NIC_MAX_PKIND; i++)
 		nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG | (i << 3),
 			       *(uint64_t *)&nic->pkind);
+
+	nic_set_tx_pkt_pad(nic, NIC_HW_MIN_FRS);
 
 	/* Disable backpressure for now */
 	for (i = 0; i < NIC_MAX_CHANS; i++)

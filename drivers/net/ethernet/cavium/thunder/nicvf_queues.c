@@ -888,6 +888,10 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
 					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 			skb = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
+			if (cqe_rx->align_pad) {
+				skb->data += cqe_rx->align_pad;
+				skb->tail += cqe_rx->align_pad;
+			}
 			skb_put(skb, payload_len);
 		} else {
 			/* Add fragments */
