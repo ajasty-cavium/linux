@@ -174,7 +174,7 @@ struct cqe_rx_t {
 	uint64_t   l3_ptr:8;
 	uint64_t   l4_ptr:8;
 	uint64_t   cq_pkt_len:8;
-	uint64_t   align_len:3;
+	uint64_t   align_pad:3;
 	uint64_t   rsvd3:1;
 	uint64_t   chan:12;
 	uint64_t   cqe_type:4; /* W0 */
@@ -216,7 +216,7 @@ struct cqe_rx_t {
 	uint64_t   cqe_type:4; /* W0 */
 	uint64_t   chan:12;
 	uint64_t   rsvd3:1;
-	uint64_t   align_len:3;
+	uint64_t   align_pad:3;
 	uint64_t   cq_pkt_len:8;
 	uint64_t   l4_ptr:8;
 	uint64_t   l3_ptr:8;
