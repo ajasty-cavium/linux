@@ -920,6 +920,7 @@ static int its_alloc_tables(struct its_node *its)
 	int i;
 	int psz = PAGE_SIZE;
 	u64 shr = GITS_BASER_InnerShareable;
+	u64 typer = readq_relaxed(its->base + GITS_TYPER);
 
 	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
 		u64 val = readq_relaxed(its->base + GITS_BASER + i * 8);
@@ -927,7 +928,6 @@ static int its_alloc_tables(struct its_node *its)
 		int type = (val >> 56) & 7;
 		int entry_size = ((val >> 48) & 0xff) + 1;
 		void *base;
-		u64 typer = readq_relaxed(its->base + GITS_TYPER + i * 8);
 		u64 max_devices, max_ittsize;
 
 		if (!type)
