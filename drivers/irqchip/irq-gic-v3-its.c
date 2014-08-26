@@ -173,55 +173,55 @@ static struct rdist *gic_rdist;
 
 static void its_encode_cmd(struct its_cmd_block *cmd, u8 cmd_nr)
 {
-	cmd->raw_cmd[0] &= ~0xffUL;
+	cmd->raw_cmd[0] &= ~0xffULL;
 	cmd->raw_cmd[0] |= cmd_nr;
 }
 
 static void its_encode_devid(struct its_cmd_block *cmd, u32 devid)
 {
-	cmd->raw_cmd[0] &= 0xffffffffUL;
+	cmd->raw_cmd[0] &= 0xffffffffULL;
 	cmd->raw_cmd[0] |= ((u64)devid) << 32;
 }
 
 static void its_encode_event_id(struct its_cmd_block *cmd, u32 id)
 {
-	cmd->raw_cmd[1] &= ~0xffffffffUL;
+	cmd->raw_cmd[1] &= ~0xffffffffULL;
 	cmd->raw_cmd[1] |= id;
 }
 
 static void its_encode_phys_id(struct its_cmd_block *cmd, u32 phys_id)
 {
-	cmd->raw_cmd[1] &= 0xffffffffUL;
+	cmd->raw_cmd[1] &= 0xffffffffULL;
 	cmd->raw_cmd[1] |= ((u64)phys_id) << 32;
 }
 
 static void its_encode_size(struct its_cmd_block *cmd, u8 size)
 {
-	cmd->raw_cmd[1] &= ~0xffUL;
-	cmd->raw_cmd[1] |= size & 0xff;
+	cmd->raw_cmd[1] &= ~0xffULL;
+	cmd->raw_cmd[1] |= size;
 }
 
 static void its_encode_itt(struct its_cmd_block *cmd, u64 itt_addr)
 {
-	cmd->raw_cmd[2] &= ~0xffffffffffffUL;
-	cmd->raw_cmd[2] |= itt_addr & 0xffffffffff00UL;
+	cmd->raw_cmd[2] &= ~0xffffffffffffULL;
+	cmd->raw_cmd[2] |= itt_addr & 0xffffffffff00ULL;
 }
 
 static void its_encode_valid(struct its_cmd_block *cmd, int valid)
 {
-	cmd->raw_cmd[2] &= ~(1UL << 63);
+	cmd->raw_cmd[2] &= ~(1ULL << 63);
 	cmd->raw_cmd[2] |= ((u64)!!valid) << 63;
 }
 
 static void its_encode_target(struct its_cmd_block *cmd, u64 target_addr)
 {
-	cmd->raw_cmd[2] &= ~(0xffffffffUL << 16);
-	cmd->raw_cmd[2] |= (target_addr & (0xffffffffUL << 16));
+	cmd->raw_cmd[2] &= ~(0xffffffffULL << 16);
+	cmd->raw_cmd[2] |= (target_addr & (0xffffffffULL << 16));
 }
 
 static void its_encode_collection(struct its_cmd_block *cmd, u16 col)
 {
-	cmd->raw_cmd[2] &= ~0xffffUL;
+	cmd->raw_cmd[2] &= ~0xffffULL;
 	cmd->raw_cmd[2] |= col;
 }
 
@@ -1220,8 +1220,8 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 
 	addr = its->phys_base + GITS_TRANSLATER;
 
-	msg.address_lo		= addr & ((1UL << 32) - 1);
-	msg.address_hi		= addr >> 32;
+	msg.address_lo		= (u32)addr;
+	msg.address_hi		= (u32)(addr >> 32);
 	msg.data		= vec_nr;
 
 	write_msi_msg(irq, &msg);
