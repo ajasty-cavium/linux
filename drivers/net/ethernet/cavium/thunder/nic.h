@@ -52,7 +52,7 @@
 
 /* Min/Max packet size */
 #define	NIC_HW_MIN_FRS			64
-#define	NIC_HW_MAX_FRS			1500
+#define	NIC_HW_MAX_FRS			9194 /* 9216 max packet including FCS */
 
 /* Max pkinds */
 #define	NIC_MAX_PKIND			16
@@ -238,7 +238,7 @@ struct nicpf {
 	uint8_t			irq_allocated[NIC_PF_MSIX_VECTORS];
 };
 
-/* PF <--> Mailbox communication
+/* PF <--> VF Mailbox communication
  * Eight 64bit registers are shared between PF and VF.
  * Separate set for each VF.
  * Writing '1' into last register mbx7 means end of message.
