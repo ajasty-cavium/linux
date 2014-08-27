@@ -923,7 +923,7 @@ static int its_alloc_tables(struct its_node *its)
 	u64 typer = readq_relaxed(its->base + GITS_TYPER);
 	u64 max_devices, max_ittsize;
 
-	max_devices = 1ULL << ((typer >> 13) & 0x1f);
+	max_devices = 1ULL << (((typer >> 13) & 0x1f) + 1);
 	max_ittsize = ((typer >> 4) & 0xf) + 1;
 	max_ittsize *= max_devices;
 
