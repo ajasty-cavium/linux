@@ -790,6 +790,11 @@ static int its_alloc_tables(struct its_node *its)
 	int psz = PAGE_SIZE;
 	u64 shr = GITS_BASER_InnerShareable;
 	u64 typer = readq_relaxed(its->base + GITS_TYPER);
+	u64 max_devices, max_ittsize;
+
+	max_devices = 1ULL << (((typer >> 13) & 0x1f) + 1);
+	max_ittsize = ((typer >> 4) & 0xf) + 1;
+	max_ittsize *= max_devices;
 
 	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
 		u64 val = readq_relaxed(its->base + GITS_BASER + i * 8);
@@ -797,14 +802,9 @@ static int its_alloc_tables(struct its_node *its)
 		u64 entry_size = GITS_BASER_ENTRY_SIZE(val);
 		u64 tmp;
 		void *base;
-		u64 max_devices, max_ittsize;
 
 		if (type == GITS_BASER_TYPE_NONE)
 			continue;
-
-		max_devices = 1ULL << (((typer >> 13) & 0x1f) + 1);
-		max_ittsize = ((typer >> 4) & 0xf) + 1;
-		max_ittsize *= max_devices;
 
 		base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, get_order(max_ittsize));
 		if (!base) {
