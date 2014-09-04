@@ -233,7 +233,4 @@ static inline void vgic_arch_setup(const struct vgic_params *vgic)
 int kvm_perf_init(void);
 int kvm_perf_teardown(void);
 
-u64 kvm_arm_timer_get_reg(struct kvm_vcpu *, u64 regid);
-int kvm_arm_timer_set_reg(struct kvm_vcpu *, u64 regid, u64 value);
-
 #endif /* __ARM_KVM_HOST_H__ */

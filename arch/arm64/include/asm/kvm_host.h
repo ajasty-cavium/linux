@@ -86,7 +86,7 @@ struct kvm_cpu_context {
 	struct kvm_regs	gp_regs;
 	union {
 		u64 sys_regs[NR_SYS_REGS];
-		u32 cp15[NR_CP15_REGS];
+		u32 copro[NR_COPRO_REGS];
 	};
 };
 
@@ -100,6 +100,9 @@ struct kvm_vcpu_arch {
 
 	/* Exception Information */
 	struct kvm_vcpu_fault_info fault;
+
+	/* Debug state */
+	u64 debug_flags;
 
 	/* Pointer to host CPU context */
 	kvm_cpu_context_t *host_cpu_context;
@@ -138,7 +141,20 @@ struct kvm_vcpu_arch {
 
 #define vcpu_gp_regs(v)		(&(v)->arch.ctxt.gp_regs)
 #define vcpu_sys_reg(v,r)	((v)->arch.ctxt.sys_regs[(r)])
-#define vcpu_cp15(v,r)		((v)->arch.ctxt.cp15[(r)])
+/*
+ * CP14 and CP15 live in the same array, as they are backed by the
+ * same system registers.
+ */
+#define vcpu_cp14(v,r)		((v)->arch.ctxt.copro[(r)])
+#define vcpu_cp15(v,r)		((v)->arch.ctxt.copro[(r)])
+
+#ifdef CONFIG_CPU_BIG_ENDIAN
+#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r))
+#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r) + 1)
+#else
+#define vcpu_cp15_64_high(v,r)	vcpu_cp15((v),(r) + 1)
+#define vcpu_cp15_64_low(v,r)	vcpu_cp15((v),(r))
+#endif
 
 struct kvm_vm_stat {
 	u32 remote_tlb_flush;

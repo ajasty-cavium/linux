@@ -1125,6 +1125,7 @@ again:
 
 static void its_free_device(struct its_device *its_dev)
 {
+	list_del(&its_dev->entry);
 	kfree(its_dev->itt);
 	kfree(its_dev);
 }

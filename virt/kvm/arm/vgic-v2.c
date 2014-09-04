@@ -78,10 +78,13 @@ static u64 vgic_v2_get_elrsr(const struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
+#if BITS_PER_LONG == 64
 	val  = vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr[1];
 	val <<= 32;
 	val |= vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr[0];
-
+#else
+	val = *(u64 *)vcpu->arch.vgic_cpu.vgic_v2.vgic_elrsr;
+#endif
 	return val;
 }
 
@@ -89,10 +92,13 @@ static u64 vgic_v2_get_eisr(const struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
+#if BITS_PER_LONG == 64
 	val  = vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr[1];
 	val <<= 32;
 	val |= vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr[0];
-
+#else
+	val = *(u64 *)vcpu->arch.vgic_cpu.vgic_v2.vgic_eisr;
+#endif
 	return val;
 }
 
@@ -225,6 +231,22 @@ int vgic_v2_probe(struct device_node *vgic_node,
 		ret = -ENXIO;
 		goto out_unmap;
 	}
+
+	if (!PAGE_ALIGNED(vcpu_res.start)) {
+		kvm_err("GICV physical address 0x%llx not page aligned\n",
+			(unsigned long long)vcpu_res.start);
+		ret = -ENXIO;
+		goto out_unmap;
+	}
+
+	if (!PAGE_ALIGNED(resource_size(&vcpu_res))) {
+		kvm_err("GICV size 0x%llx not a multiple of page size 0x%lx\n",
+			(unsigned long long)resource_size(&vcpu_res),
+			PAGE_SIZE);
+		ret = -ENXIO;
+		goto out_unmap;
+	}
+
 	vgic->vcpu_base = vcpu_res.start;
 
 	kvm_info("%s@%llx IRQ%d\n", vgic_node->name,
