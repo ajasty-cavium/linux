@@ -23,6 +23,7 @@
 #define DRV_NAME	"thunder-BGX"
 #define DRV_VERSION	"1.0"
 
+
 struct lmac {
 	int dmac;
 } lmac;
@@ -44,7 +45,7 @@ static DEFINE_PCI_DEVICE_TABLE(bgx_id_table) = {
 
 MODULE_AUTHOR("Cavium Inc");
 MODULE_DESCRIPTION("Cavium Thunder BGX/MAC Driver");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
 
@@ -78,6 +79,7 @@ static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
 		bgx->lmac[lmac].dmac--;
 	}
 }
+
 void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 {
 	int bgx_index;
@@ -107,6 +109,7 @@ void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
 	writeq_relaxed(dmac, (void *)addr);
 	bgx->lmac[lmac].dmac++;
 }
+EXPORT_SYMBOL(bgx_add_dmac_addr);
 
 void bgx_lmac_enable(uint64_t lmac)
 {
@@ -123,7 +126,9 @@ void bgx_lmac_enable(uint64_t lmac)
 	lmac = lmac % MAX_LMAC_PER_BGX;
 	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG,
 			(1 << 15) | (1 << 14) | (1 << 13));
+
 }
+EXPORT_SYMBOL(bgx_lmac_enable);
 
 void bgx_lmac_disable(uint64_t lmac)
 {
@@ -140,6 +145,7 @@ void bgx_lmac_disable(uint64_t lmac)
 	lmac = lmac % MAX_LMAC_PER_BGX;
 	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00);
 }
+EXPORT_SYMBOL(bgx_lmac_disable);
 
 static void bgx_init_hw(struct bgx *bgx)
 {

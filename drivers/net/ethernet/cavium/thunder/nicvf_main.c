@@ -38,9 +38,9 @@ static DEFINE_PCI_DEVICE_TABLE(nicvf_id_table) = {
 	{ 0, }  /* end of table */
 };
 
-MODULE_AUTHOR("Cavium Inc");
-MODULE_DESCRIPTION("Cavium Thunder Virtual Function Network Driver");
-MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Sunil Goutham");
+MODULE_DESCRIPTION("Cavium Thunder NIC Virtual Function Driver");
+MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nicvf_id_table);
 
