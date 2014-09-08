@@ -144,7 +144,6 @@ config ARCH_THUNDER
 	select SATA_AHCI_PLATFORM
 	select PCI
 	select PCI_THUNDER
-	select TIMER_STATS
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
