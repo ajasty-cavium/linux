@@ -19,8 +19,40 @@
 
 /* Registers */
 #define BGX_CMRX_CFG				0x00
+#define BGX_CMRX_RX_ID_MAP			0x60
 #define BGX_CMRX_RX_DMAC_CTL			0x0E8
 #define BGX_CMR_RX_DMACX_CAM			0x200
+#define BGX_CMR_RX_LMACS			0x468
+#define BGX_CMR_TX_LMACS			0x1000
+
+#define BGX_SPUX_STATUS1			0x10008
+#define BGX_SPUX_STATUS2			0x10020
+#define BGX_SPUX_INT				0x10220	/* +(0..3) << 20 */
+#define BGX_SPUX_INT_W1S			0x10228
+#define BGX_SPUX_INT_ENA_W1C			0x10230
+#define BGX_SPUX_INT_ENA_W1S			0x10238
+
+#define BGX_MSIX_VEC_0_29_ADDR			0x400000 /* +(0..29) << 4 */
+#define BGX_MSIX_VEC_0_29_CTL			0x400008
+#define BGX_MSIX_PBA_0				0x4F0000
+
+/* MSI-X interrupts */
+#define BGX_MSIX_VECTORS	30
+#define BGX_LMAC_VEC_OFFSET	7
+#define BGX_MSIX_VEC_SHIFT	4
+
+#define CMRX_INT		0
+#define SPUX_INT		1
+#define SMUX_RX_INT		2
+#define SMUX_TX_INT		3
+#define GMPX_PCS_INT		4
+#define GMPX_GMI_RX_INT		5
+#define GMPX_GMI_TX_INT		6
+#define CMR_MEM_INT		28
+#define SPU_MEM_INT		29
+
+#define LMAC_INTR_LINK_UP	(1 << 0)
+#define LMAC_INTR_LINK_DOWN	(1 << 1)
 
 /*  RX_DMAC_CTL configuration*/
 enum MCAST_MODE {
@@ -33,7 +65,5 @@ enum MCAST_MODE {
 #define CAM_ACCEPT	1
 
 void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
-void bgx_lmac_disable(uint8_t lmac);
-void bgx_lmac_enable(uint8_t lmac);
 
 #endif /* THUNDER_BGX_H */

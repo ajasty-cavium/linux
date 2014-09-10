@@ -186,10 +186,6 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		reg_addr = NIC_PF_QSET_0_127_CFG | (mbx.data.qs.num << NIC_QS_ID_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
 		nic_channel_cfg(nic, mbx.data.qs.num);
-		if (!mbx.data.qs.cfg)
-			bgx_lmac_disable(mbx.data.qs.num);
-		else
-			bgx_lmac_enable(mbx.data.qs.num);
 		break;
 	case NIC_PF_VF_MSG_RQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG | (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
