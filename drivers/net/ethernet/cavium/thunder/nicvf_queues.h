@@ -322,7 +322,7 @@ int nicvf_set_qset_resources(struct nicvf *nic);
 int nicvf_config_data_transfer(struct nicvf *nic, bool enable);
 void nicvf_qset_config(struct nicvf *nic, bool enable);
 void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
-			    int qidx, bool enable);
+		    int qidx, bool enable);
 
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx);
 void nicvf_sq_disable(struct nicvf *nic, int qidx);
