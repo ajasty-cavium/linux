@@ -921,7 +921,7 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 {
 	uint64_t reg_val;
 
-	reg_val = nicvf_qset_reg_read(nic, NIC_VF_ENA_W1S);
+	reg_val = nicvf_reg_read(nic, NIC_VF_ENA_W1S);
 
 	switch (int_type) {
 	case NICVF_INTR_CQ:
@@ -951,7 +951,7 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 	break;
 	}
 
-	nicvf_qset_reg_write(nic, NIC_VF_ENA_W1S, reg_val);
+	nicvf_reg_write(nic, NIC_VF_ENA_W1S, reg_val);
 }
 
 /* Disable interrupt */
@@ -987,7 +987,7 @@ void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 	break;
 	}
 
-	nicvf_qset_reg_write(nic, NIC_VF_ENA_W1C, reg_val);
+	nicvf_reg_write(nic, NIC_VF_ENA_W1C, reg_val);
 }
 
 /* Clear interrupt */
@@ -1023,7 +1023,7 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 	break;
 	}
 
-	nicvf_qset_reg_write(nic, NIC_VF_INT, reg_val);
+	nicvf_reg_write(nic, NIC_VF_INT, reg_val);
 }
 
 /* Check if interrupt is enabled */
@@ -1032,7 +1032,7 @@ int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 	uint64_t reg_val;
 	uint64_t mask = 0xff;
 
-	reg_val = nicvf_qset_reg_read(nic, NIC_VF_ENA_W1S);
+	reg_val = nicvf_reg_read(nic, NIC_VF_ENA_W1S);
 
 	switch (int_type) {
 	case NICVF_INTR_CQ:

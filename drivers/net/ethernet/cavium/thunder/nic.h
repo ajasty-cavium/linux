@@ -12,6 +12,7 @@
 
 #include <linux/netdevice.h>
 #include <linux/interrupt.h>
+#include "thunder_bgx.h"
 
 /* PCI device IDs */
 #define	PCI_DEVICE_ID_THUNDER_NIC_PF	0xA01E
@@ -26,13 +27,12 @@
 #define	MAX_NUM_VFS_SUPPORTED		128
 #define	DEFAULT_NUM_VF_ENABLED		8
 
-/* TNS present or not */
-#undef  NIC_TNS_ENABLE
-#define NIC_TNS_BYPASS_MODE		0
-#define NIC_TNS_MODE			1
+#define	NIC_TNS_BYPASS_MODE		0
+#define	NIC_TNS_MODE			1
 
 /* NIC priv flags */
 #define	NIC_SRIOV_ENABLED		(1 << 0)
+#define	NIC_TNS_ENABLED			(1 << 1)
 
 /* VNIC HW optimiation features */
 #undef	VNIC_RX_CSUM_OFFLOAD_SUPPORT
@@ -40,6 +40,7 @@
 #define	VNIC_SG_SUPPORT
 #define	VNIC_TSO_SUPPORT
 #undef	VNIC_LRO_SUPPORT
+#undef  VNIC_RSS_SUPPORT
 
 /* TSO not supported in Thunder pass1 */
 #ifdef	VNIC_TSO_SUPPORT
@@ -58,17 +59,25 @@
 #define	NIC_MAX_PKIND			16
 
 /* Rx Channels */
-#define	NIC_MAX_BGX			2
-#define	NIC_CHANS_PER_BGX_INF		128
-#define	NIC_MAX_CHANS			(NIC_MAX_BGX * NIC_CHANS_PER_BGX_INF)
-#define	NIC_MAX_CPI			2048 /* Channel parse index */
-#define	NIC_MAX_RSSI			4096 /* Receive side scaling index */
+/* Receive channel configuration in TNS bypass mode
+ * Below is configuration in TNS bypass mode
+ * BGX0-LMAC0-CHAN0 - VNIC CHAN0
+ * BGX0-LMAC1-CHAN0 - VNIC CHAN16
+ * ...
+ * BGX1-LMAC0-CHAN0 - VNIC CHAN128
+ * ...
+ * BGX1-LMAC3-CHAN0 - VNIC CHAN174
+ */
+#define	NIC_INF_COUNT			2  /* No of interfaces */
+#define	NIC_CHANS_PER_INF		128
+#define	NIC_MAX_CHANS			(NIC_INF_COUNT * NIC_CHANS_PER_INF)
+#define	NIC_CPI_COUNT			2048 /* No of channel parse indices */
 
-/* TNS bi-pass mode: 1-1 mapping between VNIC and LMAC */
-#define	NIC_CPI_PER_BGX			(NIC_MAX_CPI / NIC_MAX_BGX)
-#define	NIC_CPI_PER_LMAC		(NIC_MAX_CPI / NIC_MAX_CHANS)
-#define	NIC_RSSI_PER_BGX		(NIC_MAX_RSSI / NIC_MAX_BGX)
-#define	NIC_RSSI_PER_LMAC		(NIC_MAX_RSSI / NIC_MAX_CHANS)
+/* TNS bypass mode: 1-1 mapping between VNIC and BGX:LMAC */
+#define NIC_MAX_BGX			MAX_BGX_PER_CN88XX
+#define	NIC_CPI_PER_BGX			(NIC_CPI_COUNT / NIC_MAX_BGX)
+#define	NIC_MAX_CPI_PER_LMAC		64 /* Max when CPI_ALG is IP diffserv */
+#define	NIC_RSSI_PER_BGX		(NIC_RSSI_COUNT / NIC_MAX_BGX)
 
 /* Tx scheduling */
 #define	NIC_MAX_TL4			1024
@@ -79,9 +88,9 @@
 #define	NIC_MAX_TL2_SHAPERS		2  /* 1 shaper for 32 TL2s */
 #define	NIC_MAX_TL1			2
 
-/* TNS bi-pass mode */
+/* TNS bypass mode */
 #define	NIC_TL4_PER_BGX			(NIC_MAX_TL4 / NIC_MAX_BGX)
-#define	NIC_TL4_PER_LMAC		(NIC_MAX_TL4 / NIC_CHANS_PER_BGX_INF)
+#define	NIC_TL4_PER_LMAC		(NIC_MAX_TL4 / NIC_CHANS_PER_INF)
 
 /* NIC VF Interrupts */
 #define	NICVF_INTR_CQ			0
@@ -132,6 +141,31 @@ struct nicvf_cq_poll {
 	struct napi_struct napi;
 };
 
+#define	NIC_RSSI_COUNT			4096 /* Total no of RSS indices */
+#define NIC_MAX_RSS_HASH_BITS		8
+#define NIC_MAX_RSS_IDR_TBL_SIZE	(1 << NIC_MAX_RSS_HASH_BITS)
+#define RSS_HASH_KEY_SIZE		5 /* 320 bit key */
+
+#ifdef VNIC_RSS_SUPPORT
+struct nicvf_rss_info {
+	bool enable;
+#define	RSS_L2_EXTENDED_HASH_ENA	(1 << 0)
+#define	RSS_IP_HASH_ENA			(1 << 1)
+#define	RSS_TCP_HASH_ENA		(1 << 2)
+#define	RSS_TCP_SYN_DIS			(1 << 3)
+#define	RSS_UDP_HASH_ENA		(1 << 4)
+#define RSS_L4_EXTENDED_HASH_ENA	(1 << 5)
+#define	RSS_ROCE_ENA			(1 << 6)
+#define	RSS_L3_BI_DIRECTION_ENA		(1 << 7)
+#define	RSS_L4_BI_DIRECTION_ENA		(1 << 8)
+	uint64_t cfg;
+	uint8_t  hash_bits;
+	uint16_t rss_size;
+	uint8_t  ind_tbl[NIC_MAX_RSS_IDR_TBL_SIZE];
+	uint64_t key[RSS_HASH_KEY_SIZE];
+};
+#endif
+
 enum rx_stats_reg_offset {
 	RX_OCTS = 0x0,
 	RX_UCAST = 0x1,
@@ -147,6 +181,7 @@ enum rx_stats_reg_offset {
 	RX_DRP_MCAST = 0xb,
 	RX_DRP_L3BCAST = 0xc,
 	RX_DRP_L3MCAST = 0xd,
+	RX_STATS_ENUM_LAST,
 };
 
 enum tx_stats_reg_offset {
@@ -155,6 +190,7 @@ enum tx_stats_reg_offset {
 	TX_BCAST = 0x2,
 	TX_MCAST = 0x3,
 	TX_DROP = 0x4,
+	TX_STATS_ENUM_LAST,
 };
 
 struct nicvf_hw_stats {
@@ -211,6 +247,11 @@ struct nicvf {
 	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
 	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
 	struct nicvf_cq_poll	*napi[8];	/* NAPI */
+#ifdef VNIC_RSS_SUPPORT
+	struct nicvf_rss_info	rss_info;
+#endif
+	uint8_t			cpi_alg;
+
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
 	struct work_struct	reset_task;
@@ -231,6 +272,14 @@ struct nicpf {
 	uint16_t		num_vf_en;      /* No of VF enabled */
 	uint64_t		reg_base;       /* Register start address */
 	struct pkind_cfg	pkind;
+	uint8_t			bgx_cnt;
+#define	NIC_SET_VF_LMAC_MAP(bgx, lmac)	(((bgx & 0xF) << 4) | (lmac & 0xF))
+#define	NIC_GET_BGX_FROM_VF_LMAC_MAP(map)	((map >> 4) & 0xF)
+#define	NIC_GET_LMAC_FROM_VF_LMAC_MAP(map)	(map & 0xF)
+	uint8_t			vf_lmac_map[MAX_LMAC];
+	uint16_t		cpi_base[MAX_NUM_VFS_SUPPORTED];
+	uint16_t		rss_ind_tbl_size;
+
 	/* MSI-X */
 	bool			msix_enabled;
 	uint16_t		num_vec;
@@ -246,7 +295,6 @@ struct nicpf {
 
 /* PF <--> VF mailbox communication */
 #define	NIC_PF_VF_MAILBOX_SIZE		8
-#define	NIC_PF_VF_MBX_LOCK_OFFSET	48
 #define	NIC_PF_VF_MBX_TIMEOUT		5000 /* ms */
 
 /* Mailbox message types */
@@ -258,7 +306,11 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_SQ_CFG		0x06	/* Configure Send queue */
 #define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x07	/* Configure receive queue */
 #define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to BGX's DMAC filter */
-#define	NIC_VF_SET_MAX_FRS		0x09	/* Set max frame size */
+#define	NIC_PF_VF_MSG_SET_MAX_FRS	0x09	/* Set max frame size */
+#define	NIC_PF_VF_MSG_CPI_CFG		0x0A	/* Config CPI, RSSI */
+#define	NIC_PF_VF_MSG_RSS_SIZE		0x0B	/* Get RSS indir_tbl size */
+#define	NIC_PF_VF_MSG_RSS_CFG		0x0C	/* Config RSS table */
+#define	NIC_PF_VF_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
 
 struct nic_cfg_msg {
 	uint64_t   vf_id;
@@ -278,6 +330,7 @@ struct rq_cfg_msg {
 	uint64_t   rq_num;
 	uint64_t   cfg;
 };
+
 /* Send queue configuration */
 struct sq_cfg_msg {
 	uint64_t   qs_num;
@@ -297,23 +350,68 @@ struct set_frs_msg {
 	uint64_t   max_frs;
 };
 
+/* Set CPI algorithm type */
+struct cpi_cfg_msg {
+	uint64_t   vf_id;
+	uint64_t   rq_cnt;
+	uint64_t   cpi_alg;
+};
+
+#ifdef VNIC_RSS_SUPPORT
+/* Get RSS table size */
+struct rss_sz_msg {
+	uint64_t   vf_id;
+	uint64_t   ind_tbl_size;
+};
+
+/* Set RSS configuration */
+struct rss_cfg_msg {
+	uint8_t   vf_id;
+	uint8_t   hash_bits;
+	uint16_t  tbl_len;
+	uint16_t  tbl_offset;
+#define RSS_IND_TBL_LEN_PER_MBX_MSG	42
+	uint8_t   ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
+};
+#endif
+
 /* Maximum 8 64bit locations */
 struct nic_mbx {
-	uint64_t	   msg;
+#define	NIC_PF_VF_MBX_MSG_MASK		0xFFFF
+	uint16_t	   msg;
+#define	NIC_PF_VF_MBX_LOCK_OFFSET	0
+#define	NIC_PF_VF_MBX_LOCK_VAL(x)	((x >> 16) & 0xFFFF)
+#define	NIC_PF_VF_MBX_LOCK_CLEAR(x)	(x & ~(0xFFFF0000))
+#define	NIC_PF_VF_MBX_LOCK_SET(x)\
+	(NIC_PF_VF_MBX_LOCK_CLEAR(x) | (1 << 16))
+	uint16_t	   mbx_lock;
+	uint32_t	   unused;
 	union	{
-		struct nic_cfg_msg nic_cfg;
-		struct qs_cfg_msg  qs;
-		struct rq_cfg_msg  rq;
-		struct sq_cfg_msg  sq;
-		struct set_mac_msg mac;
-		struct set_frs_msg frs;
+		struct nic_cfg_msg	nic_cfg;
+		struct qs_cfg_msg	qs;
+		struct rq_cfg_msg	rq;
+		struct sq_cfg_msg	sq;
+		struct set_mac_msg	mac;
+		struct set_frs_msg	frs;
+		struct cpi_cfg_msg	cpi_cfg;
+#ifdef VNIC_RSS_SUPPORT
+		struct rss_sz_msg	rss_size;
+		struct rss_cfg_msg	rss_cfg;
+#endif
+		uint64_t		rsvd[6];
 	} data;
-	uint64_t	   mbx[2];
-	uint64_t	   mbx_lock;
 	uint64_t	   mbx_trigger_intr;
 };
 
+int nicvf_set_real_num_queues(struct net_device *netdev,
+			      int tx_queues, int rx_queues);
+int nicvf_open(struct net_device *netdev);
+int nicvf_stop(struct net_device *netdev);
 int nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
+void nicvf_config_cpi(struct nicvf *nic);
+#ifdef VNIC_RSS_SUPPORT
+void nicvf_config_rss(struct nicvf *nic);
+#endif
 void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 #ifdef NICVF_ETHTOOL_ENABLE
 void nicvf_set_ethtool_ops(struct net_device *netdev);

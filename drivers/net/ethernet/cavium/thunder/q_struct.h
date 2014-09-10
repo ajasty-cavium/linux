@@ -1,4 +1,7 @@
 /*
+ * This file contains HW queue descriptor formats, config register
+ * structures e.t.c
+ *
  * Copyright (C) 2014 Cavium, Inc.
  *
  * This program is free software; you can redistribute it and/or
@@ -40,6 +43,14 @@ enum layer4_type {
 	L4TYPE_GRE = 0x07,
 	L4TYPE_ROCE_BTH = 0x08,
 	L4TYPE_OTHER = 0x0E,
+};
+
+/* CPI and RSSI configuration */
+enum cpi_algorithm_type {
+	CPI_ALG_NONE = 0x0,
+	CPI_ALG_VLAN = 0x1,
+	CPI_ALG_VLAN16 = 0x2,
+	CPI_ALG_DIFF = 0x3,
 };
 
 enum rss_algorithm_type {
