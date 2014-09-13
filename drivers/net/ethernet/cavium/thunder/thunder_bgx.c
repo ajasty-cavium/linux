@@ -73,12 +73,14 @@ int bgx_get_count(void)
 {
 	return MAX_BGX_PER_CN88XX;
 }
+EXPORT_SYMBOL(bgx_get_count);
 
 /* Return number of LMAC configured for this BGX */
 int bgx_get_lmac_count(int bgx)
 {
 	return MAX_LMAC_PER_BGX;
 }
+EXPORT_SYMBOL(bgx_get_lmac_count);
 
 /* Link Interrupts APIs */
 static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
