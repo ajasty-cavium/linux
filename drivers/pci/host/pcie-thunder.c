@@ -172,9 +172,9 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 {
 	struct thunder_pcie *pcie;
 	struct resource *cfg_base;
-	struct pci_host_bridge *bridge;
-	resource_size_t lastbus;
+	struct pci_bus *bus;
 	int ret;
+	LIST_HEAD(res);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
@@ -191,29 +191,33 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		goto err_ioremap;
 	}
 
-	bridge = of_create_pci_host_bridge(&pdev->dev, &thunder_pcie_ops, pcie);
-	if (IS_ERR(bridge)) {
-		ret = PTR_ERR(bridge);
-		goto err_pci;
+	ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
+					       0, 255, &res, NULL);
+	if (ret)
+		goto err_get_host;
+
+	bus = pci_create_root_bus(&pdev->dev, 0, &thunder_pcie_ops, pcie, &res);
+	if (!bus) {
+		ret = -ENODEV;
+		goto err_root_bus;
 	}
 
 	/* Set reference to MSI chip */
-	ret = thunder_pcie_msi_enable(pcie, bridge->bus);
+	ret = thunder_pcie_msi_enable(pcie, bus);
 	if (ret)
 		goto err_msi;
 
 	platform_set_drvdata(pdev, pcie);
 
-	lastbus = pci_scan_child_bus(bridge->bus);
-	pci_bus_add_devices(bridge->bus);
-	ret = pci_bus_update_busn_res_end(bridge->bus, lastbus);
-	if (ret)
-		goto err_msi;
+	pci_scan_child_bus(bus);
+	pci_bus_add_devices(bus);
 
 	return 0;
 err_msi:
-	pci_remove_root_bus(bridge->bus);
-err_pci:
+	pci_remove_root_bus(bus);
+err_root_bus:
+	pci_free_resource_list(&res);
+err_get_host:
 	devm_ioremap_release(pcie->dev, pcie->cfg_base);
 err_ioremap:
 	of_node_put(pcie->node);
