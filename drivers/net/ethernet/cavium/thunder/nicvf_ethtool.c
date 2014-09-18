@@ -71,8 +71,14 @@ static const struct nicvf_stat nicvf_drv_stats[] = {
 	NICVF_DRV_STAT(tx_drops),
 };
 
+static const struct nicvf_stat nicvf_queue_stats[] = {
+	{ "bytes", 0 },
+	{ "frames", 1 },
+};
+
 static const unsigned int nicvf_n_hw_stats = ARRAY_SIZE(nicvf_hw_stats);
 static const unsigned int nicvf_n_drv_stats = ARRAY_SIZE(nicvf_drv_stats);
+static const unsigned int nicvf_n_queue_stats = ARRAY_SIZE(nicvf_queue_stats);
 
 static int nicvf_get_settings(struct net_device *netdev,
 			     struct ethtool_cmd *cmd)
@@ -130,31 +136,55 @@ static void nicvf_get_drvinfo(struct net_device *netdev,
 	strlcpy(info->bus_info, pci_name(nic->pdev), sizeof(info->bus_info));
 }
 
-static void nicvf_get_strings(struct net_device *netdev, u32 stringset,
-			     u8 *data)
+static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 {
-	int stats;
+	int stats, qidx;
+
+	if (sset != ETH_SS_STATS)
+		return;
 
 	for (stats = 0; stats < nicvf_n_hw_stats; stats++) {
 		memcpy(data, nicvf_hw_stats[stats].name, ETH_GSTRING_LEN);
 		data += ETH_GSTRING_LEN;
 	}
+
 	for (stats = 0; stats < nicvf_n_drv_stats; stats++) {
 		memcpy(data, nicvf_drv_stats[stats].name, ETH_GSTRING_LEN);
 		data += ETH_GSTRING_LEN;
+	}
+
+	for (qidx = 0; qidx < MAX_RCV_QUEUES_PER_QS; qidx++) {
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
+			sprintf(data, "rxq%d: %s", qidx,
+				nicvf_queue_stats[stats].name);
+			data += ETH_GSTRING_LEN;
+		}
+	}
+
+	for (qidx = 0; qidx < MAX_SND_QUEUES_PER_QS; qidx++) {
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
+			sprintf(data, "txq%d: %s", qidx,
+				nicvf_queue_stats[stats].name);
+			data += ETH_GSTRING_LEN;
+		}
 	}
 }
 
 static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 {
-	return nicvf_n_hw_stats + nicvf_n_drv_stats;
+	if (sset != ETH_SS_STATS)
+		return -EINVAL;
+
+	return nicvf_n_hw_stats + nicvf_n_drv_stats +
+		(nicvf_n_queue_stats *
+		 (MAX_RCV_QUEUES_PER_QS + MAX_SND_QUEUES_PER_QS));
 }
 
 static void nicvf_get_ethtool_stats(struct net_device *netdev,
 				   struct ethtool_stats *stats, u64 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
-	int stat;
+	int stat, qidx;
 
 	nicvf_update_stats(nic);
 
@@ -164,6 +194,18 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 	for (stat = 0; stat < nicvf_n_drv_stats; stat++)
 		*(data++) = ((u64 *)&nic->drv_stats)
 				[nicvf_drv_stats[stat].index];
+
+	for (qidx = 0; qidx < MAX_RCV_QUEUES_PER_QS; qidx++) {
+		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
+			*(data++) = ((u64 *)&nic->qs->rq[qidx].stats)
+					[nicvf_queue_stats[stat].index];
+	}
+
+	for (qidx = 0; qidx < MAX_SND_QUEUES_PER_QS; qidx++) {
+		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
+			*(data++) = ((u64 *)&nic->qs->sq[qidx].stats)
+					[nicvf_queue_stats[stat].index];
+	}
 }
 
 static int nicvf_get_regs_len(struct net_device *dev)

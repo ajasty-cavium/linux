@@ -221,12 +221,7 @@ enum RQ_SQ_STATS {
 	RQ_SQ_STATS_PKTS,
 };
 
-struct rcv_queue_stats {
-	u64	bytes;
-	u64	pkts;
-};
-
-struct snd_queue_stats {
+struct rx_tx_queue_stats {
 	u64	bytes;
 	u64	pkts;
 };
@@ -259,7 +254,7 @@ struct rcv_queue {
 	uint8_t		cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
 	uint8_t		start_rbdr_qs;     /* First buffer ptrs - QS num */
 	uint8_t		start_qs_rbdr_idx; /* RBDR idx in the above QS */
-	struct		rcv_queue_stats stats;
+	struct		rx_tx_queue_stats stats;
 };
 
 struct cmp_queue {
@@ -283,7 +278,7 @@ struct snd_queue {
 	uint64_t	*skbuff;
 	void		*desc;
 	struct q_desc_mem   dmem;
-	struct snd_queue_stats stats;
+	struct rx_tx_queue_stats stats;
 };
 
 struct queue_set {
