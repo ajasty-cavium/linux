@@ -3,7 +3,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 2013 Cavium, Inc.
+ * Copyright (C) 2014 Cavium, Inc.
  */
 
 #ifndef NICVF_QUEUES_H
