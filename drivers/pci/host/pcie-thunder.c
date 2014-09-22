@@ -243,4 +243,4 @@ module_platform_driver(thunder_pcie_driver);
 
 MODULE_AUTHOR("Sunil Goutham");
 MODULE_DESCRIPTION("Cavium Thunder PCIe host controller driver");
-MODULE_LICENSE("GPLv2");
+MODULE_LICENSE("GPL v2");
