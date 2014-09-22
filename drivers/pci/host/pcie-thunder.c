@@ -54,7 +54,7 @@ static void pci_bridge_resource_fixup(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_BRIDGE,
-						pci_bridge_resource_fixup);
+			pci_bridge_resource_fixup);
 
 /*
  * All PCIe devices in Thunder have fixed resources, shouldn't be reassigned.
@@ -76,7 +76,7 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 	}
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
-						pci_dev_resource_fixup);
+			pci_dev_resource_fixup);
 
 static void __iomem *thunder_pcie_cfg_base(struct thunder_pcie *pcie,
 				 unsigned int bus, unsigned int devfn)
