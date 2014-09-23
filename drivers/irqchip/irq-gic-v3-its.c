@@ -968,6 +968,7 @@ retry_baser:
 		val |= (max_ittsize / psz) - 1;
 
 		writeq_relaxed(val, its->base + GITS_BASER + i * 8);
+
 		tmp = readq_relaxed(its->base + GITS_BASER + i * 8);
 
 		if ((val ^ tmp) & GITS_BASER_SHAREABILITY_MASK) {
@@ -996,6 +997,12 @@ retry_baser:
 				goto retry_baser;
 			}
 		}
+
+        /* skip comparing cacheability feilds as they are implemenations
+         * defined.
+         */
+		val = val << 5;
+		tmp = tmp << 5;
 
 		if (val != tmp) {
 			pr_err("ITS: %s: GITS_BASER%d doesn't stick: %lx %lx\n",
