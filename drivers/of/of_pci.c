@@ -5,6 +5,8 @@
 #include <linux/of_pci.h>
 #include <linux/slab.h>
 
+#include "of_private.h"
+
 static inline int __of_pci_pci_compare(struct device_node *node,
 				       unsigned int data)
 {
@@ -93,10 +95,30 @@ EXPORT_SYMBOL_GPL(of_pci_parse_bus_range);
 
 static atomic_t of_domain_nr = ATOMIC_INIT(-1);
 
+/*
+ * Get the maximum value for a domain number from the device tree
+ */
+static int of_get_max_pci_domain_nr(void)
+{
+	struct alias_prop *app;
+	int max_domain = -1;
+
+	mutex_lock(&of_mutex);
+	list_for_each_entry(app, &aliases_lookup, link) {
+		if (strncmp(app->stem, "pci-domain", 10) != 0)
+			continue;
+
+		max_domain = max(max_domain, app->id);
+	}
+	mutex_unlock(&of_mutex);
+
+	return max_domain;
+}
+
 /**
  * This function will try to obtain the host bridge domain number by
- * using of_alias_get_id() call with "pci-domain" as a stem. If that
- * fails, a local allocator will be used. The local allocator can
+ * using of_alias_get_id() call with "pci-domain" as a stem.  If that
+ * fails, a local allocator will be used.  The local allocator can
  * be requested to return a new domain_nr if the information is missing
  * from the device tree.
  *
@@ -105,7 +127,7 @@ static atomic_t of_domain_nr = ATOMIC_INIT(-1);
  * allocate a new number.
  *
  * Returns the associated domain number from DT, or a new domain number
- * if DT information is missing and @allocate_if_missing is true. If
+ * if DT information is missing and @allocate_if_missing is true.  If
  * @allocate_if_missing is false then the last allocated domain number
  * will be returned.
  */
@@ -113,12 +135,18 @@ int of_pci_get_domain_nr(struct device_node *node, bool allocate_if_missing)
 {
 	int domain;
 
+	domain = atomic_read(&of_domain_nr);
+	if (domain == -1) {
+		/* first run, get max defined domain nr in device tree */
+		domain = of_get_max_pci_domain_nr();
+		/* then set the start value for allocator to be max + 1 */
+		atomic_set(&of_domain_nr, domain + 1);
+	}
 	domain = of_alias_get_id(node, "pci-domain");
 	if (domain == -ENODEV) {
+		domain = atomic_read(&of_domain_nr);
 		if (allocate_if_missing)
-			domain = atomic_inc_return(&of_domain_nr);
-		else
-			domain = atomic_read(&of_domain_nr);
+			atomic_inc(&of_domain_nr);
 	}
 
 	return domain;
@@ -129,7 +157,7 @@ EXPORT_SYMBOL_GPL(of_pci_get_domain_nr);
  * of_pci_get_host_bridge_resources - Parse PCI host bridge resources from DT
  * @dev: device node of the host bridge having the range property
  * @busno: bus number associated with the bridge root bus
- * @bus_max: maximum number of busses for this bridge
+ * @bus_max: maximum number of buses for this bridge
  * @resources: list where the range of resources will be added after DT parsing
  * @io_base: pointer to a variable that will contain on return the physical
  * address for the start of the I/O range.
@@ -140,6 +168,8 @@ EXPORT_SYMBOL_GPL(of_pci_get_domain_nr);
  * node and setup the resource mapping based on its content. It is expected
  * that the property conforms with the Power ePAPR document.
  *
+ * It returns zero if the range parsing has been successful or a standard error
+ * value if it failed.
  */
 int of_pci_get_host_bridge_resources(struct device_node *dev,
 			unsigned char busno, unsigned char bus_max,
@@ -151,6 +181,10 @@ int of_pci_get_host_bridge_resources(struct device_node *dev,
 	struct of_pci_range_parser parser;
 	char range_type[4];
 	int err;
+
+	if (!io_base)
+		return -EINVAL;
+	*io_base = OF_BAD_ADDR;
 
 	bus_range = kzalloc(sizeof(*bus_range), GFP_KERNEL);
 	if (!bus_range)
@@ -209,7 +243,7 @@ int of_pci_get_host_bridge_resources(struct device_node *dev,
 		}
 
 		if (resource_type(res) == IORESOURCE_IO) {
-			if (*io_base)
+			if (*io_base != OF_BAD_ADDR)
 				pr_warn("More than one I/O resource converted. CPU offset for old range lost!\n");
 			*io_base = range.cpu_addr;
 		}

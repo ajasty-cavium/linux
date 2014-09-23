@@ -615,7 +615,7 @@ static DEFINE_SPINLOCK(io_range_lock);
 
 /*
  * Record the PCI IO range (expressed as CPU physical address + size).
- * Return a negative value if an error has occured, zero otherwise
+ * Return a negative value if an error has occurred, zero otherwise
  */
 int __weak pci_register_io_range(phys_addr_t addr, resource_size_t size)
 {
@@ -632,7 +632,7 @@ int __weak pci_register_io_range(phys_addr_t addr, resource_size_t size)
 	}
 	spin_unlock(&io_range_lock);
 
-	/* range not registed yet, check for available space */
+	/* range not registered yet, check for available space */
 	if (allocated_size + size - 1 > IO_SPACE_LIMIT) {
 		/* if it's too big check if 64K space can be reserved */
 		if (allocated_size + SZ_64K - 1 > IO_SPACE_LIMIT)
