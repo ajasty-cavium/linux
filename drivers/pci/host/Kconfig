@@ -65,9 +65,9 @@ config PCIE_SPEAR13XX
 
 config PCI_THUNDER
 	bool "Thunder PCIe host controller"
-	depends on ARCH_THUNDER
-	select PCI_MSI
-	select PCI_IOV
+	depends on ARM64 || COMPILE_TEST
+	depends on OF_PCI
+	depends on PCI_MSI
 	help
 	  Say Y here if you want internal PCI support on Thunder SoC.
 
