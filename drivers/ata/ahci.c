@@ -2,7 +2,7 @@
  *  ahci.c - AHCI SATA support
  *
  *  Maintained by:  Tejun Heo <tj@kernel.org>
- *    		    Please ALWAYS copy linux-ide@vger.kernel.org
+ *		    Please ALWAYS copy linux-ide@vger.kernel.org
  *		    on emails.
  *
  *  Copyright 2004-2005 Red Hat, Inc.
@@ -1213,14 +1213,14 @@ static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 	if (!nvec)
 		goto msi;
 	hpriv->msix_entries = kcalloc(nvec, sizeof(struct msix_entry),
-			                                   GFP_KERNEL);
+				GFP_KERNEL);
 	for (vec = 0; vec < nvec; vec++)
-                hpriv->msix_entries[vec].entry = vec;
+		hpriv->msix_entries[vec].entry = vec;
 
 	rc = pci_enable_msix(pdev, hpriv->msix_entries, nvec);
 	if (rc < 0)
 		goto msi;
-	
+
 	pdev->irq = hpriv->msix_entries[0].vector;
 	return nvec;
 
@@ -1305,9 +1305,9 @@ int ahci_host_activate(struct ata_host *host, int irq, unsigned int n_msis)
 		}
 
 		rc = devm_request_threaded_irq(host->dev, irq + i,
-					       ahci_hw_interrupt,
-					       ahci_thread_fn, IRQF_SHARED,
-					       pp->irq_desc, host->ports[i]);
+					ahci_hw_interrupt,
+					ahci_thread_fn, IRQF_SHARED,
+					pp->irq_desc, host->ports[i]);
 		if (rc)
 			goto out_free_irqs;
 	}
