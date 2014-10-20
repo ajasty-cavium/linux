@@ -168,7 +168,7 @@ static DEFINE_SPINLOCK(its_lock);
 static struct device_node *gic_root_node;
 static struct rdist *gic_rdist;
 
-#define gic_data_rdist()		(__this_cpu_ptr(gic_rdist->rdist))
+#define gic_data_rdist()		(raw_cpu_ptr(gic_rdist->rdist))
 #define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
 
 static void its_encode_cmd(struct its_cmd_block *cmd, u8 cmd_nr)
