@@ -163,8 +163,8 @@ struct vgic_dist {
 	/* Bitmap indicating which CPU has something pending */
 	unsigned long		irq_pending_on_cpu;
 
-    /* afinity routing */
-    u32 afi_enabled;
+	/* afinity routing */
+	u32 afi_enabled;
 #endif
 };
 
