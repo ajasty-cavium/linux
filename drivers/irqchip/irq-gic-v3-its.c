@@ -918,7 +918,7 @@ static int its_alloc_tables(struct its_node *its)
 {
 	int err;
 	int i;
-	int psz = PAGE_SIZE;
+	int psz = SZ_64K;
 	u64 shr = GITS_BASER_InnerShareable;
 	u64 typer = readq_relaxed(its->base + GITS_TYPER);
 	u64 max_devices, max_ittsize;
@@ -943,6 +943,7 @@ static int its_alloc_tables(struct its_node *its)
 			goto out_free;
 		}
 
+
 		its->tables[i] = base;
 
 retry_baser:
@@ -965,8 +966,7 @@ retry_baser:
 			break;
 		}
 
-		val |= (max_ittsize / psz) - 1;
-
+        val |= ((max_ittsize / psz) - 1) & 0xffUL;
 		writeq_relaxed(val, its->base + GITS_BASER + i * 8);
 
 		tmp = readq_relaxed(its->base + GITS_BASER + i * 8);
