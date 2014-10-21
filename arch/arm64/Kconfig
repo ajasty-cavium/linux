@@ -329,9 +329,8 @@ config NUMA
 	  NUMA awareness to the kernel.
 
 config ARM64_DT_NUMA
-	def_bool y
+	def_bool n
 	prompt "DT NUMA detection"
-	default n
 	---help---
 	  Enable DT based numa.
 
