@@ -67,7 +67,7 @@ enum MCAST_MODE {
 #define BCAST_ACCEPT	1
 #define CAM_ACCEPT	1
 
-void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac);
+void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac);
 int bgx_get_count(void);
 int bgx_get_lmac_count(int bgx);
 #endif /* THUNDER_BGX_H */

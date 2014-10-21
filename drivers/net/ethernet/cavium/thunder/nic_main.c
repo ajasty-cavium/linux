@@ -171,6 +171,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	uint64_t *mbx_data;
 	uint64_t mbx_addr;
 	uint64_t reg_addr;
+	int bgx, lmac;
 	int i;
 	int ret = 0;
 
@@ -216,7 +217,10 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_tx_channel_cfg(nic, mbx.data.qs.num, mbx.data.sq.sq_num);
 		break;
 	case NIC_PF_VF_MSG_SET_MAC:
-		bgx_add_dmac_addr(mbx.data.mac.addr, mbx.data.mac.vf_id);
+		lmac = mbx.data.mac.vf_id;
+		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
+		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
+		bgx_add_dmac_addr(mbx.data.mac.addr, bgx, lmac);
 		break;
 	case NIC_PF_VF_MSG_SET_MAX_FRS:
 		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
