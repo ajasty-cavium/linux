@@ -137,4 +137,6 @@ static inline int cmp_sys_reg(const struct sys_reg_desc *i1,
 #define CRm(_x) 	.CRm = _x
 #define Op2(_x) 	.Op2 = _x
 
+void vgic_arm64_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg);
+
 #endif /* __ARM64_KVM_SYS_REGS_LOCAL_H__ */

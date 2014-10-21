@@ -1142,9 +1142,12 @@ static void vgic_dispatch_sgi(struct kvm_vcpu *vcpu, u32 reg)
 }
 
 /**
- *vigic_arm64_dispatch_sgi : called when guest os writes to ICC_SGI1R_EL1
- * for now we are using only affinity level 0. affinity level 1,2 is not at emulated..so MAX_CPUS =16
- * */
+ * vigic_arm64_dispatch_sgi : called when guest os writes to
+ * ICC_SGI1R_EL1
+ *
+ * For now we are using only affinity level 0. affinity level 1,2 is
+ * not at emulated..so MAX_CPUS =16
+ */
 void vgic_arm64_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 {
 	struct kvm *kvm = vcpu->kvm;
@@ -1168,7 +1171,6 @@ void vgic_arm64_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	}
 	vgic_update_state(vcpu->kvm);
 }
-EXPORT_SYMBOL(vgic_arm64_dispatch_sgi);
 
 
 

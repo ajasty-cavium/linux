@@ -49,7 +49,6 @@ static void reset_actlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r)
 	vcpu_sys_reg(vcpu, ACTLR_EL1) = actlr;
 }
 
-void vgic_arm64_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg);
 static bool sys_reg_access(struct kvm_vcpu *vcpu,
 			   const struct sys_reg_params *p,
 			   const struct sys_reg_desc *r)
