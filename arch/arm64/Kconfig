@@ -148,6 +148,8 @@ config ARCH_THUNDER
 	select SATA_AHCI
 	select SATA_AHCI_PLATFORM
 	select NET_VENDOR_CAVIUM
+	select HAVE_MEMBLOCK_NODE_MAP if NUMA
+	select ARM64_VA_BITS_48 if NUMA
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
@@ -242,11 +244,11 @@ choice
 
 config ARM64_VA_BITS_39
 	bool "39-bit"
-	depends on ARM64_4K_PAGES
+	depends on ARM64_4K_PAGES  && !NUMA
 
 config ARM64_VA_BITS_42
 	bool "42-bit"
-	depends on ARM64_64K_PAGES
+	depends on ARM64_64K_PAGES  && !NUMA
 
 config ARM64_VA_BITS_48
 	bool "48-bit"
@@ -314,6 +316,38 @@ config HOTPLUG_CPU
 	help
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
+
+# Common NUMA Features
+config NUMA
+	bool "Numa Memory Allocation and Scheduler Support"
+	depends on SMP
+	---help---
+	  Enable NUMA (Non Uniform Memory Access) support.
+
+	  The kernel will try to allocate memory used by a CPU on the
+	  local memory controller of the CPU and add some more
+	  NUMA awareness to the kernel.
+
+config ARM64_DT_NUMA
+	def_bool y
+	prompt "DT NUMA detection"
+	default n
+	---help---
+	  Enable DT based numa.
+
+config NODES_SHIFT
+	int "Maximum NUMA Nodes (as a power of 2)"
+	range 1 10
+	default "2"
+	depends on NEED_MULTIPLE_NODES
+	---help---
+	  Specify the maximum number of NUMA Nodes available on the target
+	  system.  Increases memory reserved to accommodate various tables.
+
+config USE_PERCPU_NUMA_NODE_ID
+	def_bool y
+	depends on NUMA
+
 
 source kernel/Kconfig.preempt
 
