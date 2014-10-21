@@ -244,7 +244,7 @@ config ARM64_VA_BITS_42
 
 config ARM64_VA_BITS_48
 	bool "48-bit"
-	depends on BROKEN
+	depends on ARM64_4K_PAGES || ARM64_64K_PAGES
 
 endchoice
 
