@@ -78,6 +78,8 @@ EXPORT_SYMBOL(bgx_get_count);
 /* Return number of LMAC configured for this BGX */
 int bgx_get_lmac_count(int bgx)
 {
+	if (bgx == 0)
+		return 1;
 	return MAX_LMAC_PER_BGX;
 }
 EXPORT_SYMBOL(bgx_get_lmac_count);
@@ -200,24 +202,22 @@ static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
 	}
 }
 
-void bgx_add_dmac_addr(uint64_t dmac, uint64_t lmac)
+void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac)
 {
-	int bgx_index;
 	uint64_t offset, addr;
 	struct bgx *bgx;
-	bgx_index = lmac / MAX_LMAC_PER_BGX;
-	bgx = bgx_vnic[bgx_index];
+	bgx = bgx_vnic[bgx_idx];
 
 	if (!bgx) {
 		pr_err("BGX%d not yet initialized, ignoring DMAC addition\n",
-				bgx_index);
+			bgx_idx);
 		return;
 	}
 
-	lmac = lmac % MAX_LMAC_PER_BGX;
-	dmac = dmac | (1ULL << 48) | (lmac << 49); /* Enable DMAC */
+	dmac = dmac | (1ULL << 48) | ((uint64_t)lmac << 49); /* Enable DMAC */
 	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC) {
-		pr_err("Max DMAC filters for LMAC%lld reached, ignoring DMAC addition\n", lmac);
+		pr_err("Max DMAC filters for LMAC%d reached, ignoring DMAC addition\n",
+		       lmac);
 		return;
 	}
 
@@ -248,8 +248,7 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmac)
 
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
-		bgx_add_dmac_addr(dmac_bcast,
-				  lmac + bgx->bgx_id * bgx->lmac_count);
+		bgx_add_dmac_addr(dmac_bcast, bgx->bgx_id, lmac);
 }
 
 void bgx_lmac_disable(struct bgx *bgx, uint8_t lmac)
