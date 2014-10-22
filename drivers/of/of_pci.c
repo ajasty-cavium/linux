@@ -3,8 +3,6 @@
 #include <linux/of.h>
 #include <linux/of_pci.h>
 
-#include "of_private.h"
-
 static inline int __of_pci_pci_compare(struct device_node *node,
 				       unsigned int data)
 {
@@ -90,66 +88,6 @@ int of_pci_parse_bus_range(struct device_node *node, struct resource *res)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(of_pci_parse_bus_range);
-
-static atomic_t of_domain_nr = ATOMIC_INIT(-1);
-
-/*
- * Get the maximum value for a domain number from the device tree
- */
-static int of_get_max_pci_domain_nr(void)
-{
-	struct alias_prop *app;
-	int max_domain = -1;
-
-	mutex_lock(&of_mutex);
-	list_for_each_entry(app, &aliases_lookup, link) {
-		if (strncmp(app->stem, "pci-domain", 10) != 0)
-			continue;
-
-		max_domain = max(max_domain, app->id);
-	}
-	mutex_unlock(&of_mutex);
-
-	return max_domain;
-}
-
-/**
- * This function will try to obtain the host bridge domain number by
- * using of_alias_get_id() call with "pci-domain" as a stem.  If that
- * fails, a local allocator will be used.  The local allocator can
- * be requested to return a new domain_nr if the information is missing
- * from the device tree.
- *
- * @node: device tree node with the domain information
- * @allocate_if_missing: if DT lacks information about the domain nr,
- * allocate a new number.
- *
- * Returns the associated domain number from DT, or a new domain number
- * if DT information is missing and @allocate_if_missing is true.  If
- * @allocate_if_missing is false then the last allocated domain number
- * will be returned.
- */
-int of_pci_get_domain_nr(struct device_node *node, bool allocate_if_missing)
-{
-	int domain;
-
-	domain = atomic_read(&of_domain_nr);
-	if (domain == -1) {
-		/* first run, get max defined domain nr in device tree */
-		domain = of_get_max_pci_domain_nr();
-		/* then set the start value for allocator to be max + 1 */
-		atomic_set(&of_domain_nr, domain + 1);
-	}
-	domain = of_alias_get_id(node, "pci-domain");
-	if (domain == -ENODEV) {
-		domain = atomic_read(&of_domain_nr);
-		if (allocate_if_missing)
-			atomic_inc(&of_domain_nr);
-	}
-
-	return domain;
-}
-EXPORT_SYMBOL_GPL(of_pci_get_domain_nr);
 
 #ifdef CONFIG_PCI_MSI
 
