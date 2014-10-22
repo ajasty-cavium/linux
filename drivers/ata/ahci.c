@@ -2,7 +2,7 @@
  *  ahci.c - AHCI SATA support
  *
  *  Maintained by:  Tejun Heo <tj@kernel.org>
- *		    Please ALWAYS copy linux-ide@vger.kernel.org
+ *    		    Please ALWAYS copy linux-ide@vger.kernel.org
  *		    on emails.
  *
  *  Copyright 2004-2005 Red Hat, Inc.
@@ -1305,9 +1305,9 @@ int ahci_host_activate(struct ata_host *host, int irq, unsigned int n_msis)
 		}
 
 		rc = devm_request_threaded_irq(host->dev, irq + i,
-					ahci_hw_interrupt,
-					ahci_thread_fn, IRQF_SHARED,
-					pp->irq_desc, host->ports[i]);
+					       ahci_hw_interrupt,
+					       ahci_thread_fn, IRQF_SHARED,
+					       pp->irq_desc, host->ports[i]);
 		if (rc)
 			goto out_free_irqs;
 	}
