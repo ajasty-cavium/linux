@@ -178,14 +178,6 @@ config PCI
 config PCI_MSI
 	def_bool PCI
 
-config NO_PCI_IOV
-	def_bool PCI
-	depends on !PCI_THUNDER
-
-config PCI_IOV
-	def_bool PCI
-	depends on !NO_PCI_IOV
-
 config PCI_DOMAINS
 	def_bool PCI
 
@@ -198,9 +190,6 @@ config PCI_SYSCALL
 source "drivers/pci/Kconfig"
 source "drivers/pci/pcie/Kconfig"
 source "drivers/pci/hotplug/Kconfig"
-
-config PCI_THUNDER
-	def_bool PCI
 
 endmenu
 
