@@ -23,7 +23,7 @@ static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 	dmem->q_len = q_len;
 	dmem->size = (desc_size * q_len) + align_bytes;
 	dmem->unalign_base = dma_alloc_coherent(&nic->pdev->dev, dmem->size,
-						&dmem->dma, GFP_ATOMIC);
+						&dmem->dma, GFP_KERNEL);
 	if (!dmem->unalign_base)
 		return -1;
 
