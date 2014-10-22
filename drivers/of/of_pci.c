@@ -182,8 +182,9 @@ int of_pci_get_host_bridge_resources(struct device_node *dev,
 	char range_type[4];
 	int err;
 
-	if (io_base)
-		*io_base = OF_BAD_ADDR;
+	if (!io_base)
+		return -EINVAL;
+	*io_base = OF_BAD_ADDR;
 
 	bus_range = kzalloc(sizeof(*bus_range), GFP_KERNEL);
 	if (!bus_range)
@@ -241,7 +242,7 @@ int of_pci_get_host_bridge_resources(struct device_node *dev,
 			goto parse_failed;
 		}
 
-		if (io_base && resource_type(res) == IORESOURCE_IO) {
+		if (resource_type(res) == IORESOURCE_IO) {
 			if (*io_base != OF_BAD_ADDR)
 				pr_warn("More than one I/O resource converted. CPU offset for old range lost!\n");
 			*io_base = range.cpu_addr;
