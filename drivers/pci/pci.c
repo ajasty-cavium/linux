@@ -2704,40 +2704,6 @@ int pci_request_regions_exclusive(struct pci_dev *pdev, const char *res_name)
 }
 EXPORT_SYMBOL(pci_request_regions_exclusive);
 
-/**
- *	pci_remap_iospace - Remap the memory mapped I/O space
- *	@res: Resource describing the I/O space
- *	@phys_addr: physical address where the range will be mapped.
- *
- *	Remap the memory mapped I/O space described by the @res
- *	into the CPU virtual address space.  Only architectures
- *	that have memory-mapped IO defined (and hence PCI_IOBASE)
- *	should call this function.
- */
-int __weak pci_remap_iospace(const struct resource *res, phys_addr_t phys_addr)
-{
-#ifdef PCI_IOBASE
-	unsigned long vaddr;
-
-	if (!(res->flags & IORESOURCE_IO))
-		return -EINVAL;
-
-	if (res->end > IO_SPACE_LIMIT)
-		return -EINVAL;
-
-	vaddr = PCI_IOBASE + res->start;
-	return ioremap_page_range(vaddr, vaddr + resource_size(res),
-				  phys_addr, pgprot_device(PAGE_KERNEL));
-#else
-	/*
-	 * This architecture does not have memory mapped I/O space,
-	 * so this function should never be called.
-	 */
-	WARN_ON(1);
-	return -ENODEV;
-#endif
-}
-
 static void __pci_set_master(struct pci_dev *dev, bool enable)
 {
 	u16 old_cmd, cmd;
