@@ -462,6 +462,7 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	qs_cfg = (struct qs_cfg *)&mbx.data.qs.cfg;
 	if (qs->enable) {
 		qs_cfg->ena = 1;
+		qs_cfg->be = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 1 : 0;
 		qs_cfg->vnic = qs->vnic_id;
 	} else {
 		mbx.data.qs.cfg = 0;
@@ -858,6 +859,15 @@ append_fail:
 	return 0;
 }
 
+static unsigned frag_num(unsigned i)
+{
+#ifdef __BIG_ENDIAN
+	return (i & ~3) + 3 - (i & 3);
+#else
+	return i;
+#endif
+}
+
 struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 {
 	int frag;
@@ -882,7 +892,7 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
-		payload_len = *rb_lens;
+		payload_len = rb_lens[frag_num(frag)];
 		if (!frag) {
 			/* First fragment */
 			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
@@ -910,7 +920,6 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 			skb_frag->len = payload_len;
 		}
 		/* Next buffer pointer */
-		rb_lens++;
 		rb_ptrs++;
 	}
 	return skb;
