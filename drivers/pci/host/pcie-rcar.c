@@ -323,7 +323,6 @@ static void rcar_pcie_setup_window(int win, struct rcar_pcie *pcie)
 
 	/* Setup PCIe address space mappings for each resource */
 	resource_size_t size;
-	resource_size_t res_start;
 	u32 mask;
 
 	rcar_pci_write_reg(pcie, 0x00000000, PCIEPTCTLR(win));
@@ -336,13 +335,8 @@ static void rcar_pcie_setup_window(int win, struct rcar_pcie *pcie)
 	mask = (roundup_pow_of_two(size) / SZ_128) - 1;
 	rcar_pci_write_reg(pcie, mask << 7, PCIEPAMR(win));
 
-	if (res->flags & IORESOURCE_IO)
-		res_start = pci_pio_to_address(res->start);
-	else
-		res_start = res->start;
-
-	rcar_pci_write_reg(pcie, upper_32_bits(res_start), PCIEPARH(win));
-	rcar_pci_write_reg(pcie, lower_32_bits(res_start), PCIEPARL(win));
+	rcar_pci_write_reg(pcie, upper_32_bits(res->start), PCIEPARH(win));
+	rcar_pci_write_reg(pcie, lower_32_bits(res->start), PCIEPARL(win));
 
 	/* First resource is for IO */
 	mask = PAR_ENABLE;
@@ -369,10 +363,9 @@ static int rcar_pcie_setup(int nr, struct pci_sys_data *sys)
 
 		rcar_pcie_setup_window(i, pcie);
 
-		if (res->flags & IORESOURCE_IO) {
-			phys_addr_t io_start = pci_pio_to_address(res->start);
-			pci_ioremap_io(nr * SZ_64K, io_start);
-		} else
+		if (res->flags & IORESOURCE_IO)
+			pci_ioremap_io(nr * SZ_64K, res->start);
+		else
 			pci_add_resource(&sys->resources, res);
 	}
 	pci_add_resource(&sys->resources, &pcie->busn);
@@ -942,10 +935,8 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 	}
 
 	for_each_of_pci_range(&parser, &range) {
-		err = of_pci_range_to_resource(&range, pdev->dev.of_node,
+		of_pci_range_to_resource(&range, pdev->dev.of_node,
 						&pcie->res[win++]);
-		if (err < 0)
-			return err;
 
 		if (win > RCAR_PCI_MAX_RESOURCES)
 			break;
