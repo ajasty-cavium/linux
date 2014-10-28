@@ -463,7 +463,9 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	qs_cfg = (struct qs_cfg *)&mbx.data.qs.cfg;
 	if (qs->enable) {
 		qs_cfg->ena = 1;
-		qs_cfg->be = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 1 : 0;
+#ifdef __BIG_ENDIAN
+		qs_cfg->be = 1;
+#endif
 		qs_cfg->vnic = qs->vnic_id;
 	} else {
 		mbx.data.qs.cfg = 0;
