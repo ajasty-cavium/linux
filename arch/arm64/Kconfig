@@ -331,6 +331,7 @@ config NUMA
 config ARM64_DT_NUMA
 	def_bool n
 	prompt "DT NUMA detection"
+	depends on BROKEN
 	---help---
 	  Enable DT based numa.
 
