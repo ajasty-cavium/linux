@@ -51,7 +51,8 @@ static int nicvf_alloc_rcv_buffer(struct nicvf *nic,
 
 	buf_len += NICVF_RCV_BUF_ALIGN_BYTES + sizeof(void *);
 
-	if (!(skb = netdev_alloc_skb(nic->netdev, buf_len))) {
+	skb = netdev_alloc_skb(nic->netdev, buf_len);
+	if (!skb) {
 		netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
 		return -ENOMEM;
 	}
@@ -79,7 +80,7 @@ static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, uint64_t rb_ptr)
 }
 
 static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
-						int ring_len, int buf_size)
+			    int ring_len, int buf_size)
 {
 	int idx;
 	unsigned char *rbuf;
@@ -89,7 +90,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 				   sizeof(struct rbdr_entry_t),
 				   NICVF_RCV_BUF_ALIGN_BYTES)) {
 		netdev_err(nic->netdev,
-			"Unable to allocate memory for rcv buffer ring\n");
+			   "Unable to allocate memory for rcv buffer ring\n");
 		return -ENOMEM;
 	}
 
@@ -224,7 +225,7 @@ static int nicvf_init_cmp_queue(struct nicvf *nic,
 				   CMP_QUEUE_DESC_SIZE,
 				   NICVF_CQ_BASE_ALIGN_BYTES)) {
 		netdev_err(nic->netdev,
-			"Unable to allocate memory for completion queue\n");
+			   "Unable to allocate memory for completion queue\n");
 		return -ENOMEM;
 	}
 	cq->desc = cq->dmem.base;
@@ -254,7 +255,7 @@ static int nicvf_init_snd_queue(struct nicvf *nic,
 				   SND_QUEUE_DESC_SIZE,
 				   NICVF_SQ_BASE_ALIGN_BYTES)) {
 		netdev_err(nic->netdev,
-			"Unable to allocate memory for send queue\n");
+			   "Unable to allocate memory for send queue\n");
 		return -ENOMEM;
 	}
 
@@ -499,7 +500,7 @@ static int nicvf_alloc_resources(struct nicvf *nic)
 	/* Alloc receive buffer descriptor ring */
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
 		if (nicvf_init_rbdr(nic, &qs->rbdr[qidx], qs->rbdr_len,
-							RCV_BUFFER_LEN))
+				    RCV_BUFFER_LEN))
 			goto alloc_fail;
 	}
 
@@ -566,7 +567,8 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 			nicvf_cmp_queue_config(nic, qs, qidx, enable);
 
 	} else {
-		if (!(qs = nic->qs))
+		qs = nic->qs;
+		if (!qs)
 			return 0;
 
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
@@ -634,7 +636,8 @@ void nicvf_sq_disable(struct nicvf *nic, int qidx)
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, sq_cfg);
 }
 
-void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq, int qidx)
+void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
+			      int qidx)
 {
 	uint64_t head, tail;
 	struct sk_buff *skb;
@@ -651,7 +654,8 @@ void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq, i
 		}
 		skb = (struct sk_buff *)sq->skbuff[sq->head];
 		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_packets);
-		atomic64_add(hdr->tot_len, (atomic64_t *)&netdev->stats.tx_bytes);
+		atomic64_add(hdr->tot_len,
+			     (atomic64_t *)&netdev->stats.tx_bytes);
 		nicvf_free_skb(nic, skb);
 		nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 	}
@@ -669,7 +673,7 @@ static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 		if (skb->protocol == htons(ETH_P_IP))
 			subdesc_cnt++;
 		if ((ip_hdr(skb)->protocol == IPPROTO_TCP) ||
-			(ip_hdr(skb)->protocol == IPPROTO_UDP))
+		    (ip_hdr(skb)->protocol == IPPROTO_UDP))
 			subdesc_cnt++;
 	}
 #endif
@@ -682,7 +686,7 @@ static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
  */
 struct sq_hdr_subdesc *
 nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
-				int subdesc_cnt, struct sk_buff *skb)
+			 int subdesc_cnt, struct sk_buff *skb)
 {
 	int qentry;
 	void *desc;
@@ -723,7 +727,7 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
  * Must follow HDR descriptor
  */
 static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
-						int sq_num, struct sk_buff *skb)
+					int sq_num, struct sk_buff *skb)
 {
 	int i;
 	void *desc;
@@ -761,7 +765,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 
 #ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
 static void nicvf_fill_l3_crc_subdesc(struct sq_crc_subdesc *l3,
-					struct sk_buff *skb)
+				      struct sk_buff *skb)
 {
 	int crc_pos;
 
@@ -777,7 +781,7 @@ static void nicvf_fill_l3_crc_subdesc(struct sq_crc_subdesc *l3,
 }
 
 static void nicvf_fill_l4_crc_subdesc(struct sq_crc_subdesc *l4,
-					struct sk_buff *skb)
+				      struct sk_buff *skb)
 {
 	l4->subdesc_type = SQ_DESC_TYPE_CRC;
 	l4->crc_alg = SEND_CRCALG_CRC32;
@@ -791,7 +795,7 @@ static void nicvf_fill_l4_crc_subdesc(struct sq_crc_subdesc *l4,
  * Must follow HDR and precede GATHER, IMM subdescriptors
  */
 static void nicvf_sq_add_crc_subdesc(struct nicvf *nic, struct queue_set *qs,
-						int sq_num, struct sk_buff *skb)
+				     int sq_num, struct sk_buff *skb)
 {
 	int proto;
 	void *desc;

@@ -30,7 +30,7 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx);
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
 
 /* Supported devices */
-static DEFINE_PCI_DEVICE_TABLE(nic_id_table) = {
+static const struct pci_device_id nic_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
 	{ 0, }  /* end of table */
 };
@@ -164,7 +164,7 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
 
-/* Handle Mailbox messgaes from VF and ack the message. */
+/* Handle Mailbox messages from VF and ack the message. */
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
@@ -254,9 +254,8 @@ static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 {
 	if ((new_frs > NIC_HW_MAX_FRS) || (new_frs < NIC_HW_MIN_FRS)) {
 		netdev_err(nic->netdev,
-			   "Invalid MTU setting from VF%d rejected"
-			   "should be between %d and %d\n", vf,
-			   NIC_HW_MIN_FRS, NIC_HW_MAX_FRS);
+			   "Invalid MTU setting from VF%d rejected, should be between %d and %d\n",
+			   vf, NIC_HW_MIN_FRS, NIC_HW_MAX_FRS);
 		return 1;
 	}
 	new_frs += ETH_HLEN;
@@ -347,7 +346,7 @@ static void nic_init_hw(struct nicpf *nic)
 
 	for (i = 0; i < NIC_MAX_PKIND; i++)
 		nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG | (i << 3),
-			       *(uint64_t *)&nic->pkind);
+			      *(uint64_t *)&nic->pkind);
 
 	nic_set_tx_pkt_pad(nic, NIC_HW_MIN_FRS);
 
@@ -542,7 +541,8 @@ static int nic_enable_msix(struct nicpf *nic)
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret) {
 		netdev_err(nic->netdev,
-			"Request for #%d msix vectors failed\n", nic->num_vec);
+			   "Request for #%d msix vectors failed\n",
+			   nic->num_vec);
 		return 0;
 	}
 
@@ -629,8 +629,10 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 		return -EPERM;
 
 	if (num_vfs_requested) {
-		if ((err = pci_enable_sriov(pdev, num_vfs_requested))) {
-			dev_err(&pdev->dev, "SRIOV, Failed to enable %d VFs\n", num_vfs_requested);
+		err = pci_enable_sriov(pdev, num_vfs_requested);
+		if (err) {
+			dev_err(&pdev->dev, "SRIOV, Failed to enable %d VFs\n",
+				num_vfs_requested);
 			return err;
 		}
 		nic->num_vf_en = num_vfs_requested;
@@ -650,16 +652,19 @@ static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
 		return 0;
 	}
 
-	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF), &nic->total_vf_cnt);
+	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF),
+			     &nic->total_vf_cnt);
 	if (nic->total_vf_cnt < nic->num_vf_en)
 		nic->num_vf_en = nic->total_vf_cnt;
 
 	if (nic->total_vf_cnt && pci_enable_sriov(pdev, nic->num_vf_en)) {
-		dev_err(&pdev->dev, "SRIOV enable failed, num VF is %d\n", nic->num_vf_en);
+		dev_err(&pdev->dev, "SRIOV enable failed, num VF is %d\n",
+			nic->num_vf_en);
 		nic->num_vf_en = 0;
 		return 0;
 	}
-	dev_info(&pdev->dev, "SRIOV enabled, numer of VF available %d\n", nic->num_vf_en);
+	dev_info(&pdev->dev, "SRIOV enabled, numer of VF available %d\n",
+		 nic->num_vf_en);
 
 	nic->flags |= NIC_SRIOV_ENABLED;
 	return 1;

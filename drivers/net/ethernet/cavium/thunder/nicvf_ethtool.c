@@ -81,7 +81,7 @@ static const unsigned int nicvf_n_drv_stats = ARRAY_SIZE(nicvf_drv_stats);
 static const unsigned int nicvf_n_queue_stats = ARRAY_SIZE(nicvf_queue_stats);
 
 static int nicvf_get_settings(struct net_device *netdev,
-			     struct ethtool_cmd *cmd)
+			      struct ethtool_cmd *cmd)
 {
 	cmd->supported = (SUPPORTED_1000baseT_Full |
 			SUPPORTED_100baseT_Full |
@@ -109,7 +109,7 @@ static int nicvf_get_settings(struct net_device *netdev,
 }
 
 static int nicvf_set_settings(struct net_device *netdev,
-			     struct ethtool_cmd *cmd)
+			      struct ethtool_cmd *cmd)
 {
 	return -EOPNOTSUPP;
 
@@ -127,7 +127,7 @@ static int nicvf_set_settings(struct net_device *netdev,
 }
 
 static void nicvf_get_drvinfo(struct net_device *netdev,
-			     struct ethtool_drvinfo *info)
+			      struct ethtool_drvinfo *info)
 {
 	struct nicvf *nic = netdev_priv(netdev);
 
@@ -181,7 +181,7 @@ static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 }
 
 static void nicvf_get_ethtool_stats(struct net_device *netdev,
-				   struct ethtool_stats *stats, u64 *data)
+				    struct ethtool_stats *stats, u64 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
 	int stat, qidx;

@@ -7,7 +7,6 @@
  * the License, or (at your option) any later version.
  */
 
-
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
@@ -41,7 +40,7 @@ struct bgx {
 struct bgx *bgx_vnic[MAX_BGX_PER_CN88XX];
 
 /* Supported devices */
-static DEFINE_PCI_DEVICE_TABLE(bgx_id_table) = {
+static const struct pci_device_id bgx_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_BGX) },
 	{ 0, }  /* end of table */
 };
@@ -61,7 +60,7 @@ static uint64_t bgx_reg_read(struct bgx *bgx, uint8_t lmac, uint64_t offset)
 }
 
 static void bgx_reg_write(struct bgx *bgx, uint8_t lmac,
-			uint64_t offset, uint64_t val)
+			  uint64_t offset, uint64_t val)
 {
 	uint64_t addr = bgx->reg_base + (lmac << 20) + offset;
 
@@ -206,6 +205,7 @@ void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac)
 {
 	uint64_t offset, addr;
 	struct bgx *bgx;
+
 	bgx = bgx_vnic[bgx_idx];
 
 	if (!bgx) {
@@ -231,8 +231,8 @@ void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac)
 	bgx->lmac[lmac].dmac++;
 
 	bgx_reg_write(bgx, lmac, BGX_CMRX_RX_DMAC_CTL,
-			(CAM_ACCEPT << 3) | (MCAST_MODE_CAM_FILTER << 1)
-			| (BCAST_ACCEPT << 0));
+		      (CAM_ACCEPT << 3) | (MCAST_MODE_CAM_FILTER << 1)
+		      | (BCAST_ACCEPT << 0));
 }
 EXPORT_SYMBOL(bgx_add_dmac_addr);
 
@@ -241,7 +241,7 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmac)
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
 
 	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG,
-			(1 << 15) | (1 << 14) | (1 << 13));
+		      (1 << 15) | (1 << 14) | (1 << 13));
 
 	/* Register interrupts */
 	bgx_register_interrupts(bgx, lmac);
@@ -297,7 +297,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP configuration registers */
-	bgx->reg_base = (uint64_t) pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	bgx->reg_base = (uint64_t)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!bgx->reg_base) {
 		dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
 		err = -ENOMEM;

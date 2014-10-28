@@ -23,7 +23,7 @@
 #define DRV_VERSION	"1.0"
 
 /* Supported devices */
-static DEFINE_PCI_DEVICE_TABLE(nicvf_id_table) = {
+static const struct pci_device_id nicvf_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_VF) },
 	{ 0, }  /* end of table */
 };
@@ -97,7 +97,7 @@ uint64_t nicvf_reg_read(struct nicvf *nic, uint64_t offset)
 }
 
 void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
-				uint64_t qidx, uint64_t val)
+			   uint64_t qidx, uint64_t val)
 {
 	uint64_t addr = nic->reg_base + offset;
 
@@ -174,8 +174,7 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 		msleep(sleep);
 		if (pf_acked)
 			break;
-		else
-			timeout -= sleep;
+		timeout -= sleep;
 		if (!timeout) {
 			netdev_err(nic->netdev,
 				   "PF didn't ack to mbox msg %d from VF%d\n",
@@ -205,11 +204,10 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 		msleep(sleep);
 		if (pf_ready_to_rcv_msg)
 			break;
-		else
-			timeout -= sleep;
+		timeout -= sleep;
 		if (!timeout) {
 			netdev_err(nic->netdev,
-				"PF didn't respond to READY msg\n");
+				   "PF didn't respond to READY msg\n");
 			return 0;
 		}
 	}
@@ -407,7 +405,8 @@ static int nicvf_init_resources(struct nicvf *nic)
 	nic->num_qs = 1;
 
 	/* Initialize queues and HW for data transfer */
-	if ((err = nicvf_config_data_transfer(nic, true))) {
+	err = nicvf_config_data_transfer(nic, true);
+	if (err) {
 		netdev_err(nic->netdev,
 			   "Failed to alloc/config VF's QSet resources\n");
 		return err;
@@ -535,7 +534,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 		cq_desc = (struct cqe_rx_t *)GET_CQ_DESC(cq, cqe_head);
 
 		if (napi && (work_done >= budget) &&
-			(cq_desc->cqe_type != CQE_TYPE_SEND)) {
+		    (cq_desc->cqe_type != CQE_TYPE_SEND)) {
 			break;
 		}
 
@@ -569,7 +568,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 
 	/* Ring doorbell to inform H/W to reuse processed CQEs */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,
-					cq_idx, processed_cqe);
+			      cq_idx, processed_cqe);
 done:
 	spin_unlock(&cq->cq_lock);
 	return work_done;
@@ -614,8 +613,8 @@ void nicvf_handle_qs_err(unsigned long data)
 
 	/* Check if it is CQ err */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
-		status = nicvf_queue_reg_read(nic,
-					NIC_QSET_CQ_0_7_STATUS, qidx);
+		status = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_STATUS,
+					      qidx);
 		if (!(status & CQ_ERR_MASK))
 			continue;
 		/* Process already queued CQEs and reconfig CQ */
@@ -735,7 +734,7 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 
 	for_each_cq_irq(irq)
 		sprintf(nic->irq_name[irq], "%s%d CQ%d", "NICVF",
-						nic->vf_id, irq);
+			nic->vf_id, irq);
 
 	for_each_sq_irq(irq)
 		sprintf(nic->irq_name[irq], "%s%d SQ%d", "NICVF",
@@ -882,8 +881,8 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	}
 #endif
 #ifdef VNIC_HW_TSO_SUPPORT
-	if (skb_shinfo(skb)->gso_size && ((skb->protocol == ETH_P_IP) &&
-				(ip_hdr(skb)->protocol != IPPROTO_TCP))) {
+	if (skb_shinfo(skb)->gso_size && (skb->protocol == ETH_P_IP) &&
+	    (ip_hdr(skb)->protocol != IPPROTO_TCP)) {
 		netdev_dbg(netdev,
 			   "Only TCP segmentation is supported, dropping packet\n");
 		dev_kfree_skb_any(skb);
@@ -997,7 +996,8 @@ no_err:
 	nicvf_hw_set_mac_addr(nic, netdev);
 
 	/* Init tasklet for handling Qset err interrupt */
-	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err, (unsigned long)nic);
+	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err,
+		     (unsigned long)nic);
 
 	/* Enable Qset err interrupt */
 	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
@@ -1007,7 +1007,8 @@ no_err:
 		nicvf_enable_intr(nic, NICVF_INTR_CQ, qidx);
 
 	/* Init RBDR tasklet and enable RBDR threshold interrupt */
-	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr, (unsigned long)nic);
+	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr,
+		     (unsigned long)nic);
 
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		nicvf_enable_intr(nic, NICVF_INTR_RBDR, qidx);

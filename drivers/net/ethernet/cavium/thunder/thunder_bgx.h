@@ -17,7 +17,6 @@
 
 #define    MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE	2
 
-
 #define    MAX_LMAC	(MAX_BGX_PER_CN88XX * MAX_LMAC_PER_BGX)
 
 /* Registers */
@@ -64,10 +63,12 @@ enum MCAST_MODE {
 		MCAST_MODE_CAM_FILTER,
 		RSVD
 };
+
 #define BCAST_ACCEPT	1
 #define CAM_ACCEPT	1
 
 void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac);
 int bgx_get_count(void);
 int bgx_get_lmac_count(int bgx);
+
 #endif /* THUNDER_BGX_H */

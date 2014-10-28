@@ -418,7 +418,6 @@ void nicvf_set_ethtool_ops(struct net_device *netdev);
 #endif
 void nicvf_update_stats(struct nicvf *nic);
 
-
 /* Debug */
 #undef	NIC_DEBUG
 
