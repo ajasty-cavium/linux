@@ -267,6 +267,9 @@ struct nicvf {
 struct nicpf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
+#define NIC_NODE_ID_MASK	0x300000000000
+#define NIC_NODE_ID(x)		((x & NODE_ID_MASK) >> 44)
+	uint8_t			node;
 	unsigned int		flags;
 	uint16_t		total_vf_cnt;   /* Total num of VF supported */
 	uint16_t		num_vf_en;      /* No of VF enabled */

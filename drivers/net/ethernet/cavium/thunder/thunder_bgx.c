@@ -37,7 +37,7 @@ struct bgx {
 	uint8_t			irq_allocated[BGX_MSIX_VECTORS];
 } bgx;
 
-struct bgx *bgx_vnic[MAX_BGX_PER_CN88XX];
+struct bgx *bgx_vnic[MAX_BGX_THUNDER];
 
 /* Supported devices */
 static const struct pci_device_id bgx_id_table[] = {
@@ -68,18 +68,30 @@ static void bgx_reg_write(struct bgx *bgx, uint8_t lmac,
 }
 
 /* Return number of BGX present in HW */
-int bgx_get_count(void)
+void bgx_get_count(int node, int *bgx_count)
 {
-	return MAX_BGX_PER_CN88XX;
+	int i;
+	struct bgx *bgx;
+
+	*bgx_count = 0;
+	for (i = 0; i < MAX_BGX_PER_CN88XX; i++) {
+		bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + i];
+		if (bgx)
+			*bgx_count |= (1 << i);
+	}
 }
 EXPORT_SYMBOL(bgx_get_count);
 
 /* Return number of LMAC configured for this BGX */
-int bgx_get_lmac_count(int bgx)
+int bgx_get_lmac_count(int node, int bgx_idx)
 {
-	if (bgx == 0)
-		return 1;
-	return MAX_LMAC_PER_BGX;
+	struct bgx *bgx;
+
+	bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+	if (bgx)
+		return bgx->lmac_count;
+
+	return 0;
 }
 EXPORT_SYMBOL(bgx_get_lmac_count);
 
@@ -201,11 +213,12 @@ static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
 	}
 }
 
-void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac)
+void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 {
 	uint64_t offset, addr;
 	struct bgx *bgx;
 
+	bgx_idx += node * MAX_BGX_PER_CN88XX;
 	bgx = bgx_vnic[bgx_idx];
 
 	if (!bgx) {
@@ -248,7 +261,7 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmac)
 
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
-		bgx_add_dmac_addr(dmac_bcast, bgx->bgx_id, lmac);
+		bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmac);
 }
 
 void bgx_lmac_disable(struct bgx *bgx, uint8_t lmac)
@@ -304,6 +317,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_release_regions;
 	}
 	bgx->bgx_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 24) & 1;
+	bgx->bgx_id += NODE_ID(pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM))
+							* MAX_BGX_PER_CN88XX;
 	bgx_vnic[bgx->bgx_id] = bgx;
 
 	/* Initialize BGX hardware */

@@ -2,9 +2,11 @@
 # Makefile for Cavium's Thunder ethernet device
 #
 
+
+# Don't change the order, NICPF driver is dependent on BGX driver init
+obj-$(CONFIG_THUNDER_NIC_BGX) += thunder_bgx.o
 obj-$(CONFIG_THUNDER_NIC_PF) += nicpf.o
 obj-$(CONFIG_THUNDER_NIC_VF) += nicvf.o
-obj-$(CONFIG_THUNDER_NIC_BGX) += thunder_bgx.o
 
 nicpf-y := nic_main.o
 nicvf-y := nicvf_main.o nicvf_queues.o

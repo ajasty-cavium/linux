@@ -220,7 +220,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		lmac = mbx.data.mac.vf_id;
 		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
 		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
-		bgx_add_dmac_addr(mbx.data.mac.addr, bgx, lmac);
+		bgx_add_dmac_addr(mbx.data.mac.addr, nic->node, bgx, lmac);
 		break;
 	case NIC_PF_VF_MSG_SET_MAX_FRS:
 		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
@@ -290,7 +290,7 @@ static void nic_set_tx_pkt_pad(struct nicpf *nic, int size)
  */
 static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 {
-	int bgx, next_bgx_lmac = 0;
+	int bgx, bgx_count, next_bgx_lmac = 0;
 	int lmac, lmac_cnt = 0;
 
 	nic->num_vf_en = 0;
@@ -299,9 +299,12 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 		return;
 	}
 
-	nic->bgx_cnt = bgx_get_count();
-	for (bgx = 0; bgx < nic->bgx_cnt; bgx++) {
-		lmac_cnt = bgx_get_lmac_count(bgx);
+	bgx_get_count(nic->node, &bgx_count);
+	for (bgx = 0; bgx < NIC_MAX_BGX; bgx++) {
+		if (!(bgx_count & (1 << bgx)))
+			continue;
+		nic->bgx_cnt++;
+		lmac_cnt = bgx_get_lmac_count(nic->node, bgx);
 		for (lmac = 0; lmac < lmac_cnt; lmac++)
 			nic->vf_lmac_map[next_bgx_lmac++] =
 						NIC_SET_VF_LMAC_MAP(bgx, lmac);
@@ -720,6 +723,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		err = -ENOMEM;
 		goto err_release_regions;
 	}
+	nic->node = NIC_NODE_ID(pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM));
 
 	/* By default set NIC in TNS bypass mode */
 	nic->flags &= ~NIC_TNS_ENABLED;

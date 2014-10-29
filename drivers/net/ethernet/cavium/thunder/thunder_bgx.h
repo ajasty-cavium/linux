@@ -10,6 +10,7 @@
 #ifndef THUNDER_BGX_H
 #define THUNDER_BGX_H
 
+#define    MAX_BGX_THUNDER			8 /* Max 4 nodes, 2 per node */
 #define    MAX_BGX_PER_CN88XX			2
 #define    MAX_LMAC_PER_BGX			4
 #define    MAX_BGX_CHANS_PER_LMAC		16
@@ -18,6 +19,9 @@
 #define    MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE	2
 
 #define    MAX_LMAC	(MAX_BGX_PER_CN88XX * MAX_LMAC_PER_BGX)
+
+#define    NODE_ID_MASK				0x300000000000
+#define    NODE_ID(x)				((x & NODE_ID_MASK) >> 44)
 
 /* Registers */
 #define BGX_CMRX_CFG				0x00
@@ -67,8 +71,8 @@ enum MCAST_MODE {
 #define BCAST_ACCEPT	1
 #define CAM_ACCEPT	1
 
-void bgx_add_dmac_addr(uint64_t dmac, int bgx_idx, int lmac);
-int bgx_get_count(void);
-int bgx_get_lmac_count(int bgx);
+void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac);
+void bgx_get_count(int node, int *bgx_count);
+int bgx_get_lmac_count(int node, int bgx);
 
 #endif /* THUNDER_BGX_H */
