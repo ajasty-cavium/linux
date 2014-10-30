@@ -254,6 +254,7 @@ struct rcv_queue {
 	uint8_t		cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
 	uint8_t		start_rbdr_qs;     /* First buffer ptrs - QS num */
 	uint8_t		start_qs_rbdr_idx; /* RBDR idx in the above QS */
+	uint8_t         caching;
 	struct		rx_tx_queue_stats stats;
 };
 

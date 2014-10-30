@@ -13,6 +13,16 @@
 #ifndef Q_STRUCT_H
 #define Q_STRUCT_H
 
+/* Load transaction types for reading segment bytes specified by
+ * NIC_SEND_GATHER_S[LD_TYPE].
+ */
+enum nic_send_ld_type_e {
+	NIC_SEND_LD_TYPE_E_LDD = 0x0,
+	NIC_SEND_LD_TYPE_E_LDT = 0x1,
+	NIC_SEND_LD_TYPE_E_LDWB = 0x2,
+	NIC_SEND_LD_TYPE_E_ENUM_LAST = 0x3,
+};
+
 enum ether_type_algorithm {
 	ETYPE_ALG_NONE = 0x0,
 	ETYPE_ALG_SKIP = 0x1,

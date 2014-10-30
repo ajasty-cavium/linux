@@ -302,13 +302,14 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->start_qs_rbdr_idx = qs->rbdr_cnt - 1;
 	rq->cont_rbdr_qs = qs->vnic_id;
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
+	rq->caching = 1;
 
 	/* Send a mailbox msg to PF to config RQ */
 	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
 	mbx.data.rq.qs_num = qs->vnic_id;
 	mbx.data.rq.rq_num = qidx;
-	mbx.data.rq.cfg = (rq->cq_qs << 19) | (rq->cq_idx << 16) |
-			  (rq->cont_rbdr_qs << 9) |
+	mbx.data.rq.cfg = (rq->caching << 26) | (rq->cq_qs << 19) |
+			  (rq->cq_idx << 16) | (rq->cont_rbdr_qs << 9) |
 			  (rq->cont_qs_rbdr_idx << 8) |
 			  (rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
 	nicvf_send_msg_to_pf(nic, &mbx);
@@ -320,8 +321,11 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	mbx.data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_GEN_CFG, qidx, 0x00);
+
 	/* Enable Receive queue */
 	rq_cfg.ena = 1;
+	rq_cfg.tcp_ena = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, *(u64 *)&rq_cfg);
 }
 
@@ -342,27 +346,24 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	/* Reset completion queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, NICVF_CQ_RESET);
 
+	/* Set completion queue base address */
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,
+			      qidx, (uint64_t)(cq->dmem.phys_base));
+
 	/* Enable Completion queue */
 	cq_cfg.ena = 1;
+	cq_cfg.reset = 0;
+	cq_cfg.caching = 1;
 	cq_cfg.qsize = (qs->cq_len >> 10) - 1;
+	cq_cfg.avg_con = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, *(u64 *)&cq_cfg);
 
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_THRESH, qidx, cq->thresh);
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2,
 			      qidx, cq->intr_timer_thresh);
-
-	/* Set completion queue base address */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,
-			      qidx, (uint64_t)(cq->dmem.phys_base));
-
-	/* Set CQ's head entry */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, qidx, 0);
 }
 
-/* TBD
- * - Set TL3 index
- */
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
@@ -391,25 +392,26 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	mbx.data.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
 	nicvf_send_msg_to_pf(nic, &mbx);
 
-	/* Enable send queue  & set queue size */
-	sq_cfg.ena = 1;
-	sq_cfg.qsize = (qs->sq_len >> 10) - 1;
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, *(u64 *)&sq_cfg);
-
-	/* Set threshold value for interrupt generation */
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_THRESH, qidx, sq->thresh);
-
 	/* Set queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_BASE,
 			      qidx, (uint64_t)(sq->dmem.phys_base));
 
-	/* Set SQ's head entry */
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_HEAD, qidx, 0);
+	/* Enable send queue  & set queue size */
+	sq_cfg.ena = 1;
+	sq_cfg.reset = 0;
+	sq_cfg.ldwb = 0;
+	sq_cfg.qsize = (qs->sq_len >> 10) - 1;
+	sq_cfg.tstmp_bgx_intf = 0;
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, *(u64 *)&sq_cfg);
+
+	/* Set threshold value for interrupt generation */
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_THRESH, qidx, sq->thresh);
 }
 
 static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 			      int qidx, bool enable)
 {
+	int reset, timeout = 10;
 	struct rbdr *rbdr;
 	struct rbdr_cfg rbdr_cfg;
 
@@ -423,21 +425,34 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	/* Reset RBDR */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
 			      qidx, NICVF_RBDR_RESET);
-
-	/* Enable RBDR  & set queue size */
-	/* Buffer size should be in multiples of 128 bytes */
-	rbdr_cfg.ena = 1;
-	rbdr_cfg.qsize = (qs->rbdr_len >> 13) - 1;
-	rbdr_cfg.lines = rbdr->buf_size / 128;
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
-			      qidx, *(u64 *)&rbdr_cfg);
+	/* Wait for reset to finish */
+	while (1) {
+		usleep_range(2000, 3000);
+		reset = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_CFG, qidx);
+		if (!(reset & NICVF_RBDR_RESET))
+			break;
+		timeout--;
+		if (!timeout) {
+			netdev_err(nic->netdev,
+				   "RBDR%d didn't come out of reset\n", qidx);
+			return;
+		}
+	}
 
 	/* Set descriptor base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_BASE,
 			      qidx, (uint64_t)(rbdr->dmem.phys_base));
 
-	/* Set RBDR head entry */
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_HEAD, qidx, 0);
+	/* Enable RBDR  & set queue size */
+	/* Buffer size should be in multiples of 128 bytes */
+	rbdr_cfg.ena = 1;
+	rbdr_cfg.reset = 0;
+	rbdr_cfg.ldwb = 0;
+	rbdr_cfg.qsize = (qs->rbdr_len >> 13) - 1;
+	rbdr_cfg.avg_con = 0;
+	rbdr_cfg.lines = rbdr->buf_size / 128;
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
+			      qidx, *(u64 *)&rbdr_cfg);
 
 	/* Notify HW */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_DOOR,
@@ -460,6 +475,7 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	mbx.msg = NIC_PF_VF_MSG_QS_CFG;
 	mbx.data.qs.num = qs->vnic_id;
 
+	mbx.data.qs.cfg = 0;
 	qs_cfg = (struct qs_cfg *)&mbx.data.qs.cfg;
 	if (qs->enable) {
 		qs_cfg->ena = 1;
@@ -467,8 +483,6 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 		qs_cfg->be = 1;
 #endif
 		qs_cfg->vnic = qs->vnic_id;
-	} else {
-		mbx.data.qs.cfg = 0;
 	}
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
@@ -740,7 +754,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 
 	memset(gather, 0, SND_QUEUE_DESC_SIZE);
 	gather->subdesc_type = SQ_DESC_TYPE_GATHER;
-	gather->ld_type = 1;
+	gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
 	gather->size = skb_is_nonlinear(skb) ? skb_headlen(skb) : skb->len;
 	gather->addr = pci_map_single(nic->pdev, skb->data,
 				gather->size, PCI_DMA_TODEVICE);
@@ -758,7 +772,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 
 		memset(gather, 0, SND_QUEUE_DESC_SIZE);
 		gather->subdesc_type = SQ_DESC_TYPE_GATHER;
-		gather->ld_type = 1;
+		gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
 		gather->size = skb_frag_size(frag);
 		gather->addr = pci_map_single(nic->pdev, skb_frag_address(frag),
 						gather->size, PCI_DMA_TODEVICE);
