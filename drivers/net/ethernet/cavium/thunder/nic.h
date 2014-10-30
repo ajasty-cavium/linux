@@ -239,14 +239,14 @@ struct nicvf {
 	uint8_t			vf_id;
 	uint8_t			tns_mode;
 	uint16_t		mtu;
-	struct queue_set	*qs;		/* Queue set this VNIC is pointing to */
-	uint8_t			num_qs;		/* No of QSs assigned to this VNIC */
-	void			*addnl_qs;	/* Pointer to QSs additional to default 1 QS */
+	struct queue_set	*qs;
+	uint8_t			num_qs;
+	void			*addnl_qs;
 	uint16_t		vf_mtu;
-	uint64_t		reg_base;	/* Register start address */
-	struct tasklet_struct	rbdr_task;	/* Tasklet to refill RBDR */
-	struct tasklet_struct	qs_err_task;	/* Tasklet to handle Qset err */
-	struct nicvf_cq_poll	*napi[8];	/* NAPI */
+	uint64_t		reg_base;
+	struct tasklet_struct	rbdr_task;
+	struct tasklet_struct	qs_err_task;
+	struct nicvf_cq_poll	*napi[8];
 #ifdef VNIC_RSS_SUPPORT
 	struct nicvf_rss_info	rss_info;
 #endif
@@ -308,7 +308,7 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_RQ_CFG		0x05	/* Configure receive queue */
 #define	NIC_PF_VF_MSG_SQ_CFG		0x06	/* Configure Send queue */
 #define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x07	/* Configure receive queue */
-#define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to BGX's DMAC filter */
+#define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to DMAC filter */
 #define	NIC_PF_VF_MSG_SET_MAX_FRS	0x09	/* Set max frame size */
 #define	NIC_PF_VF_MSG_CPI_CFG		0x0A	/* Config CPI, RSSI */
 #define	NIC_PF_VF_MSG_RSS_SIZE		0x0B	/* Get RSS indir_tbl size */

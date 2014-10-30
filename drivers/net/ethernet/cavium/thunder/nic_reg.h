@@ -27,16 +27,16 @@
 #define   NIC_PF_CNM_STATUS			(0x00B0)
 #define   NIC_PF_CQ_AVG_CFG			(0x00C0)
 #define   NIC_PF_RRM_AVG_CFG			(0x00C8)
-#define   NIC_PF_INTF_0_1_SEND_CFG		(0x0200) /* (0..1) << 8 */
+#define   NIC_PF_INTF_0_1_SEND_CFG		(0x0200)
 #define   NIC_PF_INTF_0_1_BP_CFG		(0x0208)
-#define   NIC_PF_INTF_0_1_BP_DIS_0_1		(0x0210) /* (0..1) << 8 + (0..1) << 3 */
+#define   NIC_PF_INTF_0_1_BP_DIS_0_1		(0x0210)
 #define   NIC_PF_INTF_0_1_BP_SW_0_1		(0x0220)
 #define   NIC_PF_RBDR_BP_STATE_0_3		(0x0240)
-#define   NIC_PF_MAILBOX_INT			(0x0410) /* (0..1) << 3 */
+#define   NIC_PF_MAILBOX_INT			(0x0410)
 #define   NIC_PF_MAILBOX_INT_W1S		(0x0430)
 #define   NIC_PF_MAILBOX_ENA_W1C		(0x0450)
 #define   NIC_PF_MAILBOX_ENA_W1S		(0x0470)
-#define   NIC_PF_RX_ETYPE_0_7			(0x0500) /* + (0..7) << 3 */
+#define   NIC_PF_RX_ETYPE_0_7			(0x0500)
 #define   NIC_PF_PKIND_0_15_CFG			(0x0600)
 #define   NIC_PF_ECC0_FLIP0			(0x1000)
 #define   NIC_PF_ECC1_FLIP0			(0x1008)
@@ -114,33 +114,33 @@
 #define   NIC_PF_TL4_0_1023_SH_STATUS		(0x840000)
 #define   NIC_PF_TL4A_0_1023_CNM_RATE		(0x880000)
 #define   NIC_PF_TL4A_0_1023_CNM_STATUS		(0x8A0000)
-#define   NIC_PF_VF_0_127_MAILBOX_0_7		(0x20002000) /* + (0..127) << 21 + (0..7) << 3 */
-#define   NIC_PF_VNIC_0_127_TX_STAT_0_4		(0x20004000) /* + (0..127) << 21 + (0..4) << 3 */
+#define   NIC_PF_VF_0_127_MAILBOX_0_7		(0x20002000)
+#define   NIC_PF_VNIC_0_127_TX_STAT_0_4		(0x20004000)
 #define   NIC_PF_VNIC_0_127_RX_STAT_0_13	(0x20004100)
 #define   NIC_PF_QSET_0_127_LOCK_0_15		(0x20006000)
-#define   NIC_PF_QSET_0_127_CFG			(0x20010000) /* + (0..127) << 21 */
-#define   NIC_PF_QSET_0_127_RQ_0_7_CFG		(0x20010400) /* + (0..127) << 21 + (0..7) << 18 */
+#define   NIC_PF_QSET_0_127_CFG			(0x20010000)
+#define   NIC_PF_QSET_0_127_RQ_0_7_CFG		(0x20010400)
 #define   NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG	(0x20010420)
 #define   NIC_PF_QSET_0_127_RQ_0_7_BP_CFG	(0x20010500)
-#define   NIC_PF_QSET_0_127_RQ_0_7_STAT_0_1	(0x20010600) /* + (0..127) << 21 + (0..7) << 18 + (0..1) << 3 */
-#define   NIC_PF_QSET_0_127_SQ_0_7_CFG		(0x20010C00) /* + (0..127) << 21 + (0..7) << 18 */
+#define   NIC_PF_QSET_0_127_RQ_0_7_STAT_0_1	(0x20010600)
+#define   NIC_PF_QSET_0_127_SQ_0_7_CFG		(0x20010C00)
 #define   NIC_PF_QSET_0_127_SQ_0_7_CFG2		(0x20010C08)
-#define   NIC_PF_QSET_0_127_SQ_0_7_STAT_0_1	(0x20010D00) /* + (0..127) << 21 + (0..7) << 18 + (0..1) << 3 */
+#define   NIC_PF_QSET_0_127_SQ_0_7_STAT_0_1	(0x20010D00)
 
-#define   NIC_PF_MSIX_VEC_0_18_ADDR		(0x000000) /* + (0..18) << 4 */
+#define   NIC_PF_MSIX_VEC_0_18_ADDR		(0x000000)
 #define   NIC_PF_MSIX_VEC_0_CTL			(0x000008)
 #define   NIC_PF_MSIX_PBA_0			(0x0F0000)
 
 /* Virtual function register offsets */
 #define   NIC_VNIC_CFG				(0x000020)
-#define   NIC_VF_PF_MAILBOX_0_7			(0x000100) /* + (0..7) << 3 */
+#define   NIC_VF_PF_MAILBOX_0_7			(0x000100)
 #define   NIC_VF_INT				(0x000200)
 #define   NIC_VF_INT_W1S			(0x000220)
 #define   NIC_VF_ENA_W1C			(0x000240)
 #define   NIC_VF_ENA_W1S			(0x000260)
 
 #define   NIC_VNIC_RSS_CFG			(0x0020E0)
-#define   NIC_VNIC_RSS_KEY_0_4			(0x002200) /* + (0..4) << 3*/
+#define   NIC_VNIC_RSS_KEY_0_4			(0x002200)
 #define   NIC_VNIC_TX_STAT_0_4			(0x004000)
 #define   NIC_VNIC_RX_STAT_0_13			(0x004100)
 #define   NIC_QSET_RQ_GEN_CFG			(0x010010)

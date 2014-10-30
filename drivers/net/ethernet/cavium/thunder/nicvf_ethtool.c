@@ -26,12 +26,12 @@ struct nicvf_stat {
 
 #define NICVF_HW_STAT(stat) { \
 	.name = #stat, \
-	.index = offsetof(struct nicvf_hw_stats, stat) / sizeof(u64) \
+	.index = offsetof(struct nicvf_hw_stats, stat) / sizeof(u64), \
 }
 
 #define NICVF_DRV_STAT(stat) { \
 	.name = #stat, \
-	.index = offsetof(struct nicvf_drv_stats, stat) / sizeof(u64) \
+	.index = offsetof(struct nicvf_drv_stats, stat) / sizeof(u64), \
 }
 
 static const struct nicvf_stat nicvf_hw_stats[] = {

@@ -223,7 +223,7 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 
 	if (!bgx) {
 		pr_err("BGX%d not yet initialized, ignoring DMAC addition\n",
-			bgx_idx);
+		       bgx_idx);
 		return;
 	}
 
