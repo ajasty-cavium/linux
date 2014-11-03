@@ -349,6 +349,86 @@ static int nicvf_get_rxnfc(struct net_device *dev,
 	return ret;
 }
 
+static int nicvf_set_rss_hash_opts(struct nicvf *nic,
+				   struct ethtool_rxnfc *info)
+{
+	struct nicvf_rss_info *rss = &nic->rss_info;
+	uint64_t rss_cfg = nicvf_reg_read(nic, NIC_VNIC_RSS_CFG);
+
+	if (!rss->enable)
+		netdev_err(dev, "RSS is disabled, hash cannot be set\n");
+
+	netdev_info(dev, "Set RSS flow type = %d, data = %d\n",
+		    info->flow_type, info->data);
+
+	if (!(info->data & RXH_IP_SRC) || !(info->data & RXH_IP_DST))
+		return -EINVAL;
+
+	switch (cmd->flow_type) {
+	case TCP_V4_FLOW:
+	case TCP_V6_FLOW:
+		switch (info->data & (RXH_L4_B_0_1 | RXH_L4_B_2_3)) {
+		case 0:
+			rss_cfg &= ~(1ULL << RSS_HASH_TCP);
+			break;
+		case (RXH_L4_B_0_1 | RXH_L4_B_2_3):
+			rss_cfg |= (1ULL << RSS_HASH_TCP);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case UDP_V4_FLOW:
+	case UDP_V6_FLOW:
+		switch (info->data & (RXH_L4_B_0_1 | RXH_L4_B_2_3)) {
+		case 0:
+			rss_cfg &= ~(1ULL << RSS_HASH_UDP);
+			break;
+		case (RXH_L4_B_0_1 | RXH_L4_B_2_3):
+			rss_cfg |= (1ULL << RSS_HASH_UDP);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case SCTP_V4_FLOW:
+	case SCTP_V6_FLOW:
+		switch (info->data & (RXH_L4_B_0_1 | RXH_L4_B_2_3)) {
+		case 0:
+			rss_cfg &= ~(1ULL << RSS_HASH_L4ETC);
+			break;
+		case (RXH_L4_B_0_1 | RXH_L4_B_2_3):
+			rss_cfg |= (1ULL << RSS_HASH_L4ETC);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case IPV4_FLOW:
+	case IPV6_FLOW:
+		rss_cfg = RSS_HASH_IP;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	nicvf_reg_read(nic, NIC_VNIC_RSS_CFG, rss_cfg);
+	return 0;
+}
+
+static int nicvf_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info)
+{
+	struct nicvf *nic = netdev_priv(dev);
+
+	switch (info->cmd) {
+	case ETHTOOL_SRXFH:
+		return nicvf_set_rss_hash_opts(nic, info);
+	default:
+		break;
+	}
+	return -EOPNOTSUPP;
+}
+
 static u32 nicvf_get_rxfh_key_size(struct net_device *netdev)
 {
 	return RSS_HASH_KEY_SIZE;
@@ -462,6 +542,7 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 	.get_regs		= nicvf_get_regs,
 #ifdef VNIC_RSS_SUPPORT
 	.get_rxnfc		= nicvf_get_rxnfc,
+	.set_rxnfc		= nicvf_set_rxnfc,
 	.get_rxfh_key_size	= nicvf_get_rxfh_key_size,
 	.get_rxfh_indir_size	= nicvf_get_rxfh_indir_size,
 	.get_rxfh		= nicvf_get_rxfh,

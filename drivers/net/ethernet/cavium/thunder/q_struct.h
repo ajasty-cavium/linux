@@ -74,6 +74,18 @@ enum rss_algorithm_type {
 	RSS_ALG_ROCE = 0x07,
 };
 
+enum rss_hash_cfg {
+	RSS_HASH_L2ETC = 0x00,
+	RSS_HASH_IP = 0x01,
+	RSS_HASH_TCP = 0x02,
+	RSS_TCP_SYN_DIS = 0x03,
+	RSS_HASH_UDP = 0x04,
+	RSS_HASH_L4ETC = 0x05,
+	RSS_HASH_ROCE = 0x06,
+	RSS_L3_BIDI = 0x07,
+	RSS_L4_BIDI = 0x08,
+};
+
 /* Completion queue entry types */
 enum cqe_type {
 	CQE_TYPE_INVALID = 0x0,
