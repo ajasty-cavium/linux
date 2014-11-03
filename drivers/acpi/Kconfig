@@ -47,6 +47,9 @@ config ACPI_LEGACY_TABLES_LOOKUP
 config ARCH_MIGHT_HAVE_ACPI_PDC
 	bool
 
+config IORT_TABLE
+	bool
+
 config ACPI_SLEEP
 	bool
 	depends on SUSPEND || HIBERNATION
