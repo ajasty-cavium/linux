@@ -40,9 +40,6 @@ MODULE_PARM_DESC(cpi_alg,
 		 "PFC algorithm (0=none, 1=VLAN, 2=VLAN16, 3=IP Diffserv)");
 #ifdef	VNIC_RSS_SUPPORT
 static int rss_config = RSS_IP_HASH_ENA | RSS_TCP_HASH_ENA | RSS_UDP_HASH_ENA;
-module_param(rss_config, int, S_IRUGO);
-MODULE_PARM_DESC(rss_config,
-		 "RSS hash config [bits 8:0] (Bit0:L2 extended, 1:IP, 2:TCP, 3:TCP SYN, 4:UDP, 5:L4 extended, 6:ROCE 7:L3 bi-directional, 8:L4 bi-directional)");
 #endif
 
 static int nicvf_enable_msix(struct nicvf *nic);
