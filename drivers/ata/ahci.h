@@ -39,7 +39,6 @@
 #include <linux/libata.h>
 #include <linux/phy/phy.h>
 #include <linux/regulator/consumer.h>
-#include <linux/pci.h>
 
 /* Enclosure Management Control */
 #define EM_CTRL_MSG_TYPE              0x000f0000
@@ -342,7 +341,6 @@ struct ahci_host_priv {
 	 */
 	struct phy		**phys;
 	unsigned		nports;		/* Number of ports */
-	struct msix_entry  	*msix_entries;
 	void			*plat_data;	/* Other platform data */
 	/*
 	 * Optional ahci_start_engine override, if not set this gets set to the

@@ -61,6 +61,7 @@ enum board_ids {
 	/* board IDs by feature in alphabetical order */
 	board_ahci,
 	board_ahci_ign_iferr,
+	board_ahci_msix,
 	board_ahci_noncq,
 	board_ahci_nosntf,
 	board_ahci_yes_fbs,
@@ -73,7 +74,6 @@ enum board_ids {
 	board_ahci_sb600,
 	board_ahci_sb700,	/* for SB700 and SB800 */
 	board_ahci_vt8251,
-	board_ahci_cavium,
 
 	/* aliases */
 	board_ahci_mcp_linux	= board_ahci_mcp65,
@@ -118,6 +118,13 @@ static const struct ata_port_info ahci_port_info[] = {
 	},
 	[board_ahci_ign_iferr] = {
 		AHCI_HFLAGS	(AHCI_HFLAG_IGN_IRQ_IF_ERR),
+		.flags		= AHCI_FLAG_COMMON,
+		.pio_mask	= ATA_PIO4,
+		.udma_mask	= ATA_UDMA6,
+		.port_ops	= &ahci_ops,
+	},
+	[board_ahci_msix] = {
+		AHCI_HFLAGS	(AHCI_HFLAG_MSIX | AHCI_HFLAG_NO_MSI),
 		.flags		= AHCI_FLAG_COMMON,
 		.pio_mask	= ATA_PIO4,
 		.udma_mask	= ATA_UDMA6,
@@ -197,13 +204,6 @@ static const struct ata_port_info ahci_port_info[] = {
 		.pio_mask	= ATA_PIO4,
 		.udma_mask	= ATA_UDMA6,
 		.port_ops	= &ahci_vt8251_ops,
-	},
-	[board_ahci_cavium] = {
-		AHCI_HFLAGS	(AHCI_HFLAG_MSIX | AHCI_HFLAG_NO_MSI),
-		.flags		= AHCI_FLAG_COMMON,
-		.pio_mask	= ATA_PIO4,
-		.udma_mask	= ATA_UDMA6,
-		.port_ops	= &ahci_ops,
 	},
 };
 
@@ -493,8 +493,7 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	{ PCI_DEVICE(0x1c44, 0x8000), board_ahci },
 
 	/* Cavium */
-	{ PCI_DEVICE(0x177d, 0xa01c),
-	  .driver_data = board_ahci_cavium },
+	{ PCI_DEVICE(0x177d, 0xa01c), .driver_data = board_ahci_msix },
 
 	/* Generic, PCI class code for AHCI */
 	{ PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
@@ -1201,30 +1200,45 @@ static inline void ahci_gtf_filter_workaround(struct ata_host *host)
 {}
 #endif
 
+static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
+			  struct ahci_host_priv *hpriv)
+{
+	int rc, nvec;
+	struct msix_entry entry = {};
+
+	if (!(hpriv->flags & AHCI_HFLAG_MSIX))
+		return 0;
+
+	nvec = pci_msix_vec_count(pdev);
+	if (nvec <= 0)
+		return nvec;
+
+	/* per-port msix interrupts not supported */
+	if (n_ports > 1 && nvec >= n_ports)
+		return -ENOSYS;
+
+	/* We only enable the first entry (entry.entry = 0) */
+	rc = pci_enable_msix_exact(pdev, &entry, 1);
+	if (rc < 0)
+		return rc;
+
+	pdev->irq = entry.vector;
+
+	return 1;
+}
+
 static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 				struct ahci_host_priv *hpriv)
 {
-	int rc, nvec, vec;
+	int rc, nvec;
 
-	if (!(hpriv->flags & AHCI_HFLAG_MSIX))
-		goto msi;
+	nvec = ahci_init_msix(pdev, n_ports, hpriv);
+	if (nvec > 0)
+		return nvec;
 
-	nvec = pci_msix_vec_count(pdev);
-	if (!nvec)
-		goto msi;
-	hpriv->msix_entries = kcalloc(nvec, sizeof(struct msix_entry),
-				GFP_KERNEL);
-	for (vec = 0; vec < nvec; vec++)
-		hpriv->msix_entries[vec].entry = vec;
+	if (nvec)
+		dev_err(&pdev->dev, "failed to enable MSI-X: %d", nvec);
 
-	rc = pci_enable_msix(pdev, hpriv->msix_entries, nvec);
-	if (rc < 0)
-		goto msi;
-
-	pdev->irq = hpriv->msix_entries[0].vector;
-	return nvec;
-
-msi:
 	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
 		goto intx;
 
@@ -1303,7 +1317,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_info(&pdev->dev,
 			 "PDC42819 can only drive SATA devices with this driver\n");
 
-	/* Both Connext and Enmotus devices use non-standard BARs */
+	/* Some devices use non-standard BARs */
 	if (pdev->vendor == PCI_VENDOR_ID_STMICRO && pdev->device == 0xCC06)
 		ahci_pci_bar = AHCI_PCI_BAR_STA2X11;
 	else if (pdev->vendor == 0x1c44 && pdev->device == 0x8000)
@@ -1432,10 +1446,6 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	n_ports = max(ahci_nr_ports(hpriv->cap), fls(hpriv->port_map));
 
 	ahci_init_interrupts(pdev, n_ports, hpriv);
-
-	/* Cavium Thunder doesn't have per port MSI-X irq */
-	if (board_id == board_ahci_cavium)
-		hpriv->flags &= ~AHCI_HFLAG_MULTI_MSI;
 
 	host = ata_host_alloc_pinfo(&pdev->dev, ppi, n_ports);
 	if (!host)
