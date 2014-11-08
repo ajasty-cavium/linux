@@ -10,6 +10,10 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/netdevice.h>
+#include <linux/phy.h>
+#include <linux/of.h>
+#include <linux/of_mdio.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -21,6 +25,13 @@
 struct lmac {
 	int	dmac;
 	bool	link_up;
+	int			lmacid;
+	struct net_device       netdev;
+	struct phy_device       *phydev;
+	struct device_node      *phy_np;     
+	unsigned int            last_duplex;
+	unsigned int            last_link;
+	unsigned int            last_speed;
 } lmac;
 
 struct bgx {
@@ -28,7 +39,8 @@ struct bgx {
 	struct	lmac		lmac[MAX_LMAC_PER_BGX];
 	int			lmac_count;
 	uint64_t		reg_base;
-	struct	pci_dev		*pdev;
+	struct pci_dev		*pdev;
+
 	 /* MSI-X */
 	bool			msix_enabled;
 	uint16_t		num_vec;
@@ -67,6 +79,14 @@ static void bgx_reg_write(struct bgx *bgx, uint8_t lmac,
 	writeq_relaxed(val, (void *)addr);
 }
 
+static void bgx_reg_modify(struct bgx *bgx, uint8_t lmac,
+                           uint64_t offset, uint64_t val)
+{
+        uint64_t addr = bgx->reg_base + (lmac << 20) + offset;
+
+        writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
+}
+
 /* Return number of BGX present in HW */
 void bgx_get_count(int node, int *bgx_count)
 {
@@ -95,6 +115,7 @@ int bgx_get_lmac_count(int node, int bgx_idx)
 }
 EXPORT_SYMBOL(bgx_get_lmac_count);
 
+#ifdef LINK_INTR_ENABLE
 /* Link Interrupts APIs */
 static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
 {
@@ -103,6 +124,33 @@ static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
 	val = bgx_reg_read(bgx, lmac, BGX_SPUX_INT_ENA_W1S);
 	val |= (LMAC_INTR_LINK_UP | LMAC_INTR_LINK_DOWN);
 	bgx_reg_write(bgx, lmac, BGX_SPUX_INT_ENA_W1S, val);
+}
+#endif
+
+void bgx_lmac_handler(struct net_device *netdev)
+{
+	struct lmac *lmac = container_of(netdev, struct lmac, netdev);
+	struct phy_device *phydev = lmac->phydev;
+	int link_changed = 0;
+
+	if (phydev->link
+	    && (lmac->last_duplex != phydev->duplex
+		|| lmac->last_link != phydev->link
+		|| lmac->last_speed != phydev->speed)) {
+			link_changed = 1;
+	}
+
+	lmac->last_link = phydev->link;
+	lmac->last_speed = phydev->speed;
+	lmac->last_duplex = phydev->duplex;
+
+	if (link_changed) {
+		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid,
+			phydev->speed, 
+			DUPLEX_FULL == phydev->duplex ? "Full" : "Half");
+	} else {
+		pr_info("LMAC%d: Link is down\n", lmac->lmacid);
+	}
 }
 
 static irqreturn_t bgx_lmac_intr_handler (int irq, void *bgx_irq)
@@ -164,7 +212,7 @@ static int bgx_register_interrupts(struct bgx *bgx, uint8_t lmac)
 
 	/* Register only link interrupts now */
 	irq = SPUX_INT + (lmac * BGX_LMAC_VEC_OFFSET);
-	sprintf(bgx->irq_name[irq], "LMAC%d", lmac);
+	sprintf(bgx->irq_name[irq], "BGX%d-LMAC%d", bgx->bgx_id, lmac);
 	ret = request_irq(bgx->msix_entries[irq].vector,
 			  bgx_lmac_intr_handler, 0, bgx->irq_name[irq], bgx);
 	if (ret)
@@ -173,7 +221,9 @@ static int bgx_register_interrupts(struct bgx *bgx, uint8_t lmac)
 		bgx->irq_allocated[irq] = 1;
 
 	/* Enable link interrupt */
+#ifdef LINK_INTR_ENABLE
 	bgx_enable_link_intr(bgx, lmac);
+#endif
 	return 0;
 
 fail:
@@ -249,48 +299,57 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 }
 EXPORT_SYMBOL(bgx_add_dmac_addr);
 
-void bgx_lmac_enable(struct bgx *bgx, int8_t lmac)
+void bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
+	struct lmac *lmac;
 
-	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG,
-		      (1 << 15) | (1 << 14) | (1 << 13));
+	lmac = &bgx->lmac[lmacid];
 
-	/* Register interrupts */
-	bgx_register_interrupts(bgx, lmac);
+	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG,
+		       (1 << 15) | (1 << 14) | (1 << 13));
 
 	/* Add broadcast MAC into all LMAC's DMAC filters */
-	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
-		bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmac);
+	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
+
+	/* Register interrupts */
+	bgx_register_interrupts(bgx, lmacid);
+
+	lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
+				      bgx_lmac_handler, 0,
+				      PHY_INTERFACE_MODE_SGMII);
+	phy_start_aneg(lmac->phydev);
+
 }
 
-void bgx_lmac_disable(struct bgx *bgx, uint8_t lmac)
+void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 {
-	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, 0x00);
-	bgx_flush_dmac_addrs(bgx, lmac);
+	struct lmac *lmac;
+	uint64_t cmrx_cfg;
+
+	lmac = &bgx->lmac[lmacid];
+
+	cmrx_cfg = bgx_reg_read(bgx, lmac, BGX_CMRX_CFG);
+	cmrx_cfg &= ~(1 << 15);
+	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, cmrx_cfg);
+	bgx_flush_dmac_addrs(bgx, lmacid);
 	bgx_unregister_interrupts(bgx);
-}
 
-static void bgx_init_hw(struct bgx *bgx)
-{
-	int lmac;
-	uint64_t enable = 0;
+	if (lmac->phydev)
+		phy_disconnect(lmac->phydev);
 
-	/* Enable all LMACs */
-	/* Enable LMAC, Pkt Rx enable, Pkt Tx enable */
-	enable = (1 << 15) | (1 << 14) | (1 << 13);
-	for (lmac = 0; lmac < MAX_LMAC_PER_BGX; lmac++) {
-		bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, enable);
-		bgx->lmac_count++;
-	}
+	lmac->phydev = NULL;
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	struct device *dev = &pdev->dev;
-	struct bgx *bgx;
 	int    err;
+	struct device *dev = &pdev->dev;
+	struct bgx *bgx = NULL;
 	uint8_t lmac = 0;
+	char bgx_sel[5];
+	const __be32 *reg;
+	struct device_node *np_bgx, *np_child;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
 	bgx->pdev = pdev;
@@ -321,14 +380,27 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 							* MAX_BGX_PER_CN88XX;
 	bgx_vnic[bgx->bgx_id] = bgx;
 
-	/* Initialize BGX hardware */
-	bgx_init_hw(bgx);
+	/* Get BGX node from DT */
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np_bgx = of_find_node_by_name(NULL, bgx_sel);
+
+	for_each_child_of_node(np_bgx, np_child) {
+		reg = of_get_property(np_child, "reg", NULL);
+		lmac = be32_to_cpup(reg);
+		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
+		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
+							  "phy-handle", 0);
+		bgx->lmac[lmac].lmacid = lmac;
+		bgx->lmac_count++;
+	}
+
 	/* Enable MSI-X */
 	if (!bgx_enable_msix(bgx))
 		return 1;
 	/* Enable all LMACs */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
 		bgx_lmac_enable(bgx, lmac);
+
 	goto exit;
 
 	if (bgx->reg_base)
@@ -349,7 +421,7 @@ static void bgx_remove(struct pci_dev *pdev)
 	if (!bgx)
 		return;
 	/* Disable all LMACs */
-	for (lmac = 0; lmac < 4; lmac++)
+	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
 		bgx_lmac_disable(bgx, lmac);
 
 	pci_set_drvdata(pdev, NULL);

@@ -75,4 +75,6 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac);
 void bgx_get_count(int node, int *bgx_count);
 int bgx_get_lmac_count(int node, int bgx);
 
+#undef LINK_INTR_ENABLE
+
 #endif /* THUNDER_BGX_H */
