@@ -61,7 +61,6 @@ enum board_ids {
 	/* board IDs by feature in alphabetical order */
 	board_ahci,
 	board_ahci_ign_iferr,
-	board_ahci_msix,
 	board_ahci_noncq,
 	board_ahci_nosntf,
 	board_ahci_yes_fbs,
@@ -118,13 +117,6 @@ static const struct ata_port_info ahci_port_info[] = {
 	},
 	[board_ahci_ign_iferr] = {
 		AHCI_HFLAGS	(AHCI_HFLAG_IGN_IRQ_IF_ERR),
-		.flags		= AHCI_FLAG_COMMON,
-		.pio_mask	= ATA_PIO4,
-		.udma_mask	= ATA_UDMA6,
-		.port_ops	= &ahci_ops,
-	},
-	[board_ahci_msix] = {
-		AHCI_HFLAGS	(AHCI_HFLAG_MSIX | AHCI_HFLAG_NO_MSI),
 		.flags		= AHCI_FLAG_COMMON,
 		.pio_mask	= ATA_PIO4,
 		.udma_mask	= ATA_UDMA6,
@@ -493,7 +485,7 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	{ PCI_DEVICE(0x1c44, 0x8000), board_ahci },
 
 	/* Cavium */
-	{ PCI_DEVICE(0x177d, 0xa01c), .driver_data = board_ahci_msix },
+	{ PCI_DEVICE(0x177d, 0xa01c), .driver_data = board_ahci },
 
 	/* Generic, PCI class code for AHCI */
 	{ PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
@@ -1206,18 +1198,16 @@ static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
 	int rc, nvec;
 	struct msix_entry entry = {};
 
-	if (!(hpriv->flags & AHCI_HFLAG_MSIX))
-		return 0;
-
+	/* check if msix is supported */
 	nvec = pci_msix_vec_count(pdev);
 	if (nvec <= 0)
-		return nvec;
+		return 0;
 
-	/* per-port msix interrupts not supported */
+	/* per-port msix interrupts are not supported */
 	if (n_ports > 1 && nvec >= n_ports)
 		return -ENOSYS;
 
-	/* We only enable the first entry (entry.entry = 0) */
+	/* only enable the first entry (entry.entry = 0) */
 	rc = pci_enable_msix_exact(pdev, &entry, 1);
 	if (rc < 0)
 		return rc;
@@ -1236,7 +1226,7 @@ static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 	if (nvec > 0)
 		return nvec;
 
-	if (nvec)
+	if (nvec && nvec != -ENOSYS)
 		dev_err(&pdev->dev, "failed to enable MSI-X: %d", nvec);
 
 	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
