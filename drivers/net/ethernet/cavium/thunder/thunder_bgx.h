@@ -38,6 +38,9 @@
 #define BGX_SPUX_INT_ENA_W1C			0x10230
 #define BGX_SPUX_INT_ENA_W1S			0x10238
 
+#define BGX_GMP_GMI_TXX_APPEND                  0x38218
+#define BGX_GMP_GMI_TXX_MIN_PKT                 0x38240
+
 #define BGX_MSIX_VEC_0_29_ADDR			0x400000 /* +(0..29) << 4 */
 #define BGX_MSIX_VEC_0_29_CTL			0x400008
 #define BGX_MSIX_PBA_0				0x4F0000

@@ -23,8 +23,8 @@
 #define DRV_VERSION	"1.0"
 
 struct lmac {
-	int	dmac;
-	bool	link_up;
+	int			dmac;
+	bool			link_up;
 	int			lmacid;
 	struct net_device       netdev;
 	struct phy_device       *phydev;
@@ -133,6 +133,9 @@ void bgx_lmac_handler(struct net_device *netdev)
 	struct phy_device *phydev = lmac->phydev;
 	int link_changed = 0;
 
+	if (!phydev->link && lmac->last_link)
+		link_changed = -1;
+
 	if (phydev->link
 	    && (lmac->last_duplex != phydev->duplex
 		|| lmac->last_link != phydev->link
@@ -144,7 +147,10 @@ void bgx_lmac_handler(struct net_device *netdev)
 	lmac->last_speed = phydev->speed;
 	lmac->last_duplex = phydev->duplex;
 
-	if (link_changed) {
+	if (!link_changed)
+		return;
+
+	if (link_changed > 0) {
 		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid,
 			phydev->speed, 
 			DUPLEX_FULL == phydev->duplex ? "Full" : "Half");
@@ -303,6 +309,7 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
 	struct lmac *lmac;
+	int lmac_type;
 
 	lmac = &bgx->lmac[lmacid];
 
@@ -314,6 +321,12 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 
 	/* Register interrupts */
 	bgx_register_interrupts(bgx, lmacid);
+
+	lmac_type = (bgx_reg_read(bgx, lmacid, BGX_CMRX_CFG) >> 8) & 0x7;
+	if (lmac_type == 0) /* SGMII */
+		bgx_reg_write(bgx, lmacid, BGX_GMP_GMI_TXX_MIN_PKT, 60 - 1);
+	else
+		bgx_reg_write(bgx, lmacid, BGX_GMP_GMI_TXX_MIN_PKT, 60 + 4);
 
 	lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
 				      bgx_lmac_handler, 0,
@@ -329,9 +342,9 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 
 	lmac = &bgx->lmac[lmacid];
 
-	cmrx_cfg = bgx_reg_read(bgx, lmac, BGX_CMRX_CFG);
+	cmrx_cfg = bgx_reg_read(bgx, lmacid, BGX_CMRX_CFG);
 	cmrx_cfg &= ~(1 << 15);
-	bgx_reg_write(bgx, lmac, BGX_CMRX_CFG, cmrx_cfg);
+	bgx_reg_write(bgx, lmacid, BGX_CMRX_CFG, cmrx_cfg);
 	bgx_flush_dmac_addrs(bgx, lmacid);
 	bgx_unregister_interrupts(bgx);
 
