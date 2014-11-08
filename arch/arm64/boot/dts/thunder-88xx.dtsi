@@ -580,4 +580,137 @@
 
                 mmu-masters = <&pcie3 0x100>;
         };
+
+	mdio@0x87e00,5003800 {
+		compatible = "cavium,octeon-3860-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0x05003800 0x0 0x30>;
+
+		phy0: lmac0 {
+			reg = <0> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	      		/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
+	    		marvell,reg-init = <3 0x10 0 0x8665>,
+ 					<3 0x11 0 0x00aa>,
+					<3 0x12 0 0x4105>,
+					<3 0x13 0 0x8a08>;
+
+      		};
+		phy1: lmac1 {
+			reg = <1> ;
+	   		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	      		marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy2: lmac2 {
+			reg = <2> ;
+		      	compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+
+      		};
+		phy3: lmac3 {
+			reg = <3> ;
+	      		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	 	     	marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy4: lmac4 {
+			reg = <4> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy5: lmac5 {
+			reg = <5> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+
+      		};
+		phy6: lmac6 {
+			reg = <6> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy7: lmac7 {
+			reg = <7> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+
+      		};
+	};
+
+	/**BGX0**/
+	bgx0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0xe0000000 0x0 0x1000000>; 
+
+		lmac0 {
+			reg = <0> ;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy0>;
+		};
+		lmac1 {
+			reg = <1> ;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy1>;
+		};
+		lmac2 {
+			reg = <2> ;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy2>;
+		};
+		lmac3 {
+			reg = <3> ;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy3>;
+		};
+	};
+
+	/**BGX1**/
+	bgx1 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0xe1000000 0x0 0x1000000>; 
+
+		lmac0 {
+			reg = <0> ;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy4>;
+		};
+		lmac1 {
+			reg = <1> ;
+			phy-handle = <&phy5>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+		lmac2 {
+			reg = <2> ;
+			phy-handle = <&phy6>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+		lmac3 {
+			reg = <3> ;
+			phy-handle = <&phy7>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+	};
 };
