@@ -49,6 +49,8 @@
 #define GICD_CTLR_ENABLE_G1A		(1U << 1)
 #define GICD_CTLR_ENABLE_G1		(1U << 0)
 
+#define GICD_TYPER_ID_BITS(typer)	((((typer) >> 19) & 0x1f) + 1)
+#define GICD_TYPER_IRQS(typer)		((((typer) & 0x1f) + 1) * 32)
 #define GICD_TYPER_LPIS			(1U << 17)
 
 #define GICD_IROUTER_SPI_MODE_ONE	(0U << 31)
@@ -78,6 +80,10 @@
 #define GICR_MOVALLR			0x0110
 #define GICR_PIDR2			GICD_PIDR2
 
+#define GICR_CTLR_ENABLE_LPIS		(1UL << 0)
+
+#define GICR_TYPER_CPU_NUMBER(r)	(((r) >> 8) & 0xffff)
+
 #define GICR_WAKER_ProcessorSleep	(1U << 1)
 #define GICR_WAKER_ChildrenAsleep	(1U << 2)
 
@@ -93,6 +99,7 @@
 #define GICR_PROPBASER_WaWb		(5U << 7)
 #define GICR_PROPBASER_RaWaWt		(6U << 7)
 #define GICR_PROPBASER_RaWaWb		(7U << 7)
+#define GICR_PROPBASER_IDBITS_MASK	(0x1f)
 
 /*
  * Re-Distributor registers, offsets from SGI_base
@@ -109,6 +116,9 @@
 #define GICR_TYPER_PLPIS		(1U << 0)
 #define GICR_TYPER_VLPIS		(1U << 1)
 #define GICR_TYPER_LAST			(1U << 4)
+
+#define LPI_PROP_GROUP1			(1 << 1)
+#define LPI_PROP_ENABLED		(1 << 0)
 
 /*
  * ITS registers, offsets from ITS_base
@@ -151,13 +161,29 @@
 #define GITS_BASER_WaWb			(5UL << 59)
 #define GITS_BASER_RaWaWt		(6UL << 59)
 #define GITS_BASER_RaWaWb		(7UL << 59)
+#define GITS_BASER_TYPE_SHIFT		(56)
+#define GITS_BASER_TYPE(r)		(((r) >> GITS_BASER_TYPE_SHIFT) & 7)
+#define GITS_BASER_ENTRY_SIZE_SHIFT	(48)
+#define GITS_BASER_ENTRY_SIZE(r)	((((r) >> GITS_BASER_ENTRY_SIZE_SHIFT) & 0xff) + 1)
 #define GITS_BASER_NonShareable		(0UL << 10)
 #define GITS_BASER_InnerShareable	(1UL << 10)
 #define GITS_BASER_OuterShareable	(2UL << 10)
-#define GITS_BASER_SHAREABILITY_MASK	(3UL << 10)
-#define GITS_BASER_PAGE_SIZE_4K		(0UL << 8)
-#define GITS_BASER_PAGE_SIZE_16K	(1UL << 8)
-#define GITS_BASER_PAGE_SIZE_64K	(2UL << 8)
+#define GITS_BASER_SHAREABILITY_SHIFT	(10)
+#define GITS_BASER_SHAREABILITY_MASK	(3UL << GITS_BASER_SHAREABILITY_SHIFT)
+#define GITS_BASER_PAGE_SIZE_SHIFT	(8)
+#define GITS_BASER_PAGE_SIZE_4K		(0UL << GITS_BASER_PAGE_SIZE_SHIFT)
+#define GITS_BASER_PAGE_SIZE_16K	(1UL << GITS_BASER_PAGE_SIZE_SHIFT)
+#define GITS_BASER_PAGE_SIZE_64K	(2UL << GITS_BASER_PAGE_SIZE_SHIFT)
+#define GITS_BASER_PAGE_SIZE_MASK	(3UL << GITS_BASER_PAGE_SIZE_SHIFT)
+
+#define GITS_BASER_TYPE_NONE		0
+#define GITS_BASER_TYPE_DEVICE		1
+#define GITS_BASER_TYPE_VCPU		2
+#define GITS_BASER_TYPE_CPU		3
+#define GITS_BASER_TYPE_COLLECTION	4
+#define GITS_BASER_TYPE_RESERVED5	5
+#define GITS_BASER_TYPE_RESERVED6	6
+#define GITS_BASER_TYPE_RESERVED7	7
 
 /*
  * ITS commands
@@ -269,11 +295,11 @@
 
 #include <linux/stringify.h>
 
-struct rdist {
+struct rdists {
 	struct {
 		void __iomem	*rd_base;
 		struct page	*pend_page;
-		unsigned long	phys_base;
+		phys_addr_t	phys_base;
 	} __percpu		*rdist;
 	struct page		*prop_page;
 	int			id_bits;
@@ -288,7 +314,7 @@ static inline void gic_write_eoir(u64 irq)
 
 struct irq_domain;
 int its_cpu_init(void);
-struct irq_chip *its_init(struct device_node *node, struct rdist *rdist,
+struct irq_chip *its_init(struct device_node *node, struct rdists *rdists,
 			  struct irq_domain *domain);
 
 #endif

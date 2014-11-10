@@ -38,9 +38,6 @@
 
 #include "irqchip.h"
 
-/* Define the following to enable LPI injection in the command queue */
-#undef ITS_DEBUG_ALLOW_SELF_INJECT
-
 #define ITS_FLAGS_CMDQ_NEEDS_FLUSHING		(1 << 0)
 
 #define RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING	(1 << 0)
@@ -78,16 +75,6 @@ struct its_node {
 #define ITS_ITT_ALIGN		SZ_256
 
 /*
- * Our LPI allocation unit - Chunks of 32 IDs (namespace is so big we
- * don't really care).
- */
-struct its_lpi_chunk {
-	struct list_head	entry;
-	int			lpi_base;
-	unsigned long		lpi_map;
-};
-
-/*
  * The ITS view of a device - belongs to an ITS, a collection, owns an
  * interrupt translation table, and a list of interrupts.
  */
@@ -96,10 +83,21 @@ struct its_device {
 	struct its_node		*its;
 	struct its_collection	*collection;
 	void			*itt;
+	unsigned long		*lpi_map;
+	int			lpi_base;
+	int			nr_lpis;
 	u32			nr_ites;
-	struct list_head	hwirq_list;
 	u32			device_id;
 };
+
+static LIST_HEAD(its_nodes);
+static DEFINE_SPINLOCK(its_lock);
+static struct irq_domain *lpi_domain;
+static struct device_node *gic_root_node;
+static struct rdists *gic_rdists;
+
+#define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
+#define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
 
 /*
  * ITS command descriptors - parameters to be encoded in a command
@@ -163,14 +161,6 @@ struct its_cmd_block {
 typedef struct its_collection *(*its_cmd_builder_t)(struct its_cmd_block *,
 						    struct its_cmd_desc *);
 
-static LIST_HEAD(its_nodes);
-static DEFINE_SPINLOCK(its_lock);
-static struct device_node *gic_root_node;
-static struct rdist *gic_rdist;
-
-#define gic_data_rdist()		(raw_cpu_ptr(gic_rdist->rdist))
-#define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
-
 static void its_encode_cmd(struct its_cmd_block *cmd, u8 cmd_nr)
 {
 	cmd->raw_cmd[0] &= ~0xffULL;
@@ -227,12 +217,11 @@ static void its_encode_collection(struct its_cmd_block *cmd, u16 col)
 
 static inline void its_fixup_cmd(struct its_cmd_block *cmd)
 {
-#ifdef CONFIG_CPU_BIG_ENDIAN
+	/* Let's fixup BE commands */
 	cmd->raw_cmd[0] = cpu_to_le64(cmd->raw_cmd[0]);
 	cmd->raw_cmd[1] = cpu_to_le64(cmd->raw_cmd[1]);
 	cmd->raw_cmd[2] = cpu_to_le64(cmd->raw_cmd[2]);
 	cmd->raw_cmd[3] = cpu_to_le64(cmd->raw_cmd[3]);
-#endif
 }
 
 static struct its_collection *its_build_mapd_cmd(struct its_cmd_block *cmd,
@@ -329,20 +318,6 @@ static struct its_collection *its_build_invall_cmd(struct its_cmd_block *cmd,
 
 	return NULL;
 }
-
-#ifdef ITS_DEBUG_ALLOW_SELF_INJECT
-static struct its_collection *its_build_int_cmd(struct its_cmd_block *cmd,
-						struct its_cmd_desc *desc)
-{
-	its_encode_cmd(cmd, GITS_CMD_INT);
-	its_encode_devid(cmd, desc->its_int_cmd.dev->device_id);
-	its_encode_event_id(cmd, desc->its_int_cmd.event_id);
-
-	its_fixup_cmd(cmd);
-
-	return desc->its_int_cmd.dev->collection;
-}
-#endif
 
 static u64 its_cmd_ptr_to_offset(struct its_node *its,
 				 struct its_cmd_block *ptr)
@@ -445,8 +420,11 @@ static void its_send_single_command(struct its_node *its,
 	raw_spin_lock(&its->lock);
 
 	cmd = its_allocate_entry(its);
-	if (!cmd)
-		return;		/* We're soooooo screewed... */
+	if (!cmd) {		/* We're soooooo screewed... */
+		pr_err_ratelimited("ITS can't allocate, dropping command\n");
+		raw_spin_unlock(&its->lock);
+		return;
+	}
 	sync_col = builder(cmd, desc);
 	its_flush_cmd(its, cmd);
 
@@ -478,18 +456,6 @@ static void its_send_inv(struct its_device *dev, u32 event_id)
 
 	its_send_single_command(dev->its, its_build_inv_cmd, &desc);
 }
-
-#ifdef ITS_DEBUG_ALLOW_SELF_INJECT
-static void its_send_int(struct its_device *dev, u32 id)
-{
-	struct its_cmd_desc desc;
-
-	desc.its_int_cmd.dev = dev;
-	desc.its_int_cmd.event_id = id;
-
-	its_send_single_command(dev->its, its_build_int_cmd, &desc);
-}
-#endif
 
 static void its_send_mapd(struct its_device *dev, int valid)
 {
@@ -554,22 +520,26 @@ static void its_send_invall(struct its_node *its, struct its_collection *col)
 	its_send_single_command(its, its_build_invall_cmd, &desc);
 }
 
+/*
+ * irqchip functions - assumes MSI, mostly.
+ */
+
 static void lpi_set_config(struct its_device *its_dev, u32 hwirq,
 			   u32 id, int enable)
 {
-	u8 *cfg = page_address(gic_rdist->prop_page) + hwirq - 8192;
+	u8 *cfg = page_address(gic_rdists->prop_page) + hwirq - 8192;
 
 	if (enable)
-		*cfg |= (1 << 0);
+		*cfg |= LPI_PROP_ENABLED;
 	else
-		*cfg &= ~(1 << 0);
+		*cfg &= ~LPI_PROP_ENABLED;
 
 	/*
 	 * Make the above write visible to the redistributors.
 	 * And yes, we're flushing exactly: One. Single. Byte.
 	 * Humpf...
 	 */
-	if (gic_rdist->flags & RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING)
+	if (gic_rdists->flags & RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING)
 		__flush_dcache_area(cfg, sizeof(*cfg));
 	else
 		dsb(ishst);
@@ -586,7 +556,7 @@ static void its_mask_irq(struct irq_data *d)
 	struct its_device *its_dev = irq_data_get_irq_handler_data(d);
 	u32 id;
 
-	/* If MSI, propagate the unmask to the RC */
+	/* If MSI, propagate the mask to the RC */
 	if (IS_ENABLED(CONFIG_PCI_MSI) && d->msi_desc) {
 		id = its_msi_get_entry_nr(d->msi_desc);
 		mask_msi_irq(d);
@@ -626,6 +596,9 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	struct its_collection *target_col;
 	u32 id;
 
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
 	target_col = &its_dev->its->collections[cpu];
 	if (IS_ENABLED(CONFIG_PCI_MSI) && d->msi_desc)
 		id = its_msi_get_entry_nr(d->msi_desc);
@@ -644,8 +617,6 @@ static struct irq_chip its_irq_chip = {
 	.irq_eoi		= its_eoi_irq,
 	.irq_set_affinity	= its_set_affinity,
 };
-
-static struct irq_domain *lpi_domain;
 
 /*
  * How we allocate LPIs:
@@ -678,7 +649,8 @@ static int its_lpi_init(u32 id_bits)
 {
 	lpi_chunks = its_lpi_to_chunk(1UL << id_bits);
 
-	lpi_bitmap = kzalloc(lpi_chunks / 8, GFP_KERNEL);
+	lpi_bitmap = kzalloc(BITS_TO_LONGS(lpi_chunks) * sizeof(long),
+			     GFP_KERNEL);
 	if (!lpi_bitmap) {
 		lpi_chunks = 0;
 		return -ENOMEM;
@@ -688,53 +660,65 @@ static int its_lpi_init(u32 id_bits)
 	return 0;
 }
 
-static struct its_lpi_chunk *its_lpi_alloc(void)
+static unsigned long *its_lpi_alloc_chunks(int nr_irqs, int *base, int *nr_ids)
 {
-	struct its_lpi_chunk *chunk;
-	int lpi;
+	unsigned long *bitmap = NULL;
+	int chunk_id;
+	int nr_chunks;
+	int i;
 
-	chunk = kzalloc(sizeof(*chunk), GFP_KERNEL);
-	if (!chunk)
-		return NULL;
+	nr_chunks = DIV_ROUND_UP(nr_irqs, IRQS_PER_CHUNK);
 
 	spin_lock(&lpi_lock);
 
-	lpi = find_first_zero_bit(lpi_bitmap, lpi_chunks);
-	if (lpi < lpi_chunks) {
-		set_bit(lpi, lpi_bitmap);
-		chunk->lpi_base = its_chunk_to_lpi(lpi);
-		INIT_LIST_HEAD(&chunk->entry);
-	} else {
-		lpi = -ENOSPC;
-	}
+	do {
+		chunk_id = bitmap_find_next_zero_area(lpi_bitmap, lpi_chunks,
+						      0, nr_chunks, 0);
+		if (chunk_id < lpi_chunks)
+			break;
 
+		nr_chunks--;
+	} while (nr_chunks > 0);
+
+	if (!nr_chunks)
+		goto out;
+
+	bitmap = kzalloc(BITS_TO_LONGS(nr_chunks * IRQS_PER_CHUNK) * sizeof (long),
+			 GFP_ATOMIC);
+	if (!bitmap)
+		goto out;
+
+	for (i = 0; i < nr_chunks; i++)
+		set_bit(chunk_id + i, lpi_bitmap);
+
+	*base = its_chunk_to_lpi(chunk_id);
+	*nr_ids = nr_chunks * IRQS_PER_CHUNK;
+
+out:
 	spin_unlock(&lpi_lock);
 
-	if (lpi < 0) {
-		kfree(chunk);
-		return NULL;
-	}
-
-	return chunk;
+	return bitmap;
 }
 
-static void its_lpi_free(struct its_lpi_chunk *chunk)
+static void its_lpi_free(unsigned long *bitmap, int base, int nr_ids)
 {
 	int lpi;
 
 	spin_lock(&lpi_lock);
 
-	lpi = its_lpi_to_chunk(chunk->lpi_base);
-	BUG_ON(lpi > lpi_chunks);
-	if (test_bit(lpi, lpi_bitmap)) {
-		clear_bit(lpi, lpi_bitmap);
-	} else {
-		pr_err("Bad LPI chunk %d\n", lpi);
+	for (lpi = base; lpi < (base + nr_ids); lpi += IRQS_PER_CHUNK) {
+		int chunk = its_lpi_to_chunk(lpi);
+		BUG_ON(chunk > lpi_chunks);
+		if (test_bit(chunk, lpi_bitmap)) {
+			clear_bit(chunk, lpi_bitmap);
+		} else {
+			pr_err("Bad LPI chunk %d\n", chunk);
+		}
 	}
 
 	spin_unlock(&lpi_lock);
 
-	kfree(chunk);
+	kfree(bitmap);
 }
 
 /*
@@ -750,156 +734,41 @@ static void its_lpi_free(struct its_lpi_chunk *chunk)
  */
 #define LPI_NRBITS		ilog2(LPI_PROPBASE_SZ + SZ_8K)
 
-static int gic_rdist_supports_plpis(void)
-{
-	return !!(readl_relaxed(gic_data_rdist_rd_base() + GICR_TYPER) & GICR_TYPER_PLPIS);
-}
+#define LPI_PROP_DEFAULT_PRIO	0xa0
 
 static int __init its_alloc_lpi_tables(void)
 {
-	gic_rdist->prop_page = alloc_pages(GFP_NOWAIT,
+	phys_addr_t paddr;
+
+	gic_rdists->prop_page = alloc_pages(GFP_NOWAIT,
 					   get_order(LPI_PROPBASE_SZ));
-	if (!gic_rdist->prop_page) {
+	if (!gic_rdists->prop_page) {
 		pr_err("Failed to allocate PROPBASE\n");
 		return -ENOMEM;
 	}
 
-	pr_info("GIC: using LPI property table @%llx\n",
-		page_to_phys(gic_rdist->prop_page));
+	paddr = page_to_phys(gic_rdists->prop_page);
+	pr_info("GIC: using LPI property table @%pa\n", &paddr);
 
 	/* Priority 0xa0, Group-1, disabled */
-	memset(page_address(gic_rdist->prop_page), 0xa2, LPI_PROPBASE_SZ);
+	memset(page_address(gic_rdists->prop_page),
+	       LPI_PROP_DEFAULT_PRIO | LPI_PROP_GROUP1,
+	       LPI_PROPBASE_SZ);
 
 	/* Make sure the GIC will observe the written configuration */
-	__flush_dcache_area(page_address(gic_rdist->prop_page), LPI_PROPBASE_SZ);
+	__flush_dcache_area(page_address(gic_rdists->prop_page), LPI_PROPBASE_SZ);
 
 	return 0;
 }
 
-static void its_cpu_init_lpis(void)
-{
-	void __iomem *rbase = gic_data_rdist_rd_base();
-	struct page *pend_page;
-	u64 val, tmp;
-
-	/* If we didn't allocate the pending table yet, do it now */
-	pend_page = gic_data_rdist()->pend_page;
-	if (!pend_page) {
-		if (!gic_rdist_supports_plpis()) {
-			pr_info("CPU%d: LPIs not supported\n",
-				smp_processor_id());
-			return;
-		}
-
-		/*
-		 * The pending pages have to be at least 64kB aligned,
-		 * hence the 'max(LPI_PENDBASE_SZ, SZ_64K)' below.
-		 */
-		pend_page = alloc_pages(GFP_NOWAIT | __GFP_ZERO,
-					get_order(max(LPI_PENDBASE_SZ, SZ_64K)));
-		if (!pend_page) {
-			pr_err("Failed to allocate PENDBASE for CPU%d\n",
-			       smp_processor_id());
-			return;
-		}
-
-		/* Make sure the GIC will observe the zero-ed page */
-		__flush_dcache_area(page_address(pend_page), LPI_PENDBASE_SZ);
-
-		pr_info("CPU%d: using LPI pending table @%llx\n",
-			smp_processor_id(), page_to_phys(pend_page));
-		gic_data_rdist()->pend_page = pend_page;
-	}
-
-	/* Disable LPIs */
-	val = readl_relaxed(rbase + GICR_CTLR);
-	val &= ~(1U << 0);
-	writel_relaxed(val, rbase + GICR_CTLR);
-
-	/*
-	 * Make sure any change to the table is observable by the GIC.
-	 */
-	dsb(sy);
-
-	/* set PROPBASE */
-	val = (page_to_phys(gic_rdist->prop_page) |
-	       GICR_PROPBASER_InnerShareable |
-	       GICR_PROPBASER_WaWb |
-	       ((LPI_NRBITS - 1) & 0x1f));
-
-	writeq_relaxed(val, rbase + GICR_PROPBASER);
-	tmp = readq_relaxed(rbase + GICR_PROPBASER);
-
-	if ((tmp ^ val) & GICR_PROPBASER_SHAREABILITY_MASK) {
-		pr_info_once("GIC: using cache flushing for LPI property table\n");
-		gic_rdist->flags |= RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING;
-	}
-
-	/* set PENDBASE */
-	val = (page_to_phys(pend_page) |
-	       GICR_PROPBASER_InnerShareable |
-	       GICR_PROPBASER_WaWb);
-
-	writeq_relaxed(val, rbase + GICR_PENDBASER);
-
-	/* Enable LPIs */
-	val = readl_relaxed(rbase + GICR_CTLR);
-	val |= (1U << 0);
-	writel_relaxed(val, rbase + GICR_CTLR);
-
-	/* Make sure the GIC has seen the above */
-	dsb(sy);
-}
-
-static void its_cpu_init_collection(void)
-{
-	struct its_node *its;
-
-	spin_lock(&its_lock);
-
-	list_for_each_entry(its, &its_nodes, entry) {
-		int cpu = smp_processor_id();
-		u64 target;
-
-		/*
-		 * We now have to bind each collection to its target
-		 * redistributor.
-		 */
-		if (readq_relaxed(its->base + GITS_TYPER) & GITS_TYPER_PTA) {
-			/*
-			 * This ITS wants the physical address of the
-			 * redistributor.
-			 */
-			target = gic_data_rdist()->phys_base;
-		} else {
-			/*
-			 * This ITS wants a linear CPU number.
-			 */
-			target = readq_relaxed(gic_data_rdist_rd_base() + GICR_TYPER);
-			target >>= 8;
-			target &= 0xffff;
-		}
-
-		/* Perform collection mapping */
-		its->collections[cpu].target_address = target;
-		its->collections[cpu].col_id = cpu;
-
-		its_send_mapc(its, &its->collections[cpu], 1);
-		its_send_invall(its, &its->collections[cpu]);
-	}
-
-	spin_unlock(&its_lock);
-}
-
 static const char *its_base_type_string[] = {
-	[0]	= "Unimplemented",
-	[1]	= "Devices",
-	[2]	= "Virtual CPUs",
-	[3]	= "Physical CPUs",
-	[4]	= "Interrupt Collections",
-	[5] 	= "Reserved",
-	[6] 	= "Reserved",
-	[7] 	= "Reserved",
+	[GITS_BASER_TYPE_DEVICE]	= "Devices",
+	[GITS_BASER_TYPE_VCPU]		= "Virtual CPUs",
+	[GITS_BASER_TYPE_CPU]		= "Physical CPUs",
+	[GITS_BASER_TYPE_COLLECTION]	= "Interrupt Collections",
+	[GITS_BASER_TYPE_RESERVED5] 	= "Reserved (5)",
+	[GITS_BASER_TYPE_RESERVED6] 	= "Reserved (6)",
+	[GITS_BASER_TYPE_RESERVED7] 	= "Reserved (7)",
 };
 
 static void its_free_tables(struct its_node *its)
@@ -929,12 +798,12 @@ static int its_alloc_tables(struct its_node *its)
 
 	for (i = 0; i < GITS_BASER_NR_REGS; i++) {
 		u64 val = readq_relaxed(its->base + GITS_BASER + i * 8);
+		u64 type = GITS_BASER_TYPE(val);
+		u64 entry_size = GITS_BASER_ENTRY_SIZE(val);
 		u64 tmp;
-		int type = (val >> 56) & 7;
-		int entry_size = ((val >> 48) & 0xff) + 1;
 		void *base;
 
-		if (!type)
+		if (type == GITS_BASER_TYPE_NONE)
 			continue;
 
 		base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, get_order(max_ittsize));
@@ -947,11 +816,11 @@ static int its_alloc_tables(struct its_node *its)
 		its->tables[i] = base;
 
 retry_baser:
-		val = (virt_to_phys(base) 		|
-		       ((u64)type << 56)		|
-		       ((u64)(entry_size - 1) << 48)	|
-		       GITS_BASER_WaWb			|
-		       shr				|
+		val = (virt_to_phys(base) 				 |
+		       (type << GITS_BASER_TYPE_SHIFT)			 |
+		       ((entry_size - 1) << GITS_BASER_ENTRY_SIZE_SHIFT) |
+		       GITS_BASER_WaWb					 |
+		       shr						 |
 		       GITS_BASER_VALID);
 
 		switch (psz) {
@@ -982,7 +851,7 @@ retry_baser:
 			goto retry_baser;
 		}
 
-		if ((val ^ tmp) & (3 << 8)) {
+		if ((val ^ tmp) & GITS_BASER_PAGE_SIZE_MASK) {
 			/*
 			 * Page size didn't stick. Let's try a smaller
 			 * size and retry. If we reach 4K, then
@@ -1013,10 +882,10 @@ retry_baser:
 		}
 
 		pr_info("ITS: allocated %d %s @%lx (psz %dK, shr %d)\n",
-			(int)PAGE_SIZE / entry_size,
+			(int)(PAGE_SIZE / entry_size),
 			its_base_type_string[type],
 			(unsigned long)virt_to_phys(base),
-			psz / 1024, (int)shr >> 10);
+			psz / SZ_1K, (int)shr >> GITS_BASER_SHAREABILITY_SHIFT);
 	}
 
 	return 0;
@@ -1035,6 +904,117 @@ static int its_alloc_collections(struct its_node *its)
 		return -ENOMEM;
 
 	return 0;
+}
+
+static void its_cpu_init_lpis(void)
+{
+	void __iomem *rbase = gic_data_rdist_rd_base();
+	struct page *pend_page;
+	u64 val, tmp;
+
+	/* If we didn't allocate the pending table yet, do it now */
+	pend_page = gic_data_rdist()->pend_page;
+	if (!pend_page) {
+		phys_addr_t paddr;
+		/*
+		 * The pending pages have to be at least 64kB aligned,
+		 * hence the 'max(LPI_PENDBASE_SZ, SZ_64K)' below.
+		 */
+		pend_page = alloc_pages(GFP_NOWAIT | __GFP_ZERO,
+					get_order(max(LPI_PENDBASE_SZ, SZ_64K)));
+		if (!pend_page) {
+			pr_err("Failed to allocate PENDBASE for CPU%d\n",
+			       smp_processor_id());
+			return;
+		}
+
+		/* Make sure the GIC will observe the zero-ed page */
+		__flush_dcache_area(page_address(pend_page), LPI_PENDBASE_SZ);
+
+		paddr = page_to_phys(pend_page);
+		pr_info("CPU%d: using LPI pending table @%pa\n",
+			smp_processor_id(), &paddr);
+		gic_data_rdist()->pend_page = pend_page;
+	}
+
+	/* Disable LPIs */
+	val = readl_relaxed(rbase + GICR_CTLR);
+	val &= ~GICR_CTLR_ENABLE_LPIS;
+	writel_relaxed(val, rbase + GICR_CTLR);
+
+	/*
+	 * Make sure any change to the table is observable by the GIC.
+	 */
+	dsb(sy);
+
+	/* set PROPBASE */
+	val = (page_to_phys(gic_rdists->prop_page) |
+	       GICR_PROPBASER_InnerShareable |
+	       GICR_PROPBASER_WaWb |
+	       ((LPI_NRBITS - 1) & GICR_PROPBASER_IDBITS_MASK));
+
+	writeq_relaxed(val, rbase + GICR_PROPBASER);
+	tmp = readq_relaxed(rbase + GICR_PROPBASER);
+
+	if ((tmp ^ val) & GICR_PROPBASER_SHAREABILITY_MASK) {
+		pr_info_once("GIC: using cache flushing for LPI property table\n");
+		gic_rdists->flags |= RDIST_FLAGS_PROPBASE_NEEDS_FLUSHING;
+	}
+
+	/* set PENDBASE */
+	val = (page_to_phys(pend_page) |
+	       GICR_PROPBASER_InnerShareable |
+	       GICR_PROPBASER_WaWb);
+
+	writeq_relaxed(val, rbase + GICR_PENDBASER);
+
+	/* Enable LPIs */
+	val = readl_relaxed(rbase + GICR_CTLR);
+	val |= GICR_CTLR_ENABLE_LPIS;
+	writel_relaxed(val, rbase + GICR_CTLR);
+
+	/* Make sure the GIC has seen the above */
+	dsb(sy);
+}
+
+static void its_cpu_init_collection(void)
+{
+	struct its_node *its;
+	int cpu;
+
+	spin_lock(&its_lock);
+	cpu = smp_processor_id();
+
+	list_for_each_entry(its, &its_nodes, entry) {
+		u64 target;
+
+		/*
+		 * We now have to bind each collection to its target
+		 * redistributor.
+		 */
+		if (readq_relaxed(its->base + GITS_TYPER) & GITS_TYPER_PTA) {
+			/*
+			 * This ITS wants the physical address of the
+			 * redistributor.
+			 */
+			target = gic_data_rdist()->phys_base;
+		} else {
+			/*
+			 * This ITS wants a linear CPU number.
+			 */
+			target = readq_relaxed(gic_data_rdist_rd_base() + GICR_TYPER);
+			target = GICR_TYPER_CPU_NUMBER(target);
+		}
+
+		/* Perform collection mapping */
+		its->collections[cpu].target_address = target;
+		its->collections[cpu].col_id = cpu;
+
+		its_send_mapc(its, &its->collections[cpu], 1);
+		its_send_invall(its, &its->collections[cpu]);
+	}
+
+	spin_unlock(&its_lock);
 }
 
 static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
@@ -1056,30 +1036,37 @@ static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
 }
 
 static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
-					    int itt_size)
+					    int nvecs)
 {
 	struct its_device *dev;
+	unsigned long *lpi_map;
 	void *itt;
+	int lpi_base;
+	int nr_lpis;
 	int cpu;
 	int sz;
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	sz = itt_size * its->ite_size;
+	sz = nvecs * its->ite_size;
 	sz = max(sz, ITS_ITT_ALIGN) + ITS_ITT_ALIGN - 1;
 	itt = kmalloc(sz, GFP_KERNEL);
+	lpi_map = its_lpi_alloc_chunks(nvecs, &lpi_base, &nr_lpis);
 
-	if (!dev || !itt) {
+	if (!dev || !itt || !lpi_map) {
 		kfree(dev);
 		kfree(itt);
+		kfree(lpi_map);
 		return NULL;
 	}
 
 	dev->its = its;
 	dev->itt = itt;
-	dev->nr_ites = itt_size;
+	dev->nr_ites = nvecs;
+	dev->lpi_map = lpi_map;
+	dev->lpi_base = lpi_base;
+	dev->nr_lpis = nr_lpis;
 	dev->device_id = dev_id;
 	INIT_LIST_HEAD(&dev->entry);
-	INIT_LIST_HEAD(&dev->hwirq_list);
 
 	raw_spin_lock(&its->lock);
 	list_add(&dev->entry, &its->its_device_list);
@@ -1095,88 +1082,35 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	return dev;
 }
 
+static void its_free_device(struct its_device *its_dev)
+{
+	raw_spin_lock(&its_dev->its->lock);
+	list_del(&its_dev->entry);
+	raw_spin_unlock(&its_dev->its->lock);
+	kfree(its_dev->itt);
+	kfree(its_dev);
+}
+
 static int its_alloc_device_irq(struct its_device *dev, u32 id,
 				int *hwirq, unsigned int *irq)
 {
-	struct its_lpi_chunk *chunk;
 	int idx;
 
-	chunk = list_first_entry_or_null(&dev->hwirq_list,
-					 struct its_lpi_chunk, entry);
-again:
-	if (!chunk) {		/* No allocated chunk */
-		chunk = its_lpi_alloc();
-		if (!chunk)
-			return -ENOSPC;
-		list_add(&chunk->entry, &dev->hwirq_list);
-	}
+	idx = find_first_zero_bit(dev->lpi_map, dev->nr_lpis);
+	if (idx == dev->nr_lpis)
+		return -ENOSPC;
 
-	idx = find_first_zero_bit(&chunk->lpi_map, IRQS_PER_CHUNK);
-	if (idx == IRQS_PER_CHUNK) { /* Need to allocate a new chunk */
-		chunk = NULL;
-		goto again;
-	}
-
-	set_bit(idx, &chunk->lpi_map);
-
-	*hwirq = chunk->lpi_base + idx;
+	*hwirq = dev->lpi_base + idx;
 	*irq = irq_create_mapping(lpi_domain, *hwirq);
 	if (!*irq)
 		return -ENOSPC;	/* Don't kill the device, though */
+
+	set_bit(idx, dev->lpi_map);
 
 	/* Map the GIC irq ID to the device */
 	its_send_mapvi(dev, *hwirq, id);
 
 	return 0;
-}
-
-static void its_free_device(struct its_device *its_dev)
-{
-	list_del(&its_dev->entry);
-	kfree(its_dev->itt);
-	kfree(its_dev);
-}
-
-static struct its_lpi_chunk *its_find_chunk(struct its_device *its_dev,
-					    struct irq_data *d)
-{
-	struct its_lpi_chunk *chunk;
-
-	list_for_each_entry(chunk, &its_dev->hwirq_list, entry) {
-		if (d->hwirq >= chunk->lpi_base &&
-		    (chunk->lpi_base + IRQS_PER_CHUNK) > d->hwirq)
-			return chunk;
-	}
-
-	return NULL;
-}
-
-static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
-{
-	struct irq_data *d = irq_get_irq_data(irq);
-	struct its_device *its_dev = irq_data_get_irq_handler_data(d);
-	struct its_lpi_chunk *chunk = its_find_chunk(its_dev, d);
-
-	BUG_ON(!chunk);		/* OMG! */
-
-	/* Stop the delivery of interrupts */
-	its_send_discard(its_dev, its_msi_get_entry_nr(d->msi_desc));
-
-	/* Mark interrupt index as unused, and clear the mapping */
-	clear_bit(d->hwirq - chunk->lpi_base, &chunk->lpi_map);
-	irq_dispose_mapping(irq);
-
-	/* If all interrupts have been freed, start mopping the floor */
-	if (bitmap_empty(&chunk->lpi_map, IRQS_PER_CHUNK)) {
-		list_del(&chunk->entry);
-		its_lpi_free(chunk);
-	}
-
-	if (list_empty(&its_dev->hwirq_list)) {
-		/* Unmap device/itt */
-		its_send_mapd(its_dev, 0);
-		its_free_device(its_dev);
-	}
 }
 
 /* FIXME: Use proper API once it is available in the kernel... */
@@ -1233,6 +1167,33 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 
 	write_msi_msg(irq, &msg);
 	return 0;
+}
+
+static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
+{
+	struct irq_data *d = irq_get_irq_data(irq);
+	struct its_device *its_dev = irq_data_get_irq_handler_data(d);
+
+	BUG_ON(d->hwirq < its_dev->lpi_base ||		/* OMG! */
+	       d->hwirq > (its_dev->lpi_base + its_dev->nr_lpis));
+
+	/* Stop the delivery of interrupts */
+	its_send_discard(its_dev, its_msi_get_entry_nr(d->msi_desc));
+
+	/* Mark interrupt index as unused, and clear the mapping */
+	clear_bit(d->hwirq - its_dev->lpi_base, its_dev->lpi_map);
+	irq_dispose_mapping(irq);
+
+	/* If all interrupts have been freed, start mopping the floor */
+	if (bitmap_empty(its_dev->lpi_map, its_dev->nr_lpis)) {
+		its_lpi_free(its_dev->lpi_map,
+			     its_dev->lpi_base,
+			     its_dev->nr_lpis);
+
+		/* Unmap device/itt */
+		its_send_mapd(its_dev, 0);
+		its_free_device(its_dev);
+	}
 }
 
 static int its_probe(struct device_node *node)
@@ -1336,8 +1297,18 @@ out_unmap:
 	return err;
 }
 
+static bool gic_rdists_supports_plpis(void)
+{
+	return !!(readl_relaxed(gic_data_rdist_rd_base() + GICR_TYPER) & GICR_TYPER_PLPIS);
+}
+
 int its_cpu_init(void)
 {
+	if (!gic_rdists_supports_plpis()) {
+		pr_info("CPU%d: LPIs not supported\n", smp_processor_id());
+		return -ENXIO;
+	}
+
 	if (!list_empty(&its_nodes)) {
 		its_cpu_init_lpis();
 		its_cpu_init_collection();
@@ -1351,7 +1322,7 @@ static struct of_device_id its_device_id[] = {
 	{},
 };
 
-struct irq_chip *its_init(struct device_node *node, struct rdist *rdist,
+struct irq_chip *its_init(struct device_node *node, struct rdists *rdists,
 			  struct irq_domain *domain)
 {
 	struct device_node *np;
@@ -1366,12 +1337,12 @@ struct irq_chip *its_init(struct device_node *node, struct rdist *rdist,
 		return NULL;
 	}
 
-	gic_rdist = rdist;
+	gic_rdists = rdists;
 	gic_root_node = node;
 	lpi_domain = domain;
 
 	its_alloc_lpi_tables();
-	its_lpi_init(rdist->id_bits);
+	its_lpi_init(rdists->id_bits);
 
 	return &its_irq_chip;
 }
