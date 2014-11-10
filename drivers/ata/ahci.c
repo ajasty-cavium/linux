@@ -42,6 +42,7 @@
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/gfp.h>
+#include <linux/msi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>
@@ -1212,13 +1213,11 @@ static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
 	if (rc < 0)
 		return rc;
 
-	pdev->irq = entry.vector;
-
 	return 1;
 }
 
-static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
-				struct ahci_host_priv *hpriv)
+static int __ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
+				  struct ahci_host_priv *hpriv)
 {
 	int rc, nvec;
 
@@ -1272,6 +1271,35 @@ intx:
 	return 0;
 }
 
+static struct msi_desc *msix_get_desc(struct pci_dev *dev, u16 entry)
+{
+	struct msi_desc *desc;
+
+	list_for_each_entry(desc, &dev->msi_list, list) {
+		if (desc->msi_attrib.entry_nr == entry)
+			return desc;
+	}
+
+	return NULL;
+}
+
+static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
+				struct ahci_host_priv *hpriv)
+{
+	struct msi_desc *desc;
+
+	__ahci_init_interrupts(pdev, n_ports, hpriv);
+
+	if (!pdev->msix_enabled)
+		return pdev->irq;
+
+	desc = msix_get_desc(pdev, 0);	/* first entry */
+	if (!desc)
+		return -ENODEV;
+
+	return desc->irq;
+}
+
 static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	unsigned int board_id = ent->driver_data;
@@ -1282,6 +1310,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct ata_host *host;
 	int n_ports, i, rc;
 	int ahci_pci_bar = AHCI_PCI_BAR_STANDARD;
+	int irq;
 
 	VPRINTK("ENTER\n");
 
@@ -1435,7 +1464,9 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	n_ports = max(ahci_nr_ports(hpriv->cap), fls(hpriv->port_map));
 
-	ahci_init_interrupts(pdev, n_ports, hpriv);
+	irq = ahci_init_interrupts(pdev, n_ports, hpriv);
+	if (irq < 0)
+		return irq;
 
 	host = ata_host_alloc_pinfo(&pdev->dev, ppi, n_ports);
 	if (!host)
@@ -1487,7 +1518,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_master(pdev);
 
-	return ahci_host_activate(host, pdev->irq, &ahci_sht);
+	return ahci_host_activate(host, irq, &ahci_sht);
 }
 
 module_pci_driver(ahci_pci_driver);
