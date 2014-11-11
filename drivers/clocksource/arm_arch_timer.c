@@ -668,10 +668,11 @@ arch_timer_probed(int type, const struct of_device_id *matches)
 	bool probed = true;
 
 	dn = of_find_matching_node(NULL, matches);
-	if (dn && of_device_is_available(dn) && !(arch_timers_present & type))
-		probed = false;
-	of_node_put(dn);
-
+	if (dn) {
+		if (of_device_is_available(dn) && !(arch_timers_present & type))
+			probed = false;
+		of_node_put(dn);
+	}
 	return probed;
 }
 
