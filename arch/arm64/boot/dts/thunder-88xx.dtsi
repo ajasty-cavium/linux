@@ -366,11 +366,11 @@
 		#size-cells = <2>;
 		ranges;
 
-		refclkuaa: refclkuaa {
+		refclk50mhz: refclk50mhz {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
-			clock-frequency = <116640000>;
-			clock-output-names = "refclkuaa";
+			clock-frequency = <50000000>;
+			clock-output-names = "refclk50mhz";
 		};
 
 		gic0: interrupt-controller@8010,00000000 {
@@ -403,7 +403,7 @@
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x25000000 0x0 0x1000>;
 			interrupts = <1 22 4>;
-			clocks = <&refclkuaa>;
+			clocks = <&refclk50mhz>;
 			clock-names = "apb_pclk";
 		};
 	};
