@@ -1659,14 +1659,6 @@ void pcibios_release_device(struct pci_dev *dev);
 extern struct dev_pm_ops pcibios_pm_ops;
 #endif
 
-#ifdef CONFIG_PCI_MMCONFIG
-void __init pci_mmcfg_early_init(void);
-void __init pci_mmcfg_late_init(void);
-#else
-static inline void pci_mmcfg_early_init(void) { }
-static inline void pci_mmcfg_late_init(void) { }
-#endif
-
 int pci_ext_cfg_avail(void);
 
 void __iomem *pci_ioremap_bar(struct pci_dev *pdev, int bar);
