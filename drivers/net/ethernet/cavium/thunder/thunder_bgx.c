@@ -305,7 +305,7 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 }
 EXPORT_SYMBOL(bgx_add_dmac_addr);
 
-void bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
+static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
 	struct lmac *lmac;
@@ -331,8 +331,13 @@ void bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
 				      bgx_lmac_handler, 0,
 				      PHY_INTERFACE_MODE_SGMII);
+
+	if (!lmac->phydev)
+		return -ENODEV;
+
 	phy_start_aneg(lmac->phydev);
 
+	return 0;
 }
 
 void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
@@ -411,11 +416,16 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!bgx_enable_msix(bgx))
 		return 1;
 	/* Enable all LMACs */
-	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
-		bgx_lmac_enable(bgx, lmac);
+	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
+		err = bgx_lmac_enable(bgx, lmac);
+		if (err) {
+			pr_err("BGX%d failed to enable lmac\n", lmac);
+			goto err_enable;
+		}
+	}
 
-	goto exit;
-
+	return 0;
+err_enable:
 	if (bgx->reg_base)
 		iounmap((void *)bgx->reg_base);
 err_release_regions:
