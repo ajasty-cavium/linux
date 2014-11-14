@@ -402,6 +402,9 @@ static int nicvf_init_resources(struct nicvf *nic)
 
 	nic->num_qs = 1;
 
+	/* Enable Qset */
+	nicvf_qset_config(nic, true);
+
 	/* Initialize queues and HW for data transfer */
 	err = nicvf_config_data_transfer(nic, true);
 	if (err) {
@@ -409,9 +412,6 @@ static int nicvf_init_resources(struct nicvf *nic)
 			   "Failed to alloc/config VF's QSet resources\n");
 		return err;
 	}
-	/* Enable Qset */
-	nicvf_qset_config(nic, true);
-
 	return 0;
 }
 
@@ -910,12 +910,6 @@ int nicvf_stop(struct net_device *netdev)
 	netif_carrier_off(netdev);
 	netif_tx_disable(netdev);
 
-	/* Disable HW Qset, to stop receiving packets */
-	nicvf_qset_config(nic, false);
-
-	/* disable mailbox interrupt */
-	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
-
 	/* Disable interrupts */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
 		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
@@ -926,7 +920,6 @@ int nicvf_stop(struct net_device *netdev)
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
 
-	nicvf_unregister_interrupts(nic);
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
 		napi_synchronize(&nic->napi[qidx]->napi);
 		napi_disable(&nic->napi[qidx]->napi);
@@ -934,8 +927,17 @@ int nicvf_stop(struct net_device *netdev)
 		kfree(nic->napi[qidx]);
 		nic->napi[qidx] = NULL;
 	}
+
 	/* Free resources */
 	nicvf_config_data_transfer(nic, false);
+
+	/* Disable HW Qset */
+	nicvf_qset_config(nic, false);
+
+	/* disable mailbox interrupt */
+	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
+
+	nicvf_unregister_interrupts(nic);
 
 	return 0;
 }

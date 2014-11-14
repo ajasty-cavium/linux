@@ -17,6 +17,27 @@
 
 #define  MIN_SND_QUEUE_DESC_FOR_PKT_XMIT 2
 
+static int nicvf_poll_reg(struct nicvf *nic, int qidx,
+			  uint64_t reg, int bit_pos, int bits, int val)
+{
+	uint64_t bit_mask;
+	uint64_t reg_val;
+	int timeout = 10;
+
+	bit_mask = (1ULL << bits) - 1;
+	bit_mask = (bit_mask << bit_pos);
+
+	while (timeout) {
+		reg_val = nicvf_queue_reg_read(nic, reg, qidx);
+		if (((reg_val & bit_mask) >> bit_pos) == val)
+			return 0;
+		usleep_range(1000, 2000);
+		timeout--;
+	}
+	netdev_err(nic->netdev, "Poll on reg 0x%llx failed\n", reg);
+	return 1;
+}
+
 static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 				  int q_len, int desc_size, int align_bytes)
 {
@@ -219,8 +240,6 @@ next_rbdr:
 static int nicvf_init_cmp_queue(struct nicvf *nic,
 				struct cmp_queue *cq, int q_len)
 {
-	int time;
-
 	if (nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len,
 				   CMP_QUEUE_DESC_SIZE,
 				   NICVF_CQ_BASE_ALIGN_BYTES)) {
@@ -230,9 +249,7 @@ static int nicvf_init_cmp_queue(struct nicvf *nic,
 	}
 	cq->desc = cq->dmem.base;
 	cq->thresh = CMP_QUEUE_CQE_THRESH;
-
-	time = CMP_QUEUE_TIMER_THRESH;
-	cq->intr_timer_thresh = time;
+	cq->intr_timer_thresh = CMP_QUEUE_TIMER_THRESH;
 
 	return 0;
 }
@@ -279,6 +296,71 @@ static void nicvf_free_snd_queue(struct nicvf *nic, struct snd_queue *sq)
 	nicvf_free_q_desc_mem(nic, &sq->dmem);
 }
 
+static void nicvf_reclaim_snd_queue(struct nicvf *nic,
+				    struct queue_set *qs, int qidx)
+{
+	/* Disable send queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, 0);
+	/* Check if SQ is stopped */
+	if (nicvf_poll_reg(nic, qidx, NIC_QSET_SQ_0_7_STATUS, 21, 1, 0x01))
+		return;
+	/* Reset send queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, NICVF_SQ_RESET);
+}
+
+static void nicvf_reclaim_rcv_queue(struct nicvf *nic,
+				    struct queue_set *qs, int qidx)
+{
+	/* Disable receive queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
+	/* TBD: check for PF_RX_SYNC */
+}
+
+static void nicvf_reclaim_cmp_queue(struct nicvf *nic,
+				    struct queue_set *qs, int qidx)
+{
+	/* Disable timer threshold (doesn't get reset upon CQ reset */
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2, qidx, 0);
+	/* Disable completion queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, 0);
+	/* Reset completion queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, NICVF_CQ_RESET);
+}
+
+static void nicvf_reclaim_rbdr(struct nicvf *nic,
+			       struct queue_set *qs, int qidx)
+{
+	uint64_t tmp;
+	int timeout = 10;
+
+	/* Disable RBDR */
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
+	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x00))
+		return;
+	while (1) {
+		tmp = nicvf_queue_reg_read(nic,
+					   NIC_QSET_RBDR_0_1_PREFETCH_STATUS,
+					   qidx);
+		if ((tmp & 0xFFFFFFFF) == ((tmp >> 32) & 0xFFFFFFFF))
+			break;
+		usleep_range(1000, 2000);
+		timeout--;
+		if (!timeout) {
+			netdev_err(nic->netdev,
+				   "Failed polling on prefetch status\n");
+			return;
+		}
+	}
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
+			      qidx, NICVF_RBDR_RESET);
+
+	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x02))
+		return;
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0x00);
+	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x00))
+		return;
+}
+
 static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
@@ -289,8 +371,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq = &qs->rq[qidx];
 	rq->enable = enable;
 
-	/* Disable receive queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
+	nicvf_reclaim_rcv_queue(nic, qs, qidx);
 	if (!rq->enable)
 		return;
 
@@ -340,10 +421,11 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	cq = &qs->cq[qidx];
 	cq->enable = enable;
 
-	/* Disable timer threshold (doesn't get reset upon CQ reset */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2, qidx, 0);
-	/* Disable completion queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, 0);
+	if (!cq->enable) {
+		nicvf_reclaim_cmp_queue(nic, qs, qidx);
+		return;
+	}
+
 	/* Reset completion queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, NICVF_CQ_RESET);
 
@@ -378,13 +460,13 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	sq = &qs->sq[qidx];
 	sq->enable = enable;
 
-	/* Disable send queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, 0);
+	if (!sq->enable) {
+		nicvf_reclaim_snd_queue(nic, qs, qidx);
+		return;
+	}
+
 	/* Reset send queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, NICVF_SQ_RESET);
-
-	if (!sq->enable)
-		return;
 
 	sq->cq_qs = qs->vnic_id;
 	sq->cq_idx = qidx;
@@ -412,66 +494,14 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_THRESH, qidx, sq->thresh);
 }
 
-static int nicvf_poll_reg(struct nicvf *nic, int qidx,
-			  uint64_t reg, int bit_pos, int bits, int val)
-{
-	uint64_t bit_mask;
-	uint64_t reg_val;
-	int timeout = 10;
-
-	bit_mask = (1ULL << bits) - 1;
-	bit_mask = (bit_mask << bit_pos);
-
-	while (timeout) {
-		reg_val = nicvf_queue_reg_read(nic, reg, qidx);
-		if (((reg_val & bit_mask) >> bit_pos) == val)
-			return 0;
-		usleep_range(1000, 2000);
-		timeout--;
-	}
-	netdev_err(nic->netdev, "Poll on reg 0x%llx failed\n", reg);
-	return 1;
-}
-
 static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 			      int qidx, bool enable)
 {
 	struct rbdr *rbdr;
 	struct rbdr_cfg rbdr_cfg;
-	uint64_t tmp;
-	int timeout = 10;
 
 	rbdr = &qs->rbdr[qidx];
-
-	/* Disable RBDR */
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
-	/* Reset RBDR */
-	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0x00);
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0x00);
-	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x00))
-		return;
-	while (1) {
-		tmp = nicvf_queue_reg_read(nic,
-					   NIC_QSET_RBDR_0_1_PREFETCH_STATUS,
-					   qidx);
-		if ((tmp & 0xFFFFFFFF) == ((tmp >> 32) & 0xFFFFFFFF))
-			break;
-		usleep_range(1000, 2000);
-		timeout--;
-		if (!timeout) {
-			netdev_err(nic->netdev,
-				   "Failed polling on prefetch status\n");
-			return;
-		}
-	}
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
-			      qidx, NICVF_RBDR_RESET);
-	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x02))
-		return;
-	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0x00);
-	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x00))
-		return;
-
+	nicvf_reclaim_rbdr(nic, qs, qidx);
 	if (!enable)
 		return;
 
@@ -506,6 +536,7 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	struct qs_cfg *qs_cfg;
 
 	qs->enable = enable;
+	qs->vnic_id = nic->vf_id;
 
 	/* Send a mailbox msg to PF to config Qset */
 	mbx.msg = NIC_PF_VF_MSG_QS_CFG;
@@ -609,12 +640,12 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 		if (nicvf_alloc_resources(nic))
 			return -ENOMEM;
 
-		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-			nicvf_rbdr_config(nic, qs, qidx, enable);
 		for (qidx = 0; qidx < qs->sq_cnt; qidx++)
 			nicvf_snd_queue_config(nic, qs, qidx, enable);
 		for (qidx = 0; qidx < qs->cq_cnt; qidx++)
 			nicvf_cmp_queue_config(nic, qs, qidx, enable);
+		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+			nicvf_rbdr_config(nic, qs, qidx, enable);
 		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
 			nicvf_rcv_queue_config(nic, qs, qidx, enable);
 	} else {
@@ -622,14 +653,14 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 		if (!qs)
 			return 0;
 
+		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
+			nicvf_rcv_queue_config(nic, qs, qidx, disable);
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 			nicvf_rbdr_config(nic, qs, qidx, disable);
 		for (qidx = 0; qidx < qs->sq_cnt; qidx++)
 			nicvf_snd_queue_config(nic, qs, qidx, disable);
 		for (qidx = 0; qidx < qs->cq_cnt; qidx++)
 			nicvf_cmp_queue_config(nic, qs, qidx, disable);
-		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
-			nicvf_rcv_queue_config(nic, qs, qidx, disable);
 
 		nicvf_free_resources(nic);
 	}
@@ -902,6 +933,9 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 
 	/* Add SQ gather subdesc */
 	nicvf_sq_add_gather_subdesc(nic, qs, sq_num, skb);
+
+	/* make sure all memory stores are done before ringing doorbell */
+	smp_wmb();
 
 	/* Inform HW to xmit new packet */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_DOOR,

@@ -260,7 +260,7 @@ struct rcv_queue {
 
 struct cmp_queue {
 	bool		enable;
-	uint8_t		intr_timer_thresh;
+	uint16_t	intr_timer_thresh;
 	uint16_t	thresh;
 	spinlock_t	cq_lock;  /* lock to serialize processing CQEs */
 	void		*desc;
