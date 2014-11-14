@@ -203,6 +203,12 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
+	case NIC_PF_VF_MSG_RQ_BP_CFG:
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_BP_CFG |
+			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+		break;
 	case NIC_PF_VF_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
@@ -323,6 +329,14 @@ static void nic_init_hw(struct nicpf *nic)
 	/* Enable NIC HW block */
 	nic_reg_write(nic, NIC_PF_CFG, 1);
 
+	/* Enable backpressure */
+	nic_reg_write(nic, NIC_PF_BP_CFG, (1ULL << 6) | 0x03);
+	nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG, (1ULL << 63) | 0x08);
+	nic_reg_write(nic,
+		      NIC_PF_INTF_0_1_BP_CFG + (1 << 8), (1ULL << 63) | 0x09);
+	for (i = 0; i < NIC_MAX_CHANS; i++)
+		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 1);
+
 	if (nic->flags & NIC_TNS_ENABLED) {
 		reg = NIC_TNS_MODE << 7;
 		reg |= 0x06;
@@ -352,10 +366,6 @@ static void nic_init_hw(struct nicpf *nic)
 			      *(uint64_t *)&nic->pkind);
 
 	nic_set_tx_pkt_pad(nic, NIC_HW_MIN_FRS);
-
-	/* Disable backpressure for now */
-	for (i = 0; i < NIC_MAX_CHANS; i++)
-		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 0);
 
 	/* Timer config */
 	nic_reg_write(nic, NIC_PF_INTR_TIMER_CFG, NICPF_CLK_PER_INT_TICK);
@@ -470,22 +480,33 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
  */
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 {
-	uint32_t bgx, lmac, tl3, tl4;
+	uint32_t bgx, lmac;
+	uint32_t tl2, tl3, tl4;
 
 	bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 
-	tl4 = (lmac * NIC_TL4_PER_LMAC) + (bgx * NIC_TL4_PER_BGX);
+	tl2 = bgx * 32;
+	tl2 += lmac;
+	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3),
+		      NIC_HW_MAX_FRS / 4);
+	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
+
+	tl3 = tl2 * 4;
+	nic_reg_write(nic, NIC_PF_TL3A_0_63_CFG | (tl2 << 3), tl2);
+	nic_reg_write(nic, NIC_PF_TL3_0_255_CFG | (tl3 << 3),
+		      NIC_HW_MAX_FRS / 4);
+	nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3), lmac << 4);
+
+	tl4 = tl3 * 4;
 	tl4 += sq_idx;
 
-	tl3 = tl4 / (NIC_MAX_TL4 / NIC_MAX_TL3);
-	nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
-				(vnic << NIC_QS_ID_SHIFT) |
-				(sq_idx << NIC_Q_NUM_SHIFT), tl4);
-	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
-		      (vnic << 27) | (sq_idx << 24));
 	nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
-	nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3), lmac << 4);
+	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
+		      (vnic << 27) | (sq_idx << 24) | (NIC_HW_MAX_FRS / 4));
+	nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
+		      (vnic << NIC_QS_ID_SHIFT) |
+		      (sq_idx << NIC_Q_NUM_SHIFT), tl4);
 }
 
 static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)

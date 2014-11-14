@@ -37,8 +37,8 @@
 /* VNIC HW optimiation features */
 #undef	VNIC_RX_CSUM_OFFLOAD_SUPPORT
 #undef	VNIC_TX_CSUM_OFFLOAD_SUPPORT
-#define	VNIC_SG_SUPPORT
-#define	VNIC_TSO_SUPPORT
+#undef	VNIC_SG_SUPPORT
+#undef	VNIC_TSO_SUPPORT
 #undef	VNIC_LRO_SUPPORT
 #undef  VNIC_RSS_SUPPORT
 
@@ -132,9 +132,8 @@
 #define NIC_PF_INTR_ID_MBOX0		8
 #define NIC_PF_INTR_ID_MBOX1		9
 
-/* For CQ timer threshold interrupt */
-#define NIC_NS_PER_100_SYETEM_CLK	125
-#define NICPF_CLK_PER_INT_TICK		100
+/* Coprocessor clock 700Mhz..CQ timer 1mhz */
+#define NICPF_CLK_PER_INT_TICK		700
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
@@ -314,6 +313,7 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_RSS_SIZE		0x0B	/* Get RSS indir_tbl size */
 #define	NIC_PF_VF_MSG_RSS_CFG		0x0C	/* Config RSS table */
 #define	NIC_PF_VF_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
+#define	NIC_PF_VF_MSG_RQ_BP_CFG		0x0E
 
 struct nic_cfg_msg {
 	uint64_t   vf_id;

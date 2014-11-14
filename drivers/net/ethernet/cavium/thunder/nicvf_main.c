@@ -18,6 +18,7 @@
 #include "nic_reg.h"
 #include "nic.h"
 #include "nicvf_queues.h"
+#include "thunder_bgx.h"
 
 #define DRV_NAME	"thunder-nicvf"
 #define DRV_VERSION	"1.0"
@@ -497,9 +498,11 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 	skb_checksum_none_assert(skb);
 #endif
 
+#ifdef VNIC_GRO_SUPPORT
 	if (napi && (netdev->features & NETIF_F_GRO))
 		napi_gro_receive(napi, skb);
 	else
+#endif
 		netif_receive_skb(skb);
 }
 
@@ -590,6 +593,7 @@ static int nicvf_poll(struct napi_struct *napi, int budget)
 		/* Slow packet rate, exit polling */
 		napi_complete(napi);
 		/* Re-enable interrupts */
+		nicvf_clear_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
 		nicvf_enable_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
 	}
 	return work_done;

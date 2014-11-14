@@ -22,7 +22,7 @@ static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 {
 	dmem->q_len = q_len;
 	dmem->size = (desc_size * q_len) + align_bytes;
-	dmem->unalign_base = dma_alloc_coherent(&nic->pdev->dev, dmem->size,
+	dmem->unalign_base = dma_zalloc_coherent(&nic->pdev->dev, dmem->size,
 						&dmem->dma, GFP_KERNEL);
 	if (!dmem->unalign_base)
 		return -1;
@@ -231,8 +231,7 @@ static int nicvf_init_cmp_queue(struct nicvf *nic,
 	cq->desc = cq->dmem.base;
 	cq->thresh = CMP_QUEUE_CQE_THRESH;
 
-	time = NIC_NS_PER_100_SYETEM_CLK / 100;
-	time = CMP_QUEUE_TIMER_THRESH / (NICPF_CLK_PER_INT_TICK * time);
+	time = CMP_QUEUE_TIMER_THRESH;
 	cq->intr_timer_thresh = time;
 
 	return 0;
@@ -290,11 +289,10 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq = &qs->rq[qidx];
 	rq->enable = enable;
 
-	if (!rq->enable) {
-		/* Disable receive queue */
-		nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
+	/* Disable receive queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
+	if (!rq->enable)
 		return;
-	}
 
 	rq->cq_qs = qs->vnic_id;
 	rq->cq_idx = qidx;
@@ -302,7 +300,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->start_qs_rbdr_idx = qs->rbdr_cnt - 1;
 	rq->cont_rbdr_qs = qs->vnic_id;
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
-	rq->caching = 1;
+	rq->caching = 0;
 
 	/* Send a mailbox msg to PF to config RQ */
 	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
@@ -312,6 +310,10 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 			  (rq->cq_idx << 16) | (rq->cont_rbdr_qs << 9) |
 			  (rq->cont_qs_rbdr_idx << 8) |
 			  (rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
+	nicvf_send_msg_to_pf(nic, &mbx);
+
+	mbx.msg = NIC_PF_VF_MSG_RQ_BP_CFG;
+	mbx.data.rq.cfg = (1ULL << 63) | (1ULL << 62) | (qs->vnic_id << 0);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* RQ drop config
@@ -338,13 +340,15 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	cq = &qs->cq[qidx];
 	cq->enable = enable;
 
+	/* Disable timer threshold (doesn't get reset upon CQ reset */
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2, qidx, 0);
 	/* Disable completion queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, 0);
-	if (!cq->enable)
-		return;
-
 	/* Reset completion queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, NICVF_CQ_RESET);
+
+	if (!cq->enable)
+		return;
 
 	/* Set completion queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,
@@ -353,7 +357,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	/* Enable Completion queue */
 	cq_cfg.ena = 1;
 	cq_cfg.reset = 0;
-	cq_cfg.caching = 1;
+	cq_cfg.caching = 0;
 	cq_cfg.qsize = (qs->cq_len >> 10) - 1;
 	cq_cfg.avg_con = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, *(u64 *)&cq_cfg);
@@ -376,11 +380,11 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Disable send queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, 0);
-	if (!sq->enable)
-		return;
-
 	/* Reset send queue */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, NICVF_SQ_RESET);
+
+	if (!sq->enable)
+		return;
 
 	sq->cq_qs = qs->vnic_id;
 	sq->cq_idx = qidx;
@@ -438,12 +442,9 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	int timeout = 10;
 
 	rbdr = &qs->rbdr[qidx];
-	if (!enable) {
-		/* Disable RBDR */
-		nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
-		return;
-	}
 
+	/* Disable RBDR */
+	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
 	/* Reset RBDR */
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0x00);
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0x00);
@@ -469,6 +470,9 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 		return;
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0x00);
 	if (nicvf_poll_reg(nic, qidx, NIC_QSET_RBDR_0_1_STATUS0, 62, 2, 0x00))
+		return;
+
+	if (!enable)
 		return;
 
 	/* Set descriptor base address */
@@ -613,7 +617,6 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 			nicvf_cmp_queue_config(nic, qs, qidx, enable);
 		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
 			nicvf_rcv_queue_config(nic, qs, qidx, enable);
-
 	} else {
 		qs = nic->qs;
 		if (!qs)
@@ -752,7 +755,6 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 	hdr->post_cqe = 1;
 	hdr->subdesc_cnt = subdesc_cnt;
 	hdr->tot_len = skb->len;
-
 #ifdef VNIC_HW_TSO_SUPPORT
 	if (!skb_shinfo(skb)->gso_size)
 		return hdr;
@@ -940,17 +942,18 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 	rbdr = &qs->rbdr[rq->start_qs_rbdr_idx];
 	rb_lens = cq_desc + (3 * sizeof(uint64_t)); /* Use offsetof */
 	rb_ptrs = cq_desc + (6 * sizeof(uint64_t));
+
 	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
 		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
+		*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;
 		if (!frag) {
 			/* First fragment */
 			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
 					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
-			skb = nicvf_rb_ptr_to_skb(nic,
-						  *rb_ptrs - cqe_rx->align_pad);
+			skb = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
 			if (cqe_rx->align_pad) {
 				skb->data += cqe_rx->align_pad;
 				skb->tail += cqe_rx->align_pad;
@@ -960,9 +963,11 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 			/* Add fragments */
 			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
 					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
-			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs -
-						       cqe_rx->align_pad);
-
+			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
+			if (cqe_rx->align_pad) {
+				skb_frag->data += cqe_rx->align_pad;
+				skb_frag->tail += cqe_rx->align_pad;
+			}
 			if (!skb_shinfo(skb)->frag_list)
 				skb_shinfo(skb)->frag_list = skb_frag;
 			else
