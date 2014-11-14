@@ -38,6 +38,8 @@ struct bgx {
 	uint8_t			bgx_id;
 	struct	lmac		lmac[MAX_LMAC_PER_BGX];
 	int			lmac_count;
+	int                     lmac_type;
+	int                     lane_to_sds;
 	uint64_t		reg_base;
 	struct pci_dev		*pdev;
 
@@ -212,6 +214,80 @@ static void bgx_disable_msix(struct bgx *bgx)
 	}
 }
 
+void bgx_print_stats(int bgx_idx, int lmac)
+{
+	struct bgx *bgx;
+
+	bgx = bgx_vnic[bgx_idx];
+
+	dev_info(&bgx->pdev->dev, "BGX TX STATS0 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT0));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS1 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT1));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS2 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT2));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS3 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT3));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS4 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT4));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS5 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT5));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS6 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT6));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS7 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT7));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS8 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT8));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS9 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT9));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS10 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT10));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS11 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT11));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS11 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT11));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS12 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT12));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS13 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT13));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS14 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT14));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS15 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT15));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS16 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT16));
+	dev_info(&bgx->pdev->dev, "BGX TX STATS17 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT17));
+	dev_info(&bgx->pdev->dev, "\n");
+	dev_info(&bgx->pdev->dev, "BGX RX STATS0 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT0));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS1 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT1));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS2 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT2));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS3 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT3));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS4 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT4));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS5 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT5));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS6 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT6));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS7 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT7));
+	/* FIX me: These stats cause a kernel crash */
+#if 0
+	dev_info(&bgx->pdev->dev, "BGX RX STATS8 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT8));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS9 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT9));
+	dev_info(&bgx->pdev->dev, "BGX RX STATS10 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT10));
+#endif
+	dev_info(&bgx->pdev->dev, "BGX RX BP_DROP 0x%llx\n",
+		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_BP_DROP));
+}
+
 static int bgx_register_interrupts(struct bgx *bgx, uint8_t lmac)
 {
 	int irq, ret = 0;
@@ -305,6 +381,51 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 }
 EXPORT_SYMBOL(bgx_add_dmac_addr);
 
+static void bgx_intf_init(struct bgx *bgx, int lmac)
+{
+	int reset, wait_for_reset = 1000;
+	int sleep = 5;
+	uint64_t cfg;
+
+	/* Reset */
+	bgx_reg_modify(bgx, lmac, BGX_GMP_PCS_MRX_CTL, 1ULL << 15);
+	while (1) {
+		reset = bgx_reg_read(bgx, lmac,
+				     BGX_GMP_PCS_MRX_CTL) & (1ULL << 15);
+		if (!reset)
+			break;
+		if (reset && (wait_for_reset == 0)) {
+			pr_err("BGX PCS reset not completed in 200ms\n");
+			return;
+		}
+		msleep(sleep);
+		wait_for_reset -= sleep;
+	}
+
+	cfg = bgx_reg_read(bgx, lmac, BGX_GMP_PCS_MRX_CTL);
+	cfg = cfg & (~(1ULL << 11));
+	cfg = cfg | ((1ULL << 9) | (1 << 12));
+	bgx_reg_write(bgx, lmac, BGX_GMP_PCS_MRX_CTL, cfg);
+
+	while (1) {
+		reset = bgx_reg_read(bgx, lmac,
+				     BGX_GMP_PCS_MRX_STATUS) & (1ULL << 5);
+		if (reset)
+			break;
+		if (!reset && (wait_for_reset == 0)) {
+			pr_err("BGX AN_CPT not completed in 500ms\n");
+			return;
+		}
+		msleep(sleep);
+		wait_for_reset -= sleep;
+	}
+
+	/* Set to MAC_PHY mode */
+	bgx_reg_modify(bgx, lmac, BGX_GMP_PCS_MISCX_CTL, 1ULL << 9);
+	bgx_reg_modify(bgx, lmac,
+		       BGX_GMP_PCS_SGM_AN_ADV, (1ULL << 12) | (2ULL << 10));
+}
+
 static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
@@ -316,17 +437,19 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG,
 		       (1 << 15) | (1 << 14) | (1 << 13));
 
-	/* Add broadcast MAC into all LMAC's DMAC filters */
-	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
-
-	/* Register interrupts */
-	bgx_register_interrupts(bgx, lmacid);
+	bgx_intf_init(bgx, lmacid);
 
 	lmac_type = (bgx_reg_read(bgx, lmacid, BGX_CMRX_CFG) >> 8) & 0x7;
 	if (lmac_type == 0) /* SGMII */
 		bgx_reg_write(bgx, lmacid, BGX_GMP_GMI_TXX_MIN_PKT, 60 - 1);
 	else
 		bgx_reg_write(bgx, lmacid, BGX_GMP_GMI_TXX_MIN_PKT, 60 + 4);
+
+	/* Add broadcast MAC into all LMAC's DMAC filters */
+	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
+
+	/* Register interrupts */
+	bgx_register_interrupts(bgx, lmacid);
 
 	lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
 				      bgx_lmac_handler, 0,
@@ -357,6 +480,92 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 		phy_disconnect(lmac->phydev);
 
 	lmac->phydev = NULL;
+}
+
+static void bgx_set_num_ports(struct bgx *bgx, int qlm_mode)
+{
+	switch (qlm_mode) {
+	case QLM_MODE_SGMII:
+		bgx->lmac_count = 4;
+		bgx->lmac_type = 0;
+		bgx->lane_to_sds = 0;
+		break;
+	case QLM_MODE_XAUI_1X4:
+		bgx->lmac_count = 1;
+		bgx->lmac_type = 1;
+		bgx->lane_to_sds = 0xE4;
+			break;
+	case QLM_MODE_XFI_4X1:
+		bgx->lmac_count = 4;
+		bgx->lmac_type = 3;
+		bgx->lane_to_sds = 0;
+		break;
+	case QLM_MODE_XLAUI_1X4:
+		bgx->lmac_count = 1;
+		bgx->lmac_type = 4;
+		bgx->lane_to_sds = 0xE4;
+		break;
+	case QLM_MODE_10G_KR_4X1:
+		bgx->lmac_count = 4;
+		bgx->lmac_type = 3;
+		bgx->lane_to_sds = 0;
+		break;
+	case QLM_MODE_40G_KR4_1X4:
+		bgx->lmac_count = 1;
+		bgx->lmac_type = 4;
+		bgx->lane_to_sds = 0xE4;
+		break;
+	default:
+		bgx->lmac_count = 0;
+		break;
+	}
+}
+
+static void bgx_init_hw(struct bgx *bgx)
+{
+	int i;
+	uint64_t cfg;
+
+	if (bgx->bgx_id == 0)
+		bgx_set_num_ports(bgx, QLM0_MODE);
+	else
+		bgx_set_num_ports(bgx, QLM1_MODE);
+
+	bgx_reg_modify(bgx, 0, BGX_CMR_GLOBAL_CFG, (1ULL << 6));
+	if (bgx_reg_read(bgx, 0, BGX_CMR_BIST_STATUS))
+		pr_err("%s: BGX%d BIST failed\n", __func__, bgx->bgx_id);
+
+	for (i = 0; i < bgx->lmac_count; i++) {
+		bgx_reg_modify(bgx, i, BGX_CMRX_CFG,
+			       (bgx->lmac_type << 8) | (bgx->lane_to_sds + i));
+	}
+
+	bgx_reg_write(bgx, 0, BGX_CMR_TX_LMACS, bgx->lmac_count);
+	bgx_reg_write(bgx, 0, BGX_CMR_RX_LMACS, bgx->lmac_count);
+
+	for (i = 0; i < bgx->lmac_count; i++)
+		bgx_reg_modify(bgx, 0, BGX_CMR_CHAN_MSK_AND,
+			       (((1ULL << 16) - 1) << (i * 16)));
+
+	/* Disable all MAC filtering */
+	for (i = 0; i < 32; i++)
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + (i * 8), 0x00);
+
+	/* Disable MAC steering */
+	for (i = 0; i < 8; i++)
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_STREERING + (i * 8), 0x00);
+
+	for (i = 0; i < bgx->lmac_count; i++) {
+		bgx_reg_modify(bgx, i, BGX_GMP_GMI_TXX_THRESH, (0x100 - 1));
+		bgx_reg_modify(bgx, i, BGX_SMUX_TX_THRESH, (0x100 - 1));
+
+		bgx_reg_modify(bgx, i, BGX_GMP_GMI_RXX_JABBER, 9200);
+		bgx_reg_modify(bgx, i, BGX_SMUX_RX_JABBER, 9200);
+
+		cfg = bgx_reg_read(bgx, i, BGX_GMP_GMI_TXX_APPEND);
+		if (cfg & 1)
+			bgx_reg_write(bgx, i, BGX_GMP_GMI_TXX_SGMII_CTL, 0);
+	}
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -411,6 +620,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		bgx->lmac[lmac].lmacid = lmac;
 		bgx->lmac_count++;
 	}
+
+	bgx_init_hw(bgx);
 
 	/* Enable MSI-X */
 	if (!bgx_enable_msix(bgx))
