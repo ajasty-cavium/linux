@@ -297,7 +297,7 @@ struct nicpf {
 
 /* PF <--> VF mailbox communication */
 #define	NIC_PF_VF_MAILBOX_SIZE		8
-#define	NIC_PF_VF_MBX_TIMEOUT		5000 /* ms */
+#define	NIC_PF_VF_MBX_TIMEOUT		2000 /* ms */
 
 /* Mailbox message types */
 #define	NIC_PF_VF_MSG_READY		0x01	/* Is PF ready to rcv msgs */

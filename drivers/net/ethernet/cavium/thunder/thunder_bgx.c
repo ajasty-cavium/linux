@@ -381,7 +381,7 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 }
 EXPORT_SYMBOL(bgx_add_dmac_addr);
 
-static void bgx_intf_init(struct bgx *bgx, int lmac)
+static int bgx_intf_init(struct bgx *bgx, int lmac)
 {
 	int reset, wait_for_reset = 1000;
 	int sleep = 5;
@@ -396,7 +396,7 @@ static void bgx_intf_init(struct bgx *bgx, int lmac)
 			break;
 		if (reset && (wait_for_reset == 0)) {
 			pr_err("BGX PCS reset not completed in 200ms\n");
-			return;
+			return -1;
 		}
 		msleep(sleep);
 		wait_for_reset -= sleep;
@@ -414,7 +414,7 @@ static void bgx_intf_init(struct bgx *bgx, int lmac)
 			break;
 		if (!reset && (wait_for_reset == 0)) {
 			pr_err("BGX AN_CPT not completed in 500ms\n");
-			return;
+			return -1;
 		}
 		msleep(sleep);
 		wait_for_reset -= sleep;
@@ -424,6 +424,7 @@ static void bgx_intf_init(struct bgx *bgx, int lmac)
 	bgx_reg_modify(bgx, lmac, BGX_GMP_PCS_MISCX_CTL, 1ULL << 9);
 	bgx_reg_modify(bgx, lmac,
 		       BGX_GMP_PCS_SGM_AN_ADV, (1ULL << 12) | (2ULL << 10));
+	return 0;
 }
 
 static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
@@ -437,7 +438,8 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG,
 		       (1 << 15) | (1 << 14) | (1 << 13));
 
-	bgx_intf_init(bgx, lmacid);
+	if(bgx_intf_init(bgx, lmacid))
+		return -1;
 
 	lmac_type = (bgx_reg_read(bgx, lmacid, BGX_CMRX_CFG) >> 8) & 0x7;
 	if (lmac_type == 0) /* SGMII */
@@ -630,7 +632,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
 		err = bgx_lmac_enable(bgx, lmac);
 		if (err) {
-			pr_err("BGX%d failed to enable lmac\n", lmac);
+			bgx_vnic[bgx->bgx_id] = NULL;
+			dev_err(dev, "BGX%d failed to enable lmac\n", lmac);
 			goto err_enable;
 		}
 	}
@@ -643,6 +646,7 @@ err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
+	kfree(bgx);
 exit:
 	return err;
 }
