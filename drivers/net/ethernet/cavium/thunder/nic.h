@@ -314,6 +314,7 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_RSS_CFG		0x0C	/* Config RSS table */
 #define	NIC_PF_VF_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
 #define	NIC_PF_VF_MSG_RQ_BP_CFG		0x0E
+#define	NIC_PF_VF_MSG_RQ_SW_SYNC	0x0F
 
 struct nic_cfg_msg {
 	uint64_t   vf_id;

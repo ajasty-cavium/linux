@@ -28,6 +28,7 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg);
 #endif
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx);
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
+static int nic_rcv_queue_sw_sync(struct nicpf *nic);
 
 /* Supported devices */
 static const struct pci_device_id nic_id_table[] = {
@@ -209,6 +210,9 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
+	case NIC_PF_VF_MSG_RQ_SW_SYNC:
+		ret = nic_rcv_queue_sw_sync(nic);
+		break;
 	case NIC_PF_VF_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
@@ -254,6 +258,25 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_mbx_send_ack(nic, vf);
 	else if (mbx.msg != NIC_PF_VF_MSG_READY)
 		nic_mbx_send_nack(nic, vf);
+}
+
+static int nic_rcv_queue_sw_sync(struct nicpf *nic)
+{
+	int timeout = 20;
+
+	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x01);
+	while (timeout) {
+		if (nic_reg_read(nic, NIC_PF_SW_SYNC_RX_DONE) & 0x1)
+			break;
+		usleep_range(1000, 2000);
+		timeout--;
+	}
+	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x00);
+	if (!timeout) {
+		netdev_err(nic->netdev, "Recevie queue software sync failed");
+		return 1;
+	}
+	return 0;
 }
 
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)

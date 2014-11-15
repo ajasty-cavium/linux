@@ -311,9 +311,12 @@ static void nicvf_reclaim_snd_queue(struct nicvf *nic,
 static void nicvf_reclaim_rcv_queue(struct nicvf *nic,
 				    struct queue_set *qs, int qidx)
 {
-	/* Disable receive queue */
-	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
-	/* TBD: check for PF_RX_SYNC */
+	struct nic_mbx mbx = {};
+
+	/* Make sure all packets in the pipeline are written back into mem */
+	mbx.msg = NIC_PF_VF_MSG_RQ_SW_SYNC;
+	mbx.data.rq.cfg = 0;
+	nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 static void nicvf_reclaim_cmp_queue(struct nicvf *nic,
@@ -371,9 +374,13 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq = &qs->rq[qidx];
 	rq->enable = enable;
 
-	nicvf_reclaim_rcv_queue(nic, qs, qidx);
-	if (!rq->enable)
+	/* Disable receive queue */
+	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, 0);
+
+	if (!rq->enable) {
+		nicvf_reclaim_rcv_queue(nic, qs, qidx);
 		return;
+	}
 
 	rq->cq_qs = qs->vnic_id;
 	rq->cq_idx = qidx;
