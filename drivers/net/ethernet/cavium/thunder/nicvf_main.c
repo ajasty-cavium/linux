@@ -690,6 +690,9 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 		tasklet_hi_schedule(&nic->rbdr_task);
 	}
 
+	/* Mailbox has a seperate handler */
+	intr &= ~NICVF_INTR_MBOX_MASK;
+
 	/* Clear interrupts */
 	nicvf_reg_write(nic, NIC_VF_INT, intr);
 	return IRQ_HANDLED;
