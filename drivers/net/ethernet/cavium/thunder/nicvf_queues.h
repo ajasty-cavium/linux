@@ -240,6 +240,8 @@ struct rbdr {
 	uint32_t	buf_size;
 	uint32_t	thresh;      /* Threshold level for interrupt */
 	void		*desc;
+	uint32_t	head;
+	uint32_t	tail;
 	struct q_desc_mem   dmem;
 };
 

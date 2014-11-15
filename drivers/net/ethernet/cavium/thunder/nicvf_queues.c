@@ -134,7 +134,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	return 0;
 }
 
-static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr, int rbdr_qidx)
+static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 {
 	int head, tail;
 	struct sk_buff *skb;
@@ -148,10 +148,9 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr, int rbdr_qidx)
 	if (!rbdr->dmem.base)
 		return;
 
-	head = nicvf_queue_reg_read(nic,
-				    NIC_QSET_RBDR_0_1_HEAD, rbdr_qidx) >> 3;
-	tail = nicvf_queue_reg_read(nic,
-				    NIC_QSET_RBDR_0_1_TAIL, rbdr_qidx) >> 3;
+	head = rbdr->head;
+	tail = rbdr->tail;
+
 	/* Free SKBs */
 	while (head != tail) {
 		desc = GET_RBDR_DESC(rbdr, head);
@@ -331,10 +330,18 @@ static void nicvf_reclaim_cmp_queue(struct nicvf *nic,
 }
 
 static void nicvf_reclaim_rbdr(struct nicvf *nic,
-			       struct queue_set *qs, int qidx)
+			       struct rbdr *rbdr, int qidx)
 {
 	uint64_t tmp;
 	int timeout = 10;
+
+	/* Save head and tail pointers for feeing up buffers */
+	rbdr->head = nicvf_queue_reg_read(nic,
+					  NIC_QSET_RBDR_0_1_HEAD,
+					  qidx) >> 3;
+	rbdr->tail = nicvf_queue_reg_read(nic,
+					  NIC_QSET_RBDR_0_1_TAIL,
+					  qidx) >> 3;
 
 	/* Disable RBDR */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
@@ -508,7 +515,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	struct rbdr_cfg rbdr_cfg;
 
 	rbdr = &qs->rbdr[qidx];
-	nicvf_reclaim_rbdr(nic, qs, qidx);
+	nicvf_reclaim_rbdr(nic, rbdr, qidx);
 	if (!enable)
 		return;
 
@@ -571,7 +578,7 @@ static void nicvf_free_resources(struct nicvf *nic)
 
 	/* Free receive buffer descriptor ring */
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-		nicvf_free_rbdr(nic, &qs->rbdr[qidx], qidx);
+		nicvf_free_rbdr(nic, &qs->rbdr[qidx]);
 
 	/* Free completion queue */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
