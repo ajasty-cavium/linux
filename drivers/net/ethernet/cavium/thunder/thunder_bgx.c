@@ -25,7 +25,8 @@
 struct lmac {
 	int			dmac;
 	bool			link_up;
-	int			lmacid;
+	int			lmacid; /* ID within BGX */
+	int			lmacid_bd; /* ID on board */
 	struct net_device       netdev;
 	struct phy_device       *phydev;
 	struct device_node      *phy_np;     
@@ -153,11 +154,11 @@ void bgx_lmac_handler(struct net_device *netdev)
 		return;
 
 	if (link_changed > 0) {
-		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid,
+		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid_bd,
 			phydev->speed, 
 			DUPLEX_FULL == phydev->duplex ? "Full" : "Half");
 	} else {
-		pr_info("LMAC%d: Link is down\n", lmac->lmacid);
+		pr_info("LMAC%d: Link is down\n", lmac->lmacid_bd);
 	}
 }
 
@@ -614,13 +615,14 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	np_bgx = of_find_node_by_name(NULL, bgx_sel);
 
 	for_each_child_of_node(np_bgx, np_child) {
-		reg = of_get_property(np_child, "reg", NULL);
-		lmac = be32_to_cpup(reg);
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
 		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
 							  "phy-handle", 0);
+		reg = of_get_property(np_child, "reg", NULL);
+		bgx->lmac[lmac].lmacid_bd = be32_to_cpup(reg);
 		bgx->lmac[lmac].lmacid = lmac;
 		bgx->lmac_count++;
+		lmac++;
 	}
 
 	bgx_init_hw(bgx);
@@ -633,7 +635,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		err = bgx_lmac_enable(bgx, lmac);
 		if (err) {
 			bgx_vnic[bgx->bgx_id] = NULL;
-			dev_err(dev, "BGX%d failed to enable lmac\n", lmac);
+			dev_err(dev, "BGX%d failed to enable lmac %d\n",
+				bgx->bgx_id, lmac);
 			goto err_enable;
 		}
 	}
