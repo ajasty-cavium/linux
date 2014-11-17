@@ -93,7 +93,6 @@ struct its_device {
 static LIST_HEAD(its_nodes);
 static DEFINE_SPINLOCK(its_lock);
 static struct irq_domain *lpi_domain;
-static struct device_node *gic_root_node;
 static struct rdists *gic_rdists;
 
 #define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
@@ -1216,35 +1215,26 @@ static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 	}
 }
 
-static int its_probe(struct device_node *node)
+static struct its_node *its_probe(unsigned long phys_base, unsigned long size)
 {
-	struct resource res;
 	struct its_node *its;
 	void __iomem *its_base;
 	u32 val;
 	u64 baser, tmp;
 	int err;
 
-	err = of_address_to_resource(node, 0, &res);
-	if (err) {
-		pr_warn("%s: no regs?\n", node->full_name);
-		return -ENXIO;
-	}
-
-	its_base = ioremap(res.start, resource_size(&res));
+	its_base = ioremap(phys_base, size);
 	if (!its_base) {
-		pr_warn("%s: unable to map registers\n", node->full_name);
-		return -ENOMEM;
+		pr_warn("Unable to map registers\n");
+		return NULL;
 	}
 
 	val = readl_relaxed(its_base + GITS_PIDR2) & GIC_PIDR2_ARCH_MASK;
 	if (val != 0x30 && val != 0x40) {
-		pr_warn("%s: no ITS detected, giving up\n", node->full_name);
+		pr_warn("No ITS detected, giving up\n");
 		err = -ENODEV;
 		goto out_unmap;
 	}
-
-	pr_info("ITS: %s\n", node->full_name);
 
 	its = kzalloc(sizeof(*its), GFP_KERNEL);
 	if (!its) {
@@ -1256,8 +1246,7 @@ static int its_probe(struct device_node *node)
 	INIT_LIST_HEAD(&its->entry);
 	INIT_LIST_HEAD(&its->its_device_list);
 	its->base = its_base;
-	its->phys_base = res.start;
-	its->msi_chip.of_node = node;
+	its->phys_base = phys_base;
 	its->ite_size = ((readl_relaxed(its_base + GITS_TYPER) >> 4) & 0xf) + 1;
 
 	its->cmd_base = kzalloc(ITS_CMD_QUEUE_SZ, GFP_KERNEL);
@@ -1295,15 +1284,7 @@ static int its_probe(struct device_node *node)
 	list_add(&its->entry, &its_nodes);
 	spin_unlock(&its_lock);
 
-	if (IS_ENABLED(CONFIG_PCI_MSI) && /* Remove this once we have PCI... */
-	    of_property_read_bool(its->msi_chip.of_node, "msi-controller")) {
-		its->msi_chip.setup_irq		= its_msi_setup_irq;
-		its->msi_chip.teardown_irq	= its_msi_teardown_irq;
-
-		err = of_pci_msi_chip_add(&its->msi_chip);
-	}
-
-	return err;
+	return its;
 
 out_free_tables:
 	its_free_tables(its);
@@ -1313,8 +1294,8 @@ out_free_its:
 	kfree(its);
 out_unmap:
 	iounmap(its_base);
-	pr_err("ITS: failed probing %s (%d)\n", node->full_name, err);
-	return err;
+	pr_err("ITS: failed probing (%d)\n", err);
+	return NULL;
 }
 
 static bool gic_rdists_supports_plpis(void)
@@ -1337,32 +1318,55 @@ int its_cpu_init(void)
 	return 0;
 }
 
-static struct of_device_id its_device_id[] = {
-	{	.compatible	= "arm,gic-v3-its",	},
-	{},
-};
-
-struct irq_chip *its_init(struct device_node *node, struct rdists *rdists,
-			  struct irq_domain *domain)
+struct irq_chip *its_init(struct rdists *rdists, struct irq_domain *domain)
 {
-	struct device_node *np;
-
-	for (np = of_find_matching_node(node, its_device_id); np;
-	     np = of_find_matching_node(np, its_device_id)) {
-		its_probe(np);
-	}
-
 	if (list_empty(&its_nodes)) {
 		pr_info("ITS: No ITS available, not enabling LPIs\n");
 		return NULL;
 	}
 
 	gic_rdists = rdists;
-	gic_root_node = node;
 	lpi_domain = domain;
 
 	its_alloc_lpi_tables();
 	its_lpi_init(rdists->id_bits);
 
 	return &its_irq_chip;
+}
+
+static struct of_device_id its_device_id[] = {
+	{	.compatible	= "arm,gic-v3-its",	},
+	{},
+};
+
+void its_of_probe(struct device_node *node)
+{
+	struct device_node *np;
+	struct its_node *its;
+	struct resource res;
+
+	for (np = of_find_matching_node(node, its_device_id); np;
+	     np = of_find_matching_node(np, its_device_id)) {
+		if (of_address_to_resource(np, 0, &res)) {
+			pr_warn("%s: no regs?\n", node->full_name);
+			continue;
+		}
+
+		pr_info("ITS: %s\n", np->full_name);
+		its = its_probe(res.start, resource_size(&res));
+		if (!its)
+			continue;
+
+		if (IS_ENABLED(CONFIG_PCI_MSI) && /* Remove this once we have PCI... */
+		    of_property_read_bool(np, "msi-controller")) {
+			its->msi_chip.of_node		= np;
+			its->msi_chip.setup_irq		= its_msi_setup_irq;
+			its->msi_chip.teardown_irq	= its_msi_teardown_irq;
+
+			of_pci_msi_chip_add(&its->msi_chip);
+		}
+	}
+
+
+
 }
