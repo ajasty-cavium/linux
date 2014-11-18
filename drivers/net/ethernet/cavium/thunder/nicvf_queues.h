@@ -61,14 +61,17 @@
 #define SND_QUEUE_CNT		1
 #define CMP_QUEUE_CNT		1 /* Max of RCV and SND qcount */
 
-#define SND_QUEUE_LEN		(1ULL << (SND_QUEUE_SIZE0 + 10))
+#define SND_QSIZE		SND_QUEUE_SIZE1
+#define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
 #define SND_QUEUE_THRESH	2ULL
 
-#define CMP_QUEUE_LEN		(1ULL << (CMP_QUEUE_SIZE1 + 10))
+#define CMP_QSIZE		CMP_QUEUE_SIZE2
+#define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
 #define CMP_QUEUE_CQE_THRESH	0
 #define CMP_QUEUE_TIMER_THRESH	2 /* 2 ms */
 
-#define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE0 + 13))
+#define RBDR_SIZE		RBDR_SIZE0
+#define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define RCV_BUFFER_LEN		2048 /* In multiples of 128bytes */
 #define RQ_CQ_DROP		((CMP_QUEUE_LEN - SND_QUEUE_LEN) / 256)

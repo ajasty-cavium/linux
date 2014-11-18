@@ -911,6 +911,7 @@ int nicvf_stop(struct net_device *netdev)
 	int qidx;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
+	struct nicvf_cq_poll *cq_poll = NULL;
 
 	netif_carrier_off(netdev);
 	netif_tx_disable(netdev);
@@ -926,10 +927,13 @@ int nicvf_stop(struct net_device *netdev)
 	tasklet_kill(&nic->qs_err_task);
 
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
-		napi_synchronize(&nic->napi[qidx]->napi);
-		napi_disable(&nic->napi[qidx]->napi);
-		netif_napi_del(&nic->napi[qidx]->napi);
-		kfree(nic->napi[qidx]);
+		cq_poll = nic->napi[qidx];
+		if (!cq_poll)
+			continue;
+		napi_synchronize(&cq_poll->napi);
+		napi_disable(&cq_poll->napi);
+		netif_napi_del(&cq_poll->napi);
+		kfree(cq_poll);
 		nic->napi[qidx] = NULL;
 	}
 
@@ -962,41 +966,20 @@ int nicvf_open(struct net_device *netdev)
 	if (err)
 		return err;
 
-	err = nicvf_init_resources(nic);
-	if (err) {
-		nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
-		nicvf_unregister_interrupts(nic);
-		return err;
-	}
-
-	err = nicvf_register_interrupts(nic);
-	if (err) {
-		nicvf_stop(netdev);
-		return err;
-	}
-
+	/* Register NAPI handler for processing CQEs */
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		cq_poll = kzalloc(sizeof(*cq_poll), GFP_KERNEL);
-		if (!cq_poll)
+		if (!cq_poll) {
+			err = -ENOMEM;
 			goto napi_del;
+		}
 		cq_poll->cq_idx = qidx;
 		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll,
 			       NAPI_POLL_WEIGHT);
 		napi_enable(&cq_poll->napi);
 		nic->napi[qidx] = cq_poll;
 	}
-	goto no_err;
-napi_del:
-	while (qidx) {
-		qidx--;
-		cq_poll = nic->napi[qidx];
-		napi_disable(&cq_poll->napi);
-		netif_napi_del(&cq_poll->napi);
-		kfree(cq_poll);
-		nic->napi[qidx] = NULL;
-	}
-	return -ENOMEM;
-no_err:
+
 	/* Set MAC-ID */
 	if (is_zero_ether_addr(netdev->dev_addr))
 		eth_hw_addr_random(netdev);
@@ -1007,19 +990,9 @@ no_err:
 	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err,
 		     (unsigned long)nic);
 
-	/* Enable Qset err interrupt */
-	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
-
-	/* Enable completion queue interrupt */
-	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
-		nicvf_enable_intr(nic, NICVF_INTR_CQ, qidx);
-
-	/* Init RBDR tasklet and enable RBDR threshold interrupt */
+	/* Init RBDR tasklet which will refill RBDR */
 	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr,
 		     (unsigned long)nic);
-
-	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
-		nicvf_enable_intr(nic, NICVF_INTR_RBDR, qidx);
 
 	/* Configure CPI alorithm */
 	nic->cpi_alg = cpi_alg;
@@ -1030,12 +1003,49 @@ no_err:
 	nicvf_rss_init(nic);
 #endif
 
+	err = nicvf_register_interrupts(nic);
+	if (err)
+		goto cleanup;
+
+	/* Initialize the queues */
+	err = nicvf_init_resources(nic);
+	if (err)
+		goto cleanup;
+
+	/* Make sure queue initialization is written */
+	smp_wmb();
+
+	/* Enable Qset err interrupt */
+	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
+
+	/* Enable completion queue interrupt */
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
+		nicvf_enable_intr(nic, NICVF_INTR_CQ, qidx);
+
+	/* Enable RBDR threshold interrupt */
+	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+		nicvf_enable_intr(nic, NICVF_INTR_RBDR, qidx);
+
 	if (nicvf_is_link_active(nic)) {
 		netif_carrier_on(netdev);
 		netif_tx_start_all_queues(netdev);
 	}
 
 	return 0;
+cleanup:
+	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
+	nicvf_unregister_interrupts(nic);
+napi_del:
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
+		cq_poll = nic->napi[qidx];
+		if (!cq_poll)
+			continue;
+		napi_disable(&cq_poll->napi);
+		netif_napi_del(&cq_poll->napi);
+		kfree(cq_poll);
+		nic->napi[qidx] = NULL;
+	}
+	return err;
 }
 
 static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)

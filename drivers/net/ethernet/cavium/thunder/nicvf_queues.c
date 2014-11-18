@@ -454,7 +454,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	cq_cfg.ena = 1;
 	cq_cfg.reset = 0;
 	cq_cfg.caching = 0;
-	cq_cfg.qsize = (qs->cq_len >> 10) - 1;
+	cq_cfg.qsize = CMP_QSIZE;
 	cq_cfg.avg_con = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG, qidx, *(u64 *)&cq_cfg);
 
@@ -500,7 +500,7 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	sq_cfg.ena = 1;
 	sq_cfg.reset = 0;
 	sq_cfg.ldwb = 0;
-	sq_cfg.qsize = (qs->sq_len >> 10) - 1;
+	sq_cfg.qsize = SND_QSIZE;
 	sq_cfg.tstmp_bgx_intf = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_CFG, qidx, *(u64 *)&sq_cfg);
 
@@ -528,7 +528,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	rbdr_cfg.ena = 1;
 	rbdr_cfg.reset = 0;
 	rbdr_cfg.ldwb = 0;
-	rbdr_cfg.qsize = (qs->rbdr_len >> 13) - 1;
+	rbdr_cfg.qsize = RBDR_SIZE;
 	rbdr_cfg.avg_con = 0;
 	rbdr_cfg.lines = rbdr->buf_size / 128;
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
@@ -548,6 +548,12 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	struct  nic_mbx mbx = {};
 	struct queue_set *qs = nic->qs;
 	struct qs_cfg *qs_cfg;
+
+	if (!qs) {
+		netdev_warn(nic->netdev,
+			    "Qset is still not allocated, don't init queues\n");
+		return;
+	}
 
 	qs->enable = enable;
 	qs->vnic_id = nic->vf_id;
@@ -572,9 +578,6 @@ static void nicvf_free_resources(struct nicvf *nic)
 {
 	int qidx;
 	struct queue_set *qs = nic->qs;
-
-	if (!qs)
-		return;
 
 	/* Free receive buffer descriptor ring */
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
@@ -647,10 +650,10 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	struct queue_set *qs = nic->qs;
 	int qidx;
 
-	if (enable) {
-		qs->vnic_id = nic->vf_id;
-		nic->qs = qs;
+	if (!qs)
+		return 0;
 
+	if (enable) {
 		if (nicvf_alloc_resources(nic))
 			return -ENOMEM;
 
@@ -663,10 +666,6 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
 			nicvf_rcv_queue_config(nic, qs, qidx, enable);
 	} else {
-		qs = nic->qs;
-		if (!qs)
-			return 0;
-
 		for (qidx = 0; qidx < qs->rq_cnt; qidx++)
 			nicvf_rcv_queue_config(nic, qs, qidx, disable);
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
