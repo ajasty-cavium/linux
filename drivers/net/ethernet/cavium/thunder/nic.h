@@ -132,8 +132,8 @@
 #define NIC_PF_INTR_ID_MBOX0		8
 #define NIC_PF_INTR_ID_MBOX1		9
 
-/* Coprocessor clock 700Mhz..CQ timer 1mhz */
-#define NICPF_CLK_PER_INT_TICK		700
+/* Value for CQ timer to run at 1hz */
+#define NICPF_CLK_PER_INT_TICK		70000
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */

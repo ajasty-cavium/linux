@@ -350,7 +350,7 @@ static void nic_init_hw(struct nicpf *nic)
 	nic_reg_write(nic, NIC_PF_SOFT_RESET, 1);
 
 	/* Enable NIC HW block */
-	nic_reg_write(nic, NIC_PF_CFG, 1);
+	nic_reg_write(nic, NIC_PF_CFG, 0x3);
 
 	/* Enable backpressure */
 	nic_reg_write(nic, NIC_PF_BP_CFG, (1ULL << 6) | 0x03);

@@ -66,7 +66,7 @@
 
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QUEUE_SIZE1 + 10))
 #define CMP_QUEUE_CQE_THRESH	0
-#define CMP_QUEUE_TIMER_THRESH	2000 /* 2 ms */
+#define CMP_QUEUE_TIMER_THRESH	2 /* 2 ms */
 
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE0 + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)

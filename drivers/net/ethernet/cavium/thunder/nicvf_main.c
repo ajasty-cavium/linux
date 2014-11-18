@@ -569,6 +569,8 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 	/* Ring doorbell to inform H/W to reuse processed CQEs */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_DOOR,
 			      cq_idx, processed_cqe);
+	cqe_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx);
+	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx, cqe_head);
 done:
 	spin_unlock(&cq->cq_lock);
 	return work_done;
