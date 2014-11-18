@@ -123,13 +123,13 @@ static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 		switch (bdf) {
 			case 0x008:   /* SMMU */
 			case 0x020:   /* AHCI0*/
-			//case 0x028:   /* AHCI1 */
-			//case 0x030:   /* AHCI2 */
-			//case 0x038:   /* AHCI3 */
-			//case 0x040:   /* AHCI4 */
-			//case 0x048:   /* AHCI5 */
-			//case 0x050:   /* AHCI5 */
-			//case 0x058:   /* AHCI7 */
+			case 0x028:   /* AHCI1 */
+			case 0x030:   /* AHCI2 */
+			case 0x038:   /* AHCI3 */
+			case 0x040:   /* AHCI4 */
+			case 0x048:   /* AHCI5 */
+			case 0x050:   /* AHCI5 */
+			case 0x058:   /* AHCI7 */
 			//case 0x080:   /* PCIRC0 */
 			//case 0x098:   /* PCIRC1 */
 			//case 0x0A8:   /* PCIRC2 */
@@ -166,14 +166,14 @@ static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 	} else if (ecam == 3) {
 		switch (bdf) {
 			case 0x008:   /* SMMU */
-		//	case 0x018:   /* AHCI8 */
-		//	case 0x020:   /* AHCI9*/
-		//	case 0x028:   /* AHCI10 */
-		//	case 0x030:   /* AHCI11 */
-		//	case 0x038:   /* AHCI12 */
-		//	case 0x040:   /* AHCI13 */
-		//	case 0x048:   /* AHCI14 */
-		//	case 0x050:   /* AHCI15 */
+			//case 0x018:   /* AHCI8 */
+			//case 0x020:   /* AHCI9*/
+			//case 0x028:   /* AHCI10 */
+			//case 0x030:   /* AHCI11 */
+			//case 0x038:   /* AHCI12 */
+			//case 0x040:   /* AHCI13 */
+			//case 0x048:   /* AHCI14 */
+			//case 0x050:   /* AHCI15 */
 			//case 0x080:   /* PCIRC3 */
 			//case 0x098:   /* PCIRC4 */
 			//case 0x0A8:   /* PCIRC5 */
