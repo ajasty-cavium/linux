@@ -112,9 +112,17 @@ static u64 __maybe_unused gic_read_iar(void)
 	u64 irqstat;
 
         /* Workaround for thunder replay issue */
+    mb();
+    mb();
+    mb();
+    mb();
         asm volatile("nop;nop;nop;nop;");
         asm volatile("nop;nop;nop;nop;");
         asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+    mb();
+    mb();
+    mb();
+    mb();
 	return irqstat;
 }
 
