@@ -15,8 +15,6 @@
 #include "q_struct.h"
 #include "nicvf_queues.h"
 
-#define  MIN_SND_QUEUE_DESC_FOR_PKT_XMIT 2
-
 static int nicvf_poll_reg(struct nicvf *nic, int qidx,
 			  uint64_t reg, int bit_pos, int bits, int val)
 {
@@ -278,7 +276,7 @@ static int nicvf_init_snd_queue(struct nicvf *nic,
 	sq->skbuff = kcalloc(q_len, sizeof(uint64_t), GFP_ATOMIC);
 	sq->head = 0;
 	sq->tail = 0;
-	sq->free_cnt = q_len;
+	atomic_set(&sq->free_cnt, q_len);
 	sq->thresh = SND_QUEUE_THRESH;
 
 	return 0;
@@ -446,6 +444,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	if (!cq->enable)
 		return;
 
+	spin_lock_init(&cq->lock);
 	/* Set completion queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,
 			      qidx, (uint64_t)(cq->dmem.phys_base));
@@ -692,11 +691,12 @@ static int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
 	int qentry;
 	struct snd_queue *sq = &qs->sq[qnum];
 
-	if (!sq->free_cnt)
+	if (!atomic_read(&sq->free_cnt))
 		return 0;
 
 	qentry = sq->tail++;
-	sq->free_cnt--;
+	atomic_dec(&sq->free_cnt);
+
 	sq->tail &= (sq->dmem.q_len - 1);
 	*desc = GET_SQ_DESC(sq, qentry);
 	return qentry;
@@ -705,7 +705,7 @@ static int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
 void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt)
 {
 	while (desc_cnt--) {
-		sq->free_cnt++;
+		atomic_inc(&sq->free_cnt);
 		sq->head++;
 		sq->head &= (sq->dmem.q_len - 1);
 	}
@@ -758,7 +758,7 @@ void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
 
 static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 {
-	int subdesc_cnt = MIN_SND_QUEUE_DESC_FOR_PKT_XMIT;
+	int subdesc_cnt = MIN_SQ_DESC_PER_PKT_XMIT;
 
 	if (skb_shinfo(skb)->nr_frags)
 		subdesc_cnt += skb_shinfo(skb)->nr_frags;
@@ -932,7 +932,7 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 
 	subdesc_cnt = nicvf_sq_subdesc_required(nic, skb);
 
-	if (subdesc_cnt > sq->free_cnt)
+	if (subdesc_cnt > atomic_read(&sq->free_cnt))
 		goto append_fail;
 
 	/* Add SQ header subdesc */
@@ -996,10 +996,10 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
 		*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;
+		pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
+				 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		if (!frag) {
 			/* First fragment */
-			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
-					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 			skb = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
 			if (cqe_rx->align_pad) {
 				skb->data += cqe_rx->align_pad;
@@ -1008,8 +1008,6 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 			skb_put(skb, payload_len);
 		} else {
 			/* Add fragments */
-			pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
-					 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
 			if (cqe_rx->align_pad) {
 				skb_frag->data += cqe_rx->align_pad;

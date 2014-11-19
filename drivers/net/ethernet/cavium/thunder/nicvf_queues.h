@@ -61,11 +61,13 @@
 #define SND_QUEUE_CNT		1
 #define CMP_QUEUE_CNT		1 /* Max of RCV and SND qcount */
 
-#define SND_QSIZE		SND_QUEUE_SIZE1
+#define SND_QSIZE		SND_QUEUE_SIZE3
 #define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
 #define SND_QUEUE_THRESH	2ULL
+#define MIN_SQ_DESC_PER_PKT_XMIT	2
+#define MAX_CQE_PER_PKT_XMIT		2
 
-#define CMP_QSIZE		CMP_QUEUE_SIZE2
+#define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
 #define CMP_QUEUE_CQE_THRESH	0
 #define CMP_QUEUE_TIMER_THRESH	2 /* 2 ms */
@@ -74,7 +76,10 @@
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define RCV_BUFFER_LEN		2048 /* In multiples of 128bytes */
-#define RQ_CQ_DROP		((CMP_QUEUE_LEN - SND_QUEUE_LEN) / 256)
+
+#define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
+				 MAX_CQE_PER_PKT_XMIT)
+#define RQ_CQ_DROP		((CMP_QUEUE_LEN - MAX_CQES_FOR_TX) / 256)
 
 /* Descriptor size */
 #define SND_QUEUE_DESC_SIZE	16   /* 128 bits */
@@ -267,7 +272,7 @@ struct cmp_queue {
 	bool		enable;
 	uint16_t	intr_timer_thresh;
 	uint16_t	thresh;
-	spinlock_t	cq_lock;  /* lock to serialize processing CQEs */
+	spinlock_t	lock;  /* lock to serialize processing CQEs */
 	void		*desc;
 	struct q_desc_mem   dmem;
 	struct cmp_queue_stats	stats;
@@ -278,9 +283,9 @@ struct snd_queue {
 	uint8_t		cq_qs;  /* CQ's QS to which this SQ is pointing */
 	uint8_t		cq_idx; /* CQ index (0 to 7) in the above QS */
 	uint16_t	thresh;
-	uint16_t	free_cnt;
-	uint64_t	head;
-	uint64_t	tail;
+	atomic_t	free_cnt;
+	uint32_t	head;
+	uint32_t	tail;
 	uint64_t	*skbuff;
 	void		*desc;
 	struct q_desc_mem   dmem;

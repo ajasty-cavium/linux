@@ -516,7 +516,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 	struct cmp_queue *cq = &qs->cq[cq_idx];
 	struct cqe_rx_t *cq_desc;
 
-	spin_lock(&cq->cq_lock);
+	spin_lock_bh(&cq->lock);
 	/* Get no of valid CQ entries to process */
 	cqe_count = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_STATUS, cq_idx);
 	cqe_count &= CQ_CQE_COUNT;
@@ -572,7 +572,7 @@ static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
 	cqe_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx);
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx, cqe_head);
 done:
-	spin_unlock(&cq->cq_lock);
+	spin_unlock_bh(&cq->lock);
 	return work_done;
 }
 
