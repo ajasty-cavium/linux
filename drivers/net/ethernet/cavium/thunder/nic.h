@@ -132,8 +132,13 @@
 #define NIC_PF_INTR_ID_MBOX0		8
 #define NIC_PF_INTR_ID_MBOX1		9
 
-/* Value for CQ timer to run at 1hz */
-#define NICPF_CLK_PER_INT_TICK		70000
+/* Global timer for CQ timer thresh interrupts
+ * Calculated for SCLK of 700Mhz
+ * value written should be a 1/16thof what is expected
+ *
+ * 1 tick per ms
+ */
+#define NICPF_CLK_PER_INT_TICK		43750
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
@@ -245,6 +250,7 @@ struct nicvf {
 	uint64_t		reg_base;
 	struct tasklet_struct	rbdr_task;
 	struct tasklet_struct	qs_err_task;
+	struct tasklet_struct	cq_task;
 	struct nicvf_cq_poll	*napi[8];
 #ifdef VNIC_RSS_SUPPORT
 	struct nicvf_rss_info	rss_info;
