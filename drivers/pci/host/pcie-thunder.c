@@ -28,6 +28,11 @@
 #define THUNDER_ECAM2_CFG_BASE		0x84a000000000
 #define THUNDER_ECAM3_CFG_BASE		0x84b000000000
 
+
+#define THUNDER_GSER_N0_BASE        0x87e090000000
+#define THUNDER_GSER_SIZE           0xd000000
+
+void __iomem      *gser_base = NULL;
 struct thunder_pcie {
 	struct device_node	*node;
 	struct device		*dev;
@@ -84,11 +89,17 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 			pci_dev_resource_fixup);
 
+static uint64_t thunder_get_gser_cfg_addr(int qlm)
+{
+    return ((uint64_t)gser_base) + 0x80 + (0x1000000 * qlm);
+}
+
 static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 					 unsigned int devfn)
 {
 	int supported = 0;
 	uint16_t bdf = (bus << 8) | devfn;
+    uint64_t gser_cfg;
 
 	if (ecam == 0) {
 		switch (bdf) {
@@ -108,13 +119,17 @@ static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 			case 0x10C:   /* EMM */
 			case 0x10D:   /* KEY */
 			case 0x10e:   /* MIO_BOOT */
-			case 0x180:   /* BGX0 */
-			case 0x181:   /* BGX1 */
-			case 0x1E2:   /* GSER2 */
-			case 0x1E3:   /* GSER3 */
-			case 0x1E6:   /* GSER6 */
-			case 0x1E7:   /* GSER7 */
 				supported = 1;
+				break;
+			case 0x180:   /* BGX0 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0);
+                if(gser_cfg & 0x4)
+                    supported = 1;
+				break;
+			case 0x181:   /* BGX1 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1);
+                if(gser_cfg & 0x4)
+                    supported = 1;
 				break;
 			default:
 				supported = 0;
@@ -126,15 +141,21 @@ static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 			case 0x028:   /* AHCI1 */
 			case 0x030:   /* AHCI2 */
 			case 0x038:   /* AHCI3 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(2);
+                if(gser_cfg & 0x20)
+                    supported = 1;
+                break;
 			case 0x040:   /* AHCI4 */
 			case 0x048:   /* AHCI5 */
 			case 0x050:   /* AHCI5 */
 			case 0x058:   /* AHCI7 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(3);
+                if(gser_cfg & 0x20)
+                    supported = 1;
+                break;
 			//case 0x080:   /* PCIRC0 */
 			//case 0x098:   /* PCIRC1 */
 			//case 0x0A8:   /* PCIRC2 */
-				supported = 1;
-				break;
 			default:
 				supported = 0;
 		}
@@ -166,18 +187,27 @@ static int thunder_pcie_check_cfg_access(int ecam, unsigned int bus,
 	} else if (ecam == 3) {
 		switch (bdf) {
 			case 0x008:   /* SMMU */
-			//case 0x018:   /* AHCI8 */
-			//case 0x020:   /* AHCI9*/
-			//case 0x028:   /* AHCI10 */
-			//case 0x030:   /* AHCI11 */
-			//case 0x038:   /* AHCI12 */
-			//case 0x040:   /* AHCI13 */
-			//case 0x048:   /* AHCI14 */
-			//case 0x050:   /* AHCI15 */
+                supported = 1;
+                break;
+			case 0x018:   /* AHCI8 */
+			case 0x020:   /* AHCI9*/
+			case 0x028:   /* AHCI10 */
+			case 0x030:   /* AHCI11 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(6);
+                if(gser_cfg & 0x20)
+                    supported = 1;
+                break;
+			case 0x038:   /* AHCI12 */
+			case 0x040:   /* AHCI13 */
+			case 0x048:   /* AHCI14 */
+			case 0x050:   /* AHCI15 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(7);
+                if(gser_cfg & 0x20)
+                    supported = 1;
+                break;
 			//case 0x080:   /* PCIRC3 */
 			//case 0x098:   /* PCIRC4 */
 			//case 0x0A8:   /* PCIRC5 */
-				supported = 1;
 				break;
 			default:
 				supported = 0;
@@ -319,10 +349,14 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			pcie->ecam = 3;
 			break;
 	}
-	pr_err("%s: ECAM%d CFG BASE 0x%llx\n",__func__, pcie->ecam, (uint64_t)cfg_base->start);
 
 	pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-	if (IS_ERR(pcie->cfg_base)) {
+    if(gser_base == NULL)
+        gser_base = devm_ioremap(&pdev->dev, THUNDER_GSER_N0_BASE, THUNDER_GSER_SIZE); 
+
+	pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n",__func__,
+           pcie->ecam, (uint64_t)cfg_base->start,gser_base);
+	if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
 		ret = PTR_ERR(pcie->cfg_base);
 		goto err_ioremap;
 	}
