@@ -890,7 +890,6 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	mpidr = SGI_AFFINITY_LEVEL(reg, 3);
 	mpidr |= SGI_AFFINITY_LEVEL(reg, 2);
 	mpidr |= SGI_AFFINITY_LEVEL(reg, 1);
-	mpidr &= ~MPIDR_LEVEL_MASK;
 
 	/*
 	 * We take the dist lock here, because we come from the sysregs
