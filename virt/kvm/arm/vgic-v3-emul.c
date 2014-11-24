@@ -274,7 +274,6 @@ static bool handle_mmio_route_reg(struct kvm_vcpu *vcpu,
 
 	/* get the stored MPIDR for this IRQ */
 	mpidr = uncompress_mpidr(dist->irq_spi_mpidr[spi]);
-	mpidr &= MPIDR_HWID_BITMASK;
 	reg = mpidr;
 
 	vgic_reg_access(mmio, &reg, offset,
