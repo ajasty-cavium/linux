@@ -321,6 +321,7 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 {
 	int bgx, bgx_count, next_bgx_lmac = 0;
 	int lmac, lmac_cnt = 0;
+	uint64_t lmac_credit;
 
 	nic->num_vf_en = 0;
 	if (nic->flags & NIC_TNS_ENABLED) {
@@ -338,6 +339,14 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 			nic->vf_lmac_map[next_bgx_lmac++] =
 						NIC_SET_VF_LMAC_MAP(bgx, lmac);
 		nic->num_vf_en += lmac_cnt;
+
+		/* Program LMAC credits */
+		lmac_credit = (1ull << 1); /* chennel credit enable */
+		lmac_credit |= (0x1ff << 2);
+		lmac_credit |= (((((48 * 1024) / lmac_cnt) -
+				NIC_HW_MAX_FRS) / 16) << 12);
+		nic_reg_write(nic,
+			      NIC_PF_LMAC_0_7_CREDIT + (lmac * 8), lmac_credit);
 	}
 }
 
@@ -357,6 +366,7 @@ static void nic_init_hw(struct nicpf *nic)
 	nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG, (1ULL << 63) | 0x08);
 	nic_reg_write(nic,
 		      NIC_PF_INTF_0_1_BP_CFG + (1 << 8), (1ULL << 63) | 0x09);
+
 	for (i = 0; i < NIC_MAX_CHANS; i++)
 		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 1);
 

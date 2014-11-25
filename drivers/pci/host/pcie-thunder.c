@@ -367,11 +367,15 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	}
 
 	pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-    if(gser_base == NULL)
-        gser_base = devm_ioremap(&pdev->dev, THUNDER_GSER_N0_BASE, THUNDER_GSER_SIZE); 
 
-	pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n",__func__,
-           pcie->ecam, (uint64_t)cfg_base->start,gser_base);
+	if (gser_base == NULL)
+		gser_base = devm_ioremap(&pdev->dev,
+					 THUNDER_GSER_N0_BASE,
+					 THUNDER_GSER_SIZE);
+
+	pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n", __func__,
+	       pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base);
+
 	if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
 		ret = PTR_ERR(pcie->cfg_base);
 		goto err_ioremap;

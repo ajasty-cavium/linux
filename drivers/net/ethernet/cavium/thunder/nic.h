@@ -35,7 +35,7 @@
 #define	NIC_TNS_ENABLED			(1 << 1)
 
 /* VNIC HW optimiation features */
-#undef	VNIC_RX_CSUM_OFFLOAD_SUPPORT
+#define	VNIC_RX_CSUM_OFFLOAD_SUPPORT
 #undef	VNIC_TX_CSUM_OFFLOAD_SUPPORT
 #undef	VNIC_SG_SUPPORT
 #undef	VNIC_TSO_SUPPORT

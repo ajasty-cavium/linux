@@ -276,7 +276,7 @@ static int nicvf_init_snd_queue(struct nicvf *nic,
 	sq->skbuff = kcalloc(q_len, sizeof(uint64_t), GFP_ATOMIC);
 	sq->head = 0;
 	sq->tail = 0;
-	atomic_set(&sq->free_cnt, q_len);
+	atomic_set(&sq->free_cnt, q_len - 1);
 	sq->thresh = SND_QUEUE_THRESH;
 
 	return 0;
