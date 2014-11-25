@@ -27,6 +27,10 @@
 #define THUNDER_ECAM1_CFG_BASE		0x849000000000
 #define THUNDER_ECAM2_CFG_BASE		0x84a000000000
 #define THUNDER_ECAM3_CFG_BASE		0x84b000000000
+#define THUNDER_ECAM4_CFG_BASE		0x948000000000
+#define THUNDER_ECAM5_CFG_BASE		0x949000000000
+#define THUNDER_ECAM6_CFG_BASE		0x94a000000000
+#define THUNDER_ECAM7_CFG_BASE		0x94b000000000
 
 
 #define THUNDER_GSER_N0_BASE        0x87e090000000
@@ -346,6 +350,18 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			pcie->ecam = 2;
 			break;
 		case THUNDER_ECAM3_CFG_BASE:
+			pcie->ecam = 3;
+			break;
+		case THUNDER_ECAM4_CFG_BASE:
+			pcie->ecam = 0;
+			break;
+		case THUNDER_ECAM5_CFG_BASE:
+			pcie->ecam = 1;
+			break;
+		case THUNDER_ECAM6_CFG_BASE:
+			pcie->ecam = 2;
+			break;
+		case THUNDER_ECAM7_CFG_BASE:
 			pcie->ecam = 3;
 			break;
 	}
