@@ -53,7 +53,7 @@
 
 /* Min/Max packet size */
 #define	NIC_HW_MIN_FRS			64
-#define	NIC_HW_MAX_FRS			9194 /* 9216 max packet including FCS */
+#define	NIC_HW_MAX_FRS			9200 /* 9216 max packet including FCS */
 
 /* Max pkinds */
 #define	NIC_MAX_PKIND			16

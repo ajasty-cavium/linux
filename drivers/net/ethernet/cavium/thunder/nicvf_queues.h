@@ -58,8 +58,8 @@
 /* Default queue count per QS, its lengths and threshold values */
 #define RBDR_CNT		1
 #define RCV_QUEUE_CNT		1
-#define SND_QUEUE_CNT		1
-#define CMP_QUEUE_CNT		1 /* Max of RCV and SND qcount */
+#define SND_QUEUE_CNT		8
+#define CMP_QUEUE_CNT		8 /* Max of RCV and SND qcount */
 
 #define SND_QSIZE		SND_QUEUE_SIZE3
 #define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
@@ -70,7 +70,7 @@
 #define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
 #define CMP_QUEUE_CQE_THRESH	0
-#define CMP_QUEUE_TIMER_THRESH	1 /* 2 ms */
+#define CMP_QUEUE_TIMER_THRESH	1 /* 1 ms */
 
 #define RBDR_SIZE		RBDR_SIZE0
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))

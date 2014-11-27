@@ -995,11 +995,11 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
-		*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;
 		pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
 				 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		if (!frag) {
 			/* First fragment */
+			*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;
 			skb = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
 			if (cqe_rx->align_pad) {
 				skb->data += cqe_rx->align_pad;
@@ -1009,10 +1009,6 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 		} else {
 			/* Add fragments */
 			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
-			if (cqe_rx->align_pad) {
-				skb_frag->data += cqe_rx->align_pad;
-				skb_frag->tail += cqe_rx->align_pad;
-			}
 			if (!skb_shinfo(skb)->frag_list)
 				skb_shinfo(skb)->frag_list = skb_frag;
 			else

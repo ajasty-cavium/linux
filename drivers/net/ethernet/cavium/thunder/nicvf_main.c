@@ -475,7 +475,7 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 
 	/* Check for errors */
 	err = nicvf_check_cqe_rx_errs(nic, cq, cq_desc);
-	if (err || !cqe_rx->rb_cnt)
+	if (err && !cqe_rx->rb_cnt)
 		return;
 
 	skb = nicvf_get_rcv_skb(nic, cq_desc);
@@ -500,11 +500,9 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 		skb_checksum_none_assert(skb);
 	}
 
-#ifdef VNIC_GRO_SUPPORT
 	if (napi && (netdev->features & NETIF_F_GRO))
 		napi_gro_receive(napi, skb);
 	else
-#endif
 		netif_receive_skb(skb);
 }
 
