@@ -1113,8 +1113,7 @@ static int its_alloc_device_irq(struct its_device *dev, u32 id,
 	return 0;
 }
 
-/* FIXME: Use proper API once it is available in the kernel... */
-#define PCI_REQUESTER_ID(dev)	((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn)
+
 
 static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 {
@@ -1128,6 +1127,7 @@ static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 #endif
 }
 
+int pci_requester_id(struct pci_dev *dev);
 static int its_msi_setup_irq(struct msi_chip *chip,
 			     struct pci_dev *pdev,
 			     struct msi_desc *desc)
@@ -1139,7 +1139,7 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 	u64 addr;
 	int hwirq;
 	int err;
-	u32 dev_id = PCI_REQUESTER_ID(pdev);
+	u32 dev_id = pci_requester_id(pdev);
 	u32 vec_nr;
 
 	its_dev = its_find_device(its, dev_id);
