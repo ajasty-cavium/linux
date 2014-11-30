@@ -573,8 +573,6 @@ loop:
 	if ((work_done < budget) && napi)
 		goto loop;
 
-	cqe_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx);
-	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD, cq_idx, cqe_head);
 done:
 	spin_unlock_bh(&cq->lock);
 	return work_done;
@@ -583,6 +581,7 @@ done:
 static int nicvf_poll(struct napi_struct *napi, int budget)
 {
 	int  work_done = 0;
+	uint64_t cq_head;
 	struct net_device *netdev = napi->dev;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct nicvf_cq_poll *cq;
@@ -599,6 +598,10 @@ static int nicvf_poll(struct napi_struct *napi, int budget)
 		/* Slow packet rate, exit polling */
 		napi_complete(napi);
 		/* Re-enable interrupts */
+		cq_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD,
+					       cq->cq_idx);
+		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD,
+				      cq->cq_idx, cq_head);
 		nicvf_enable_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
 	}
 	return work_done;
