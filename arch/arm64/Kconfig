@@ -148,6 +148,9 @@ config ARCH_THUNDER
 	  This enables support for Cavium's Thunder Family of SoCs.
 	select SATA_AHCI
 	select NET_VENDOR_CAVIUM
+	select MARVELL_PHY
+	select BROADCOM_PHY
+	select BCM87XX_PHY
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
 	select ARM64_VA_BITS_48 if NUMA
 
