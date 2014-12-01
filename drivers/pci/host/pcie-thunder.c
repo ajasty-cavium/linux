@@ -560,7 +560,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct pci_bus *bus;
 	resource_size_t iobase = 0;
 	int ret=0;
-    int primary_bus = 0;
+	int primary_bus = 0;
 	LIST_HEAD(res);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
@@ -671,7 +671,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		goto err_get_host;
 
 
-	bus = pci_create_root_bus(&pdev->dev, 0, &thunder_pcie_ops, pcie, &res);
+	bus = pci_create_root_bus(&pdev->dev, primary_bus, &thunder_pcie_ops, pcie, &res);
 	if (!bus) {
 		ret = -ENODEV;
 		goto err_root_bus;
