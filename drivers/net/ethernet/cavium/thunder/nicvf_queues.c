@@ -931,7 +931,6 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 	sq = &qs->sq[sq_num];
 
 	subdesc_cnt = nicvf_sq_subdesc_required(nic, skb);
-
 	if (subdesc_cnt > atomic_read(&sq->free_cnt))
 		goto append_fail;
 

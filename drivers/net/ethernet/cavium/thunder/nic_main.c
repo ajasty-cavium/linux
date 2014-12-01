@@ -519,27 +519,24 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 	bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 
-	tl2 = bgx * 32;
-	tl2 += lmac;
-	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3),
-		      NIC_HW_MAX_FRS / 4);
-	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
+	tl4 = (lmac * NIC_TL4_PER_LMAC) + (bgx * NIC_TL4_PER_BGX);
+	tl4 += sq_idx;
+	tl3 = tl4 / (NIC_MAX_TL4 / NIC_MAX_TL3);
+	nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
+		      (vnic << NIC_QS_ID_SHIFT) |
+		      (sq_idx << NIC_Q_NUM_SHIFT), tl4);
+	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
+		      (vnic << 27) | (sq_idx << 24) | (NIC_HW_MAX_FRS / 4));
 
-	tl3 = tl2 * 4;
-	nic_reg_write(nic, NIC_PF_TL3A_0_63_CFG | (tl2 << 3), tl2);
 	nic_reg_write(nic, NIC_PF_TL3_0_255_CFG | (tl3 << 3),
 		      NIC_HW_MAX_FRS / 4);
 	nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3), lmac << 4);
 
-	tl4 = tl3 * 4;
-	tl4 += sq_idx;
-
-	nic_reg_write(nic, NIC_PF_TL4A_0_255_CFG | (tl3 << 3), tl3);
-	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
-		      (vnic << 27) | (sq_idx << 24) | (NIC_HW_MAX_FRS / 4));
-	nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
-		      (vnic << NIC_QS_ID_SHIFT) |
-		      (sq_idx << NIC_Q_NUM_SHIFT), tl4);
+	tl2 = tl3 >> 2;
+	nic_reg_write(nic, NIC_PF_TL3A_0_63_CFG | (tl2 << 3), tl2);
+	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3),
+		      NIC_HW_MAX_FRS / 4);
+	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
 }
 
 static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
