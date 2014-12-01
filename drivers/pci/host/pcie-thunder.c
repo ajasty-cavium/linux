@@ -83,17 +83,17 @@ int pci_requester_id(struct pci_dev *dev)
 {
 	struct thunder_pcie *pcie = dev->bus->sysdata;
 
-    if(pcie->device_type == THUNDER_ECAM) {
-        /* this is easy case */
-        return ((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
-    }
-    else {
-        if(pcie->pem < 3 ) {
-            return ((1 << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
-        }
-        else {
-            return ((3 << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
-        }
+	if(pcie->device_type == THUNDER_ECAM) {
+		/* this is easy case */
+		return ((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
+	}
+	else {
+		if(pcie->pem < 3 ) {
+			return ((1 << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
+		}
+		else {
+			return ((3 << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
+		}
 
     }
 
@@ -552,7 +552,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct resource *cfg_base;
 	struct pci_bus *bus;
 	resource_size_t iobase = 0;
-	int ret;
+	int ret=0;
     int primary_bus = 0;
 	LIST_HEAD(res);
 
@@ -660,32 +660,31 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		goto err_get_host;
 
 
-	bus = pci_scan_root_bus(&pdev->dev, primary_bus, &thunder_pcie_ops, pcie, &res);
-    /*
 	bus = pci_create_root_bus(&pdev->dev, 0, &thunder_pcie_ops, pcie, &res);
 	if (!bus) {
 		ret = -ENODEV;
 		goto err_root_bus;
-	}*/
+	}
 
 	/* Set reference to MSI chip */
 	ret = thunder_pcie_msi_enable(pcie, bus);
-	if (ret)
+	if (ret) {
+		pr_err("%s: Unable to set reference to MSI chip: ret=%d\n",__func__,ret);
 		goto err_msi;
+	}
 
 	platform_set_drvdata(pdev, pcie);
-    /*
+    
 	pci_scan_child_bus(bus);
 	pci_bus_add_devices(bus);
-    */
+   
 	if (pcie->device_type == THUNDER_PEM) {
-		//pci_bus_update_busn_res_end(bus, 1);
-		//pci_assign_unassigned_bridge_resources(bus->parent->self);
 		pci_assign_unassigned_root_bus_resources(bus);
 	}
 	return 0;
 err_msi:
-	//pci_remove_root_bus(bus);
+	pci_remove_root_bus(bus);
+err_root_bus:
 	pci_free_resource_list(&res);
 err_get_host:
 	devm_ioremap_release(pcie->dev, pcie->cfg_base);
