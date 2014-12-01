@@ -509,7 +509,6 @@
 	pem2: pem2@0x87e0,c2000000 {
 	    compatible = "cavium,thunder-pcie";
 		device_type = "pci";
-	    interrupt-parent = <&gic0>;
 		msi-parent = <&its>;
 		/*bus-range = <0 255>; */
 		#size-cells = <2>;
@@ -518,11 +517,9 @@
 		#interrupt-cells = <1>;
 		reg = <0x87e0 0xc2000000 0 0x10000000>;  /* Configuration space */
 		ranges = <0x03000000 0x8890 0x0000000 0x8890 0x00000000 0x04 0x80000000>, /* PEM memory */
-			 <0x43000000 0x88a0 0x0000000 0x88a0 0x0 0x04 0x80000000>, /* mem, pref */
-			 <0x01000000 0x0 0x0000000 0x88b0 0x0 0x00 0x08000000>; /* I/O */
-       };
-
-
+			 <0x43000000 0x88a0 0x0000000 0x88a0 0x00000000 0x04 0x80000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x0000000 0x88b0 0x0 0x00 0x08000000>; /* I/O */
+        };
 
 	smmu0@0x8300,00000000 {
                 compatible = "thunder,smmu-v2";
