@@ -530,20 +530,27 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 #define PCIERC_CFG002 0x08
 #define PCIERC_CFG006 0x18
 
-static void thunder_pcierc_config_init(struct thunder_pcie *pcie)
+static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
 {
 	uint64_t pem_addr;
 	uint64_t region;
-    uint64_t sli;
-    uint64_t node =0; //TODO find out from pem numbers
+	uint64_t sli;
+	uint64_t node =0; //TODO find out from pem numbers
+	uint64_t gser_cfg;
 
 	/* device class as bridge */
 	//thunder_pcierc_config_write(pcie->pem_base, PCIERC_CFG006, 4, 0xff0100);
 
-    sli= (pcie->pem < 3) ? 8ULL : 9ULL;
+	/* FIXME TODO: Right now QLM num==(PEM num+2) but not always*/
+	gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(pcie->pem+2);
+	if(!(gser_cfg & THUNDER_GSER_PCIE_MASK))
+		return -ENODEV;
+
+	sli= (pcie->pem < 3) ? 8ULL : 9ULL;
 	region = ((pcie->pem << 6) | (0ULL << 4)) << 32; /* PEM number and access type */;
 	pem_addr = (1ULL << 47) | (node << 44) | (sli << 40) | region;
 	pcie->pem_sli_base = ioremap(pem_addr, (0xFFULL << 24) - 1);
+	return 0;
 }
 
 static int thunder_pcie_probe(struct platform_device *pdev)
@@ -629,32 +636,36 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 					 THUNDER_GSER_N0_BASE,
 					 THUNDER_GSER_SIZE);
 
-    if(pcie->device_type == THUNDER_ECAM) {
-	pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-	    if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
-		    ret = PTR_ERR(pcie->cfg_base);
-		    goto err_ioremap;
-	    }
-	    pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n", __func__,
-	        pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base);
-	    ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
-					       0, 255, &res, NULL);
-    }
-    else {
-		pcie->pem_base = ioremap(cfg_base->start, 0x500);
-		if (!pcie->pem_base) {
-			pr_err("Unable to map PEM2 CFG registers\n");
+	if(pcie->device_type == THUNDER_ECAM) {
+		pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
+		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
+			ret = PTR_ERR(pcie->cfg_base);
 			goto err_ioremap;
 		}
-		thunder_pcierc_config_init(pcie);
-        primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006,0x4);
-	    pr_err("%s: PEM%d CFG BASE 0x%llx gser_base:%llx primary_bus:%x\n", __func__,
-	        pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base,primary_bus);
-        primary_bus = ( primary_bus >>  0x8) & 0xff;
+		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n", __func__,
+				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base);
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
-						       primary_bus, 255, &res, &iobase);
-    }
+				0, 255, &res, NULL);
+	}
+	else {
+		if(thunder_pcierc_config_init(pcie)) {
+			pr_err("%s: PCIe RC%d not found\n",__func__,pcie->pem);
+			return -ENODEV;
+		}
 
+		pcie->pem_base = ioremap(cfg_base->start, 0x500);
+		if (!pcie->pem_base) {
+			pr_err("Unable to map PCIe RC CFG registers\n");
+			goto err_ioremap;
+		}
+
+		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006,0x4);
+		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base:%llx primary_bus:%x\n", __func__,
+				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base,primary_bus);
+		primary_bus = ( primary_bus >>  0x8) & 0xff;
+		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
+				primary_bus, 255, &res, &iobase);
+	}
 
 	if (ret)
 		goto err_get_host;
