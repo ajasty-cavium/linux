@@ -242,7 +242,7 @@ static unsigned long uncompress_mpidr(u32 value)
  * Lookup the given MPIDR value to get the vcpu_id (if there is one)
  * and store that in the irq_spi_cpu[] array.
  * This limits the number of VCPUs to 255 for now, extending the data
- * type (or storing kvm_vcpu poiners) should lift the limit.
+ * type (or storing kvm_vcpu pointers) should lift the limit.
  * Store the original MPIDR value in an extra array to support read-as-written.
  * Unallocated MPIDRs are translated to a special value and caught
  * before any array accesses.
