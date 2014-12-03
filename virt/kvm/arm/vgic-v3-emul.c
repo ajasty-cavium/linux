@@ -97,7 +97,6 @@ static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 {
 	u32 reg;
 
-	/* we report at most 1024 IRQs via this interface */
 	reg = (min(vcpu->kvm->arch.vgic.nr_irqs, 1024) >> 5) - 1;
 
 	reg |= (INTERRUPT_ID_BITS - 1) << 19;
