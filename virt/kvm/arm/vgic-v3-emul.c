@@ -863,8 +863,8 @@ static int match_mpidr(u64 sgi_aff, u16 sgi_cpu_mask, struct kvm_vcpu *vcpu)
  * @vcpu: The VCPU requesting a SGI
  * @reg: The value written into the ICC_SGI1R_EL1 register by that VCPU
  *
- * With GICv3 (and ARE=1) CPUs trigger SGIs by writing to an architectural
- * system register. This will trap in sys_regs.c and call this function.
+ * With GICv3 (and ARE=1) CPUs trigger SGIs by writing to a system register.
+ * This will trap in sys_regs.c and call this function.
  * This ICC_SGI1R_EL1 register contains the upper three affinity levels of the
  * target processors as well as a bitmask of 16 Aff0 CPUs.
  * If the interrupt routing mode bit is not set, we iterate over all VCPUs to
