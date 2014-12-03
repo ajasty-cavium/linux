@@ -491,7 +491,7 @@ static const struct kvm_mmio_range vgic_v3_dist_ranges[] = {
 	},
 	{
 		.base		= GICD_IROUTER + 0x100,
-		.len		= 0x1edc,
+		.len		= 0x1ee0,
 		.bits_per_irq	= 64,
 		.handle_mmio	= handle_mmio_route_reg,
 	},
