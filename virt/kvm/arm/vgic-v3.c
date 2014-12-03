@@ -79,7 +79,7 @@ static void vgic_v3_set_lr(struct kvm_vcpu *vcpu, int lr,
 	lr_val = lr_desc.irq;
 
 	/*
-	 * currently all guest IRQs are Group1, as Group0 would result
+	 * Currently all guest IRQs are Group1, as Group0 would result
 	 * in a FIQ in the guest, which it wouldn't expect.
 	 * Eventually we want to make this configurable, so we may revisit
 	 * this in the future.
