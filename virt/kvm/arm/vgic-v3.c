@@ -173,8 +173,9 @@ static void vgic_v3_enable(struct kvm_vcpu *vcpu)
 	vgic_v3->vgic_vmcr = 0;
 
 	/*
-	 * Set the SRE_EL1 value depending on the configured
-	 * emulated vGIC model.
+	 * If we are emulating a GICv3, we do it in an non-GICv2-compatible
+	 * way, so we force SRE to 1 to demonstrate this to the guest.
+	 * This goes with the spec allowing the value to be RAO/WI.
 	 */
 	if (vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V3)
 		vgic_v3->vgic_sre = ICC_SRE_EL1_SRE;
