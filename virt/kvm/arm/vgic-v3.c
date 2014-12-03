@@ -57,9 +57,9 @@ static struct vgic_lr vgic_v3_get_lr(const struct kvm_vcpu *vcpu, int lr)
 	lr_desc.source = 0;
 	if (lr_desc.irq <= 15 &&
 	    vcpu->kvm->arch.vgic.vgic_model == KVM_DEV_TYPE_ARM_VGIC_V2)
-		lr_desc.source	= (val >> GICH_LR_PHYSID_CPUID_SHIFT) & 0x7;
+		lr_desc.source = (val >> GICH_LR_PHYSID_CPUID_SHIFT) & 0x7;
 
-	lr_desc.state   = 0;
+	lr_desc.state = 0;
 
 	if (val & ICH_LR_PENDING_BIT)
 		lr_desc.state |= LR_STATE_PENDING;
