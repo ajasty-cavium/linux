@@ -877,11 +877,10 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	u16 target_cpus;
 	u64 mpidr;
-	int sgi, c, vcpu_id;
+	int sgi, c;
+	int vcpu_id = vcpu->vcpu_id;
 	bool broadcast;
 	int updated = 0;
-
-	vcpu_id = vcpu->vcpu_id;
 
 	sgi = (reg & ICC_SGI1R_SGI_ID_MASK) >> ICC_SGI1R_SGI_ID_SHIFT;
 	broadcast = reg & BIT(ICC_SGI1R_IRQ_ROUTING_MODE_BIT);
