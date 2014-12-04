@@ -535,6 +535,7 @@ static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
 	uint64_t pem_addr;
 	uint64_t region;
 	uint64_t sli;
+	uint64_t sli_group;
 	uint64_t node =0; //TODO find out from pem numbers
 	uint64_t gser_cfg;
 
@@ -546,10 +547,12 @@ static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
 	if(!(gser_cfg & THUNDER_GSER_PCIE_MASK))
 		return -ENODEV;
 
-	sli= (pcie->pem < 3) ? 8ULL : 9ULL;
-	region = ((pcie->pem << 6) | (0ULL << 4)) << 32; /* PEM number and access type */;
-	pem_addr = (1ULL << 47) | (node << 44) | (sli << 40) | region;
+	sli = (pcie->pem >= 3) ? 1 : 0;
+	sli_group= pcie->pem - sli*3;
+	region = ((sli_group << 6) | (0ULL << 4)) << 32; /* PEM number and access type */;
+	pem_addr = (1ULL << 47) | (node << 44) | ((0x8 + sli) << 40) | region;
 	pcie->pem_sli_base = ioremap(pem_addr, (0xFFULL << 24) - 1);
+
 	return 0;
 }
 
@@ -574,61 +577,61 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	cfg_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	switch(cfg_base->start) {
 		case THUNDER_ECAM0_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 0;
 			break;
 		case THUNDER_ECAM1_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 1;
 			break;
 		case THUNDER_ECAM2_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 2;
 			break;
 		case THUNDER_ECAM3_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 3;
 			break;
 		case THUNDER_ECAM4_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 0;
 			break;
 		case THUNDER_ECAM5_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 1;
 			break;
 		case THUNDER_ECAM6_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 2;
 			break;
 		case THUNDER_ECAM7_CFG_BASE:
-            pcie->device_type = THUNDER_ECAM;
+			pcie->device_type = THUNDER_ECAM;
 			pcie->ecam = 3;
 			break;
-        case THUNDER_PEM0_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+		case THUNDER_PEM0_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 0;
-            break;
-        case THUNDER_PEM1_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+			break;
+		case THUNDER_PEM1_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 1;
-            break;
-        case THUNDER_PEM2_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+			break;
+		case THUNDER_PEM2_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 2;
-            break;
-        case THUNDER_PEM3_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+			break;
+		case THUNDER_PEM3_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 3;
-            break;
-        case THUNDER_PEM4_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+			break;
+		case THUNDER_PEM4_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 4;
-            break;
-        case THUNDER_PEM5_REG_BASE:
-            pcie->device_type = THUNDER_PEM;
+			break;
+		case THUNDER_PEM5_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
 			pcie->pem = 5;
-            break;
+			break;
 	}
 
 	if (gser_base == NULL)
