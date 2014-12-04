@@ -40,7 +40,7 @@
 unsigned long *vgic_bitmap_get_shared_map(struct vgic_bitmap *x);
 
 void vgic_update_state(struct kvm *kvm);
-int vgic_init_maps(struct kvm *kvm);
+int vgic_init_common_maps(struct kvm *kvm);
 
 u32 *vgic_bitmap_get_reg(struct vgic_bitmap *x, int cpuid, u32 offset);
 u32 *vgic_bytemap_get_reg(struct vgic_bytemap *x, int cpuid, u32 offset);

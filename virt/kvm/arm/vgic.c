@@ -102,6 +102,11 @@ static int vgic_init(struct kvm *kvm, const struct vgic_params *params)
 	return kvm->arch.vgic.vm_ops.vgic_init(kvm, params);
 }
 
+static int vgic_init_maps(struct kvm *kvm)
+{
+	return kvm->arch.vgic.vm_ops.vgic_init_maps(kvm);
+}
+
 /*
  * struct vgic_bitmap contains a bitmap made of unsigned longs, but
  * extracts u32s out of them.
@@ -1456,7 +1461,7 @@ void kvm_vgic_destroy(struct kvm *kvm)
  * Allocate and initialize the various data structures. Must be called
  * with kvm->lock held!
  */
-int vgic_init_maps(struct kvm *kvm)
+int vgic_init_common_maps(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	struct kvm_vcpu *vcpu;

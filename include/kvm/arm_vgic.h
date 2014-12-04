@@ -141,6 +141,7 @@ struct vgic_vm_ops {
 	bool	(*queue_sgi)(struct kvm_vcpu *vcpu, int irq);
 	void	(*add_sgi_source)(struct kvm_vcpu *vcpu, int irq, int source);
 	int	(*vgic_init)(struct kvm *kvm, const struct vgic_params *params);
+	int	(*vgic_init_maps)(struct kvm *kvm);
 };
 
 struct vgic_dist {

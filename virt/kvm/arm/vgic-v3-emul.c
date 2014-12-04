@@ -763,9 +763,15 @@ static bool vgic_v3_queue_sgi(struct kvm_vcpu *vcpu, int irq)
 	return false;
 }
 
-static int vgic_v3_init_maps(struct vgic_dist *dist)
+static int vgic_v3_init_maps(struct kvm *kvm)
 {
+	struct vgic_dist *dist = &kvm->arch.vgic;
 	int nr_spis = dist->nr_irqs - VGIC_NR_PRIVATE_IRQS;
+	int ret;
+
+	ret = vgic_init_common_maps(kvm);
+	if (ret)
+		return ret;
 
 	dist->irq_spi_mpidr = kcalloc(nr_spis, sizeof(dist->irq_spi_mpidr[0]),
 				      GFP_KERNEL);
@@ -779,23 +785,13 @@ static int vgic_v3_init_maps(struct vgic_dist *dist)
 static int vgic_v3_init(struct kvm *kvm, const struct vgic_params *params)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
-	int ret, i;
+	int i;
 	u32 mpidr;
 
 	if (IS_VGIC_ADDR_UNDEF(dist->vgic_dist_base) ||
 	    IS_VGIC_ADDR_UNDEF(dist->vgic_redist_base)) {
 		kvm_err("Need to set vgic distributor addresses first\n");
 		return -ENXIO;
-	}
-
-	/*
-	 * FIXME: this should be moved to init_maps time, and may bite
-	 * us when adding save/restore. Add a per-emulation hook?
-	 */
-	ret = vgic_v3_init_maps(dist);
-	if (ret) {
-		kvm_err("Unable to allocate maps\n");
-		return ret;
 	}
 
 	/* Initialize the target VCPUs for each IRQ to VCPU 0 */
@@ -822,6 +818,7 @@ int vgic_v3_init_emulation(struct kvm *kvm)
 	dist->vm_ops.queue_sgi = vgic_v3_queue_sgi;
 	dist->vm_ops.add_sgi_source = vgic_v3_add_sgi_source;
 	dist->vm_ops.vgic_init = vgic_v3_init;
+	dist->vm_ops.vgic_init_maps = vgic_v3_init_maps;
 
 	kvm->arch.max_vcpus = KVM_MAX_VCPUS;
 

@@ -512,6 +512,11 @@ static void vgic_v2_add_sgi_source(struct kvm_vcpu *vcpu, int irq, int source)
 	*vgic_get_sgi_sources(dist, vcpu->vcpu_id, irq) |= 1 << source;
 }
 
+static int vgic_v2_init_maps(struct kvm *kvm)
+{
+	return vgic_init_common_maps(kvm);
+}
+
 int vgic_v2_init_emulation(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
@@ -520,6 +525,7 @@ int vgic_v2_init_emulation(struct kvm *kvm)
 	dist->vm_ops.queue_sgi = vgic_v2_queue_sgi;
 	dist->vm_ops.add_sgi_source = vgic_v2_add_sgi_source;
 	dist->vm_ops.vgic_init = vgic_v2_init;
+	dist->vm_ops.vgic_init_maps = vgic_v2_init_maps;
 
 	kvm->arch.max_vcpus = 8;
 
@@ -634,7 +640,7 @@ static int vgic_attr_regs_access(struct kvm_device *dev,
 
 	mutex_lock(&dev->kvm->lock);
 
-	ret = vgic_init_maps(dev->kvm);
+	ret = vgic_v2_init_maps(dev->kvm);
 	if (ret)
 		goto out;
 
