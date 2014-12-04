@@ -140,9 +140,6 @@ struct vgic_dist {
 	bool			in_kernel;
 	bool			ready;
 
-	/* vGIC model the kernel emulates for the guest (GICv2 or GICv3) */
-	u32			vgic_model;
-
 	int			nr_cpus;
 	int			nr_irqs;
 
@@ -282,7 +279,7 @@ struct kvm_exit_mmio;
 int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, bool write);
 int kvm_vgic_hyp_init(void);
 int kvm_vgic_init(struct kvm *kvm);
-int kvm_vgic_create(struct kvm *kvm, u32 type);
+int kvm_vgic_create(struct kvm *kvm);
 void kvm_vgic_destroy(struct kvm *kvm);
 void kvm_vgic_vcpu_destroy(struct kvm_vcpu *vcpu);
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu);
@@ -333,7 +330,7 @@ static inline int kvm_vgic_init(struct kvm *kvm)
 	return 0;
 }
 
-static inline int kvm_vgic_create(struct kvm *kvm, u32 type)
+static inline int kvm_vgic_create(struct kvm *kvm)
 {
 	return 0;
 }
