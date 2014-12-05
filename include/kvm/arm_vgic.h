@@ -397,6 +397,11 @@ static inline bool vgic_initialized(struct kvm *kvm)
 {
 	return true;
 }
+
+static inline int kvm_vgic_get_max_vcpus(void)
+{
+	return KVM_MAX_VCPUS;
+}
 #endif
 
 #endif
