@@ -1389,7 +1389,7 @@ static int vgic_vcpu_init_maps(struct kvm_vcpu *vcpu, int nr_irqs)
  */
 int kvm_vgic_get_max_vcpus(void)
 {
-	return vgic->max_hw_vcpus;
+	return vgic->max_gic_vcpus;
 }
 
 /**

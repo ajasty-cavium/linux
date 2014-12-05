@@ -133,7 +133,7 @@ struct vgic_params {
 	unsigned int	maint_irq;
 	/* Virtual control interface base address */
 	void __iomem	*vctrl_base;
-	int		max_hw_vcpus;
+	int		max_gic_vcpus;
 };
 
 struct vgic_vm_ops {
