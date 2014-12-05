@@ -68,7 +68,7 @@
 
 #define APM_CPU_PART_POTENZA	0x000
 
-#define ARM_CPU_PART_THUNDER	0x0A10
+#define ARM_CPU_PART_THUNDER	0x0A1
 
 #ifndef __ASSEMBLY__
 
