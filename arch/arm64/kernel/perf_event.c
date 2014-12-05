@@ -174,7 +174,7 @@ armpmu_event_set_period(struct perf_event *event,
 
 	local64_set(&hwc->prev_count, (u64)-left);
 
-	armpmu->write_counter(idx, (u64)(-left) & 0xffffffff);
+	armpmu->write_counter(idx, (u64)(-left));
 
 	perf_event_update_userpage(event);
 
@@ -819,6 +819,7 @@ static const unsigned armv8_pmuv3_perf_cache_map[PERF_COUNT_HW_CACHE_MAX]
 #define ARMV8_PMCR_D		(1 << 3) /* CCNT counts every 64th cpu cycle */
 #define ARMV8_PMCR_X		(1 << 4) /* Export to ETM */
 #define ARMV8_PMCR_DP		(1 << 5) /* Disable CCNT if non-invasive debug*/
+#define ARMV8_PMCR_LC		(1 << 6) /* Cycle counter overs to 64bit (1) or 32bit. */
 #define	ARMV8_PMCR_N_SHIFT	11	 /* Number of counters supported */
 #define	ARMV8_PMCR_N_MASK	0x1f
 #define	ARMV8_PMCR_MASK		0x3f	 /* Mask for writable bits */
@@ -899,30 +900,35 @@ static inline int armv8pmu_select_counter(int idx)
 	return idx;
 }
 
-static inline u32 armv8pmu_read_counter(int idx)
+static inline u64 armv8pmu_read_counter(int idx)
 {
-	u32 value = 0;
+	u64 value = 0;
 
 	if (!armv8pmu_counter_valid(idx))
 		pr_err("CPU%u reading wrong counter %d\n",
 			smp_processor_id(), idx);
 	else if (idx == ARMV8_IDX_CYCLE_COUNTER)
 		asm volatile("mrs %0, pmccntr_el0" : "=r" (value));
-	else if (armv8pmu_select_counter(idx) == idx)
-		asm volatile("mrs %0, pmxevcntr_el0" : "=r" (value));
+	else if (armv8pmu_select_counter(idx) == idx) {
+		u32 realvalue;
+		asm volatile("mrs %0, pmxevcntr_el0" : "=r" (realvalue));
+		value = realvalue;
+	}
 
 	return value;
 }
 
-static inline void armv8pmu_write_counter(int idx, u32 value)
+static inline void armv8pmu_write_counter(int idx, u64 value)
 {
 	if (!armv8pmu_counter_valid(idx))
 		pr_err("CPU%u writing wrong counter %d\n",
 			smp_processor_id(), idx);
 	else if (idx == ARMV8_IDX_CYCLE_COUNTER)
 		asm volatile("msr pmccntr_el0, %0" :: "r" (value));
-	else if (armv8pmu_select_counter(idx) == idx)
-		asm volatile("msr pmxevcntr_el0, %0" :: "r" (value));
+	else if (armv8pmu_select_counter(idx) == idx) {
+		u32 realvalue = value;
+		asm volatile("msr pmxevcntr_el0, %0" :: "r" (realvalue));
+	}
 }
 
 static inline void armv8pmu_write_evtype(int idx, u32 val)
@@ -1213,8 +1219,12 @@ static void armv8pmu_reset(void *info)
 	for (idx = ARMV8_IDX_CYCLE_COUNTER; idx < nb_cnt; ++idx)
 		armv8pmu_disable_event(NULL, idx);
 
-	/* Initialize & Reset PMNC: C and P bits. */
-	armv8pmu_pmcr_write(ARMV8_PMCR_P | ARMV8_PMCR_C);
+	/*
+	 * Initialize & Reset PMNC: C and P and LC bits.
+	 * Note LC bit turns on 64bit cycle counter which is always on
+	 * for AARCH64 implementations only.
+	 */
+	armv8pmu_pmcr_write(ARMV8_PMCR_P | ARMV8_PMCR_C | ARMV8_PMCR_LC);
 
 	/* Disable access from userspace. */
 	asm volatile("msr pmuserenr_el0, %0" :: "r" (0));
