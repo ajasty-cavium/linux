@@ -39,15 +39,20 @@
 #define THUNDER_PEM4_REG_BASE      (0x87e0c0000000 | (4 << 24))
 #define THUNDER_PEM5_REG_BASE      (0x87e0c0000000 | (5 << 24))
 
-#define THUNDER_GSER_N0_BASE        0x87e090000000
-#define THUNDER_GSER_SIZE           0xd000000
+#define THUNDER_GSER_N0_BASE		0x87e090000000
+#define THUNDER_GSER_SIZE		0xd000000
 
+#define SLIX_S2M_REGX_ACC		0x874001000000
+#define SLIX_S2M_REGX_ACC_SIZE		0x1000
+	
 #define THUNDER_GSER_PCIE_MASK  0x1
 #define THUNDER_GSER_BGX_MASK   0x4
 #define THUNDER_GSER_SATA_MASK  0x20
 
 
-void __iomem      *gser_base = NULL;
+void __iomem	*gser_base = NULL;
+void __iomem	*sli0_s2m_regx_base = NULL;
+void __iomem	*sli1_s2m_regx_base = NULL;
 
 enum thunder_pcie_device_type {
     THUNDER_ECAM,
@@ -155,12 +160,28 @@ static uint64_t thunder_get_gser_cfg_addr(int qlm)
     return ((uint64_t)gser_base) + 0x80 + (0x1000000 * qlm);
 }
 
+static void modify_slix_s2m_regx_acc(int sli, int regnum)
+{
+	uint64_t regval;
+	void __iomem *address;
+
+	if(!sli)
+		address = (void *)((uint64_t)sli0_s2m_regx_base) + (regnum & 255) * 0x10ull;
+	else
+		address = (void *)((uint64_t)sli1_s2m_regx_base) + (regnum & 255) * 0x10ull;
+
+	//regval = *(uint64_t *)(((uint64_t)sli_s2m_regx_base) + (sli & 1) * 0x1000000000ull + (regnum & 255) * 0x10ull);
+	regval = readq(address);
+	regval &= ~(0xFFFFFFFFull);
+	writeq(regval, address);
+}
+
 static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 					 unsigned int devfn)
 {
 	int supported = 0;
 	uint16_t bdf = (bus << 8) | devfn;
-    uint64_t gser_cfg;
+    	uint64_t gser_cfg;
 
 
 	if (ecam == 0) {
@@ -530,7 +551,7 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 #define PCIERC_CFG002 0x08
 #define PCIERC_CFG006 0x18
 
-static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
+static int thunder_pcierc_init(struct thunder_pcie *pcie)
 {
 	uint64_t pem_addr;
 	uint64_t region;
@@ -538,6 +559,7 @@ static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
 	uint64_t sli_group;
 	uint64_t node =0; //TODO find out from pem numbers
 	uint64_t gser_cfg;
+	int i;
 
 	/* device class as bridge */
 	//thunder_pcierc_config_write(pcie->pem_base, PCIERC_CFG006, 4, 0xff0100);
@@ -547,9 +569,17 @@ static int thunder_pcierc_config_init(struct thunder_pcie *pcie)
 	if(!(gser_cfg & THUNDER_GSER_PCIE_MASK))
 		return -ENODEV;
 
+
 	sli = (pcie->pem >= 3) ? 1 : 0;
 	sli_group= pcie->pem - sli*3;
-	region = ((sli_group << 6) | (0ULL << 4)) << 32; /* PEM number and access type */;
+	region = ((sli_group << 6) | (0ULL << 4)) << 32; /* PEM number and access type */
+
+	/* FIXME: TODO */
+	/* To support 32-bit PCIe devices, set S2M_REGx_ACC[BA]=0x0 */
+	for(i=0; i< 255; i++) {
+		modify_slix_s2m_regx_acc(sli, i);
+	}
+
 	pem_addr = (1ULL << 47) | (node << 44) | ((0x8 + sli) << 40) | region;
 	pcie->pem_sli_base = ioremap(pem_addr, (0xFFULL << 24) - 1);
 
@@ -639,6 +669,13 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 					 THUNDER_GSER_N0_BASE,
 					 THUNDER_GSER_SIZE);
 
+	if(sli0_s2m_regx_base == NULL)
+		sli0_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC,
+					 SLIX_S2M_REGX_ACC_SIZE);
+	if(sli1_s2m_regx_base == NULL)
+		sli1_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC+(1ull<<36),
+					 SLIX_S2M_REGX_ACC_SIZE);
+
 	if(pcie->device_type == THUNDER_ECAM) {
 		pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
 		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
@@ -651,16 +688,18 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 				0, 255, &res, NULL);
 	}
 	else {
-		if(thunder_pcierc_config_init(pcie)) {
-			pr_err("%s: PCIe RC%d not found\n",__func__,pcie->pem);
-			return -ENODEV;
-		}
-
 		pcie->pem_base = ioremap(cfg_base->start, 0x500);
 		if (!pcie->pem_base) {
 			pr_err("Unable to map PCIe RC CFG registers\n");
 			goto err_ioremap;
 		}
+
+		if(thunder_pcierc_init(pcie)) {
+			pr_err("%s: PCIe RC%d not found\n",__func__,pcie->pem);
+			iounmap(cfg_base->start);
+			return -ENODEV;
+		}
+
 
 		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006,0x4);
 		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base:%llx primary_bus:%x\n", __func__,
