@@ -8,6 +8,7 @@
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
  */
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -444,16 +445,16 @@ static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 
 	addr = thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
 
-    if(pcie->device_type == THUNDER_ECAM) {
-	supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn);
-    }
-    else if(pcie->device_type == THUNDER_PEM) {
-	supported = thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn);
+	if(pcie->device_type == THUNDER_ECAM) {
+		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn);
+	}
+	else if(pcie->device_type == THUNDER_PEM) {
+		supported = thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn);
 		addr = thunder_pcie_external_addr(pcie, busnr, devfn, reg);
-    }
-    else {
-        supported = 0;
-    }
+	}
+	else {
+		supported = 0;
+	}
 
 	switch (size) {
 	case 1:
@@ -550,6 +551,28 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 
 #define PCIERC_CFG002 0x08
 #define PCIERC_CFG006 0x18
+#define PCIERC_CFG032 0x80
+
+static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
+{
+	uint64_t regval;
+	void __iomem *address;
+
+	address = pcie->pem_base;
+	regval = readq(pcie->pem_base);
+	regval |= 0x10; // Set Link Enable bit
+	writeq(regval, address);
+
+
+	udelay(1000);
+	regval = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG032,0x4);
+	if(((regval>>29 & 0x1) == 0x0) || ((regval>>27 & 0x1) == 0x1)) {
+		printk("PCIe RC: Port %d Link Timeout\n",pcie->pem);
+		return -ENODEV;
+	}
+
+	return 0;
+}
 
 static int thunder_pcierc_init(struct thunder_pcie *pcie)
 {
@@ -559,7 +582,7 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	uint64_t sli_group;
 	uint64_t node =0; //TODO find out from pem numbers
 	uint64_t gser_cfg;
-	int i;
+	int i, ret = 0;
 
 	/* device class as bridge */
 	//thunder_pcierc_config_write(pcie->pem_base, PCIERC_CFG006, 4, 0xff0100);
@@ -569,6 +592,9 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	if(!(gser_cfg & THUNDER_GSER_PCIE_MASK))
 		return -ENODEV;
 
+	ret = thunder_pcierc_link_init(pcie);
+	if(ret)
+		return ret;
 
 	sli = (pcie->pem >= 3) ? 1 : 0;
 	sli_group= pcie->pem - sli*3;
@@ -583,7 +609,7 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	pem_addr = (1ULL << 47) | (node << 44) | ((0x8 + sli) << 40) | region;
 	pcie->pem_sli_base = ioremap(pem_addr, (0xFFULL << 24) - 1);
 
-	return 0;
+	return ret;
 }
 
 static int thunder_pcie_probe(struct platform_device *pdev)
@@ -696,7 +722,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 		if(thunder_pcierc_init(pcie)) {
 			pr_err("%s: PCIe RC%d not found\n",__func__,pcie->pem);
-			iounmap(cfg_base->start);
+			iounmap(pcie->pem_base);
 			return -ENODEV;
 		}
 
