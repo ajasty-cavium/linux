@@ -9,6 +9,7 @@
 
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/ip.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -393,7 +394,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->start_qs_rbdr_idx = qs->rbdr_cnt - 1;
 	rq->cont_rbdr_qs = qs->vnic_id;
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
-	rq->caching = 0;
+	rq->caching = 1;
 
 	/* Send a mailbox msg to PF to config RQ */
 	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
@@ -760,18 +761,14 @@ static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 {
 	int subdesc_cnt = MIN_SQ_DESC_PER_PKT_XMIT;
 
+	if (skb_shinfo(skb)->gso_size) {
+		subdesc_cnt = skb_shinfo(skb)->gso_size / nic->mtu;
+		subdesc_cnt *= MIN_SQ_DESC_PER_PKT_XMIT;
+		return subdesc_cnt;
+	}
+
 	if (skb_shinfo(skb)->nr_frags)
 		subdesc_cnt += skb_shinfo(skb)->nr_frags;
-
-#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		if (skb->protocol == htons(ETH_P_IP))
-			subdesc_cnt++;
-		if ((ip_hdr(skb)->protocol == IPPROTO_TCP) ||
-		    (ip_hdr(skb)->protocol == IPPROTO_UDP))
-			subdesc_cnt++;
-	}
-#endif
 
 	return subdesc_cnt;
 }
@@ -783,7 +780,7 @@ struct sq_hdr_subdesc *
 nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 			 int subdesc_cnt, struct sk_buff *skb)
 {
-	int qentry;
+	int qentry, proto;
 	void *desc;
 	struct snd_queue *sq;
 	struct sq_hdr_subdesc *hdr;
@@ -799,21 +796,27 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 	hdr->post_cqe = 1;
 	hdr->subdesc_cnt = subdesc_cnt;
 	hdr->tot_len = skb->len;
-#ifdef VNIC_HW_TSO_SUPPORT
-	if (!skb_shinfo(skb)->gso_size)
-		return hdr;
 
-	/* Packet to be subjected to TSO */
-	hdr->tso = 1;
-	hdr->tso_l4_offset = (int)(skb_transport_header(skb) - skb->data) +
-				tcp_hdrlen(skb);
-	hdr->tso_max_paysize = skb_shinfo(skb)->gso_size + hdr->tso_l4_offset;
-	/* TBD: These fields have to be setup properly */
-	hdr->tso_sdc_first	= 0;
-	hdr->tso_sdc_cont	= 0;
-	hdr->tso_flags_first	= 0;
-	hdr->tso_flags_last	= 0;
-#endif
+	if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		if (skb->protocol != htons(ETH_P_IP))
+			return hdr;
+		hdr->csum_l3 = 0;
+		hdr->l3_offset = skb_network_offset(skb);
+		hdr->l4_offset = skb_transport_offset(skb);
+		proto = ip_hdr(skb)->protocol;
+		switch (proto) {
+		case IPPROTO_TCP:
+			hdr->csum_l4 = SEND_L4_CSUM_TCP;
+			break;
+		case IPPROTO_UDP:
+			hdr->csum_l4 = SEND_L4_CSUM_UDP;
+			break;
+		case IPPROTO_SCTP:
+			hdr->csum_l4 = SEND_L4_CSUM_SCTP;
+			break;
+		}
+	}
+
 	return hdr;
 }
 
@@ -834,8 +837,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 	gather->subdesc_type = SQ_DESC_TYPE_GATHER;
 	gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
 	gather->size = skb_is_nonlinear(skb) ? skb_headlen(skb) : skb->len;
-	gather->addr = pci_map_single(nic->pdev, skb->data,
-				gather->size, PCI_DMA_TODEVICE);
+	gather->addr = virt_to_phys(skb->data);
 
 	if (!skb_is_nonlinear(skb))
 		return;
@@ -852,71 +854,9 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 		gather->subdesc_type = SQ_DESC_TYPE_GATHER;
 		gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
 		gather->size = skb_frag_size(frag);
-		gather->addr = pci_map_single(nic->pdev, skb_frag_address(frag),
-						gather->size, PCI_DMA_TODEVICE);
+		gather->addr = virt_to_phys(skb_frag_address(frag));
 	}
 }
-
-#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-static void nicvf_fill_l3_crc_subdesc(struct sq_crc_subdesc *l3,
-				      struct sk_buff *skb)
-{
-	int crc_pos;
-
-	crc_pos = skb_network_header(skb) - skb_mac_header(skb);
-	crc_pos += offsetof(struct iphdr, check);
-
-	l3->subdesc_type = SQ_DESC_TYPE_CRC;
-	l3->crc_alg = SEND_CRCALG_CRC32;
-	l3->crc_insert_pos = crc_pos;
-	l3->hdr_start = skb_network_offset(skb);
-	l3->crc_len = skb_transport_header(skb) - skb_network_header(skb);
-	l3->crc_ival = 0;
-}
-
-static void nicvf_fill_l4_crc_subdesc(struct sq_crc_subdesc *l4,
-				      struct sk_buff *skb)
-{
-	l4->subdesc_type = SQ_DESC_TYPE_CRC;
-	l4->crc_alg = SEND_CRCALG_CRC32;
-	l4->crc_insert_pos = skb->csum_start + skb->csum_offset;
-	l4->hdr_start = skb->csum_start;
-	l4->crc_len = skb->len - skb_transport_offset(skb);
-	l4->crc_ival = 0;
-}
-
-/* SQ CRC subdescriptor
- * Must follow HDR and precede GATHER, IMM subdescriptors
- */
-static void nicvf_sq_add_crc_subdesc(struct nicvf *nic, struct queue_set *qs,
-				     int sq_num, struct sk_buff *skb)
-{
-	int proto;
-	void *desc;
-	struct sq_crc_subdesc *crc;
-	struct snd_queue *sq;
-
-	if (skb->ip_summed != CHECKSUM_PARTIAL)
-		return;
-
-	if (skb->protocol != htons(ETH_P_IP))
-		return;
-
-	sq = &qs->sq[sq_num];
-	nicvf_get_sq_desc(qs, sq_num, &desc);
-
-	crc = (struct sq_crc_subdesc *)desc;
-
-	nicvf_fill_l3_crc_subdesc(crc, skb);
-
-	proto = ip_hdr(skb)->protocol;
-	if ((proto == IPPROTO_TCP) || (proto == IPPROTO_UDP)) {
-		nicvf_get_sq_desc(qs, sq_num, &desc);
-		crc = (struct sq_crc_subdesc *)desc;
-		nicvf_fill_l4_crc_subdesc(crc, skb);
-	}
-}
-#endif
 
 /* Append an skb to a SQ for packet transfer. */
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
@@ -936,12 +876,6 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 
 	/* Add SQ header subdesc */
 	hdr_desc = nicvf_sq_add_hdr_subdesc(qs, sq_num, subdesc_cnt - 1, skb);
-
-#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-	/* Add CRC subdescriptor for IP/TCP/UDP (L3/L4) crc calculation */
-	if (skb->ip_summed == CHECKSUM_PARTIAL)
-		nicvf_sq_add_crc_subdesc(nic, qs, sq_num, skb);
-#endif
 
 	/* Add SQ gather subdesc */
 	nicvf_sq_add_gather_subdesc(nic, qs, sq_num, skb);

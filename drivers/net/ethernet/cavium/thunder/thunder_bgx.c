@@ -57,7 +57,7 @@ struct bgx {
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
 
-static int bgx_lmac_xaui_link_init(struct lmac *lmac);
+static int bgx_xaui_check_link(struct lmac *lmac);
 
 /* Supported devices */
 static const struct pci_device_id bgx_id_table[] = {
@@ -152,7 +152,7 @@ static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
 }
 #endif
 
-static void bgx_lmac_change_link_state(struct lmac *lmac)
+static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
 	struct bgx *bgx = lmac->bgx;
 	uint64_t cmr_cfg;
@@ -257,10 +257,9 @@ void bgx_lmac_handler(struct net_device *netdev)
 	}
 
 	if (lmac->is_sgmii) {
-		bgx_lmac_change_link_state(lmac);
+		bgx_sgmii_change_link_state(lmac);
 	} else {
-		if (!lmac->link_up)
-			bgx_lmac_xaui_link_init(lmac);
+		bgx_xaui_check_link(lmac);
 	}
 }
 
@@ -608,7 +607,7 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, int lmacid, int lmac_type)
 	return 0;
 }
 
-static int bgx_lmac_xaui_link_init(struct lmac *lmac)
+static int bgx_xaui_check_link(struct lmac *lmac)
 {
 	struct bgx *bgx = lmac->bgx;
 	uint64_t cfg;

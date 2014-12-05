@@ -356,15 +356,16 @@ static int nicvf_set_rss_hash_opts(struct nicvf *nic,
 	uint64_t rss_cfg = nicvf_reg_read(nic, NIC_VNIC_RSS_CFG);
 
 	if (!rss->enable)
-		netdev_err(dev, "RSS is disabled, hash cannot be set\n");
+		netdev_err(nic->netdev,
+			   "RSS is disabled, hash cannot be set\n");
 
-	netdev_info(dev, "Set RSS flow type = %d, data = %d\n",
+	netdev_info(nic->netdev, "Set RSS flow type = %d, data = %lld\n",
 		    info->flow_type, info->data);
 
 	if (!(info->data & RXH_IP_SRC) || !(info->data & RXH_IP_DST))
 		return -EINVAL;
 
-	switch (cmd->flow_type) {
+	switch (info->flow_type) {
 	case TCP_V4_FLOW:
 	case TCP_V6_FLOW:
 		switch (info->data & (RXH_L4_B_0_1 | RXH_L4_B_2_3)) {
@@ -412,7 +413,7 @@ static int nicvf_set_rss_hash_opts(struct nicvf *nic,
 		return -EINVAL;
 	}
 
-	nicvf_reg_read(nic, NIC_VNIC_RSS_CFG, rss_cfg);
+	nicvf_reg_write(nic, NIC_VNIC_RSS_CFG, rss_cfg);
 	return 0;
 }
 

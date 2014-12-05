@@ -36,17 +36,11 @@
 
 /* VNIC HW optimiation features */
 #define	VNIC_RX_CSUM_OFFLOAD_SUPPORT
-#undef	VNIC_TX_CSUM_OFFLOAD_SUPPORT
-#undef	VNIC_SG_SUPPORT
+#define	VNIC_TX_CSUM_OFFLOAD_SUPPORT
+#define	VNIC_SG_SUPPORT
 #undef	VNIC_TSO_SUPPORT
 #undef	VNIC_LRO_SUPPORT
 #undef  VNIC_RSS_SUPPORT
-
-/* TSO not supported in Thunder pass1 */
-#ifdef	VNIC_TSO_SUPPORT
-#define	VNIC_SW_TSO_SUPPORT
-#undef	VNIC_HW_TSO_SUPPORT
-#endif
 
 /* ETHTOOL enable or disable, undef this to disable */
 #define	NICVF_ETHTOOL_ENABLE

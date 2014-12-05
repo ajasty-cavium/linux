@@ -833,7 +833,7 @@ static int nicvf_register_misc_interrupt(struct nicvf *nic)
 	return 0;
 }
 
-#ifdef VNIC_SW_TSO_SUPPORT
+#ifdef VNIC_TSO_SUPPORT
 static int nicvf_sw_tso(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct sk_buff *segs, *nskb;
@@ -875,37 +875,18 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 		return NETDEV_TX_OK;
 	}
 
-#ifdef VNIC_SW_TSO_SUPPORT
+#ifdef VNIC_TSO_SUPPORT
 	if (netdev->features & NETIF_F_TSO)
 		ret = nicvf_sw_tso(skb, netdev);
 #endif
 	if (ret == NETDEV_TX_OK)
 		return NETDEV_TX_OK;
 
-#ifndef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-	/* Calculate checksum in software */
-	if (skb->ip_summed == CHECKSUM_PARTIAL) {
-		if (unlikely(skb_checksum_help(skb))) {
-			netdev_dbg(netdev, "unable to do checksum\n");
-			dev_kfree_skb_any(skb);
-			return NETDEV_TX_OK;
-		}
-	}
-#endif
-#ifdef VNIC_HW_TSO_SUPPORT
-	if (skb_shinfo(skb)->gso_size && (skb->protocol == ETH_P_IP) &&
-	    (ip_hdr(skb)->protocol != IPPROTO_TCP)) {
-		netdev_dbg(netdev,
-			   "Only TCP segmentation is supported, dropping packet\n");
-		dev_kfree_skb_any(skb);
-		return NETDEV_TX_OK;
-	}
-#endif
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
 		nic->drv_stats.tx_busy++;
-		netdev_err(netdev, "VF%d: TX ring full, stopping queue%d\n",
-			   nic->vf_id, qid);
+		netdev_info(netdev, "VF%d: TX ring full, stopping queue%d\n",
+			    nic->vf_id, qid);
 		return NETDEV_TX_BUSY;
 	}
 
@@ -1078,6 +1059,7 @@ static int nicvf_change_mtu(struct net_device *netdev, int new_mtu)
 	if (nicvf_update_hw_max_frs(nic, new_mtu))
 		return -EINVAL;
 	netdev->mtu = new_mtu;
+	nic->mtu = new_mtu;
 
 	return 0;
 }

@@ -341,7 +341,7 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 		nic->num_vf_en += lmac_cnt;
 
 		/* Program LMAC credits */
-		lmac_credit = (1ull << 1); /* chennel credit enable */
+		lmac_credit = (1ull << 1); /* channel credit enable */
 		lmac_credit |= (0x1ff << 2);
 		lmac_credit |= (((((48 * 1024) / lmac_cnt) -
 				NIC_HW_MAX_FRS) / 16) << 12);
