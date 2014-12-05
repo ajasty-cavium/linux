@@ -527,7 +527,7 @@ int vgic_v2_init_emulation(struct kvm *kvm)
 	dist->vm_ops.vgic_init = vgic_v2_init;
 	dist->vm_ops.vgic_init_maps = vgic_v2_init_maps;
 
-	kvm->arch.max_vcpus = 8;
+	kvm->arch.max_vcpus = VGIC_V2_MAX_CPUS;
 
 	return 0;
 }

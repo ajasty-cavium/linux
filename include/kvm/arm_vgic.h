@@ -33,6 +33,7 @@
 #define VGIC_V2_MAX_LRS		(1 << 6)
 #define VGIC_V3_MAX_LRS		16
 #define VGIC_MAX_IRQS		1024
+#define VGIC_V2_MAX_CPUS	8
 
 /* Sanity checks... */
 #if (KVM_MAX_VCPUS > 255)
