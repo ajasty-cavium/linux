@@ -41,6 +41,7 @@
 #define THUNDER_PEM5_REG_BASE      (0x87e0c0000000 | (5 << 24))
 
 #define THUNDER_GSER_N0_BASE		0x87e090000000
+#define THUNDER_GSER_N1_BASE		0x97e090000000
 #define THUNDER_GSER_SIZE		0xd000000
 
 #define SLIX_S2M_REGX_ACC		0x874001000000
@@ -51,7 +52,8 @@
 #define THUNDER_GSER_SATA_MASK  0x20
 
 
-void __iomem	*gser_base = NULL;
+void __iomem	*gser_base0 = NULL;
+void __iomem	*gser_base1 = NULL;
 void __iomem	*sli0_s2m_regx_base = NULL;
 void __iomem	*sli1_s2m_regx_base = NULL;
 
@@ -91,7 +93,8 @@ int pci_requester_id(struct pci_dev *dev)
 
 	if(pcie->device_type == THUNDER_ECAM) {
 		/* this is easy case */
-		return ((pci_domain_nr(dev->bus) << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
+		return (((pci_domain_nr(dev->bus) >> 2) << 19) |
+				((pci_domain_nr(dev->bus)%4) << 16) | ((dev)->bus->number << 8) | (dev)->devfn);
 	}
 	else {
 		if(pcie->pem < 3 ) {
@@ -156,10 +159,13 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 			pci_dev_resource_fixup);
 
-static uint64_t thunder_get_gser_cfg_addr(int qlm)
+static uint64_t thunder_get_gser_cfg_addr(int node, int qlm)
 {
-    return ((uint64_t)gser_base) + 0x80 + (0x1000000 * qlm);
-}
+	if ( node )
+		return ((uint64_t)gser_base1) + 0x80 + (0x1000000 * qlm);
+	else
+		return ((uint64_t)gser_base0) + 0x80 + (0x1000000 * qlm);
+ }
 
 static void modify_slix_s2m_regx_acc(int sli, int regnum)
 {
@@ -206,12 +212,12 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 1;
 				break;
 			case 0x180:   /* BGX0 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,0);
                 if(gser_cfg & THUNDER_GSER_BGX_MASK)
                     supported = 1;
 				break;
 			case 0x181:   /* BGX1 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,1);
                 if(gser_cfg & THUNDER_GSER_BGX_MASK)
                     supported = 1;
 				break;
@@ -225,7 +231,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x028:   /* AHCI1 */
 			case 0x030:   /* AHCI2 */
 			case 0x038:   /* AHCI3 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(2);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,2);
                 if(gser_cfg & THUNDER_GSER_SATA_MASK)
                     supported = 1;
                 break;
@@ -233,7 +239,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x048:   /* AHCI5 */
 			case 0x050:   /* AHCI5 */
 			case 0x058:   /* AHCI7 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(3);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,3);
                 if(gser_cfg & THUNDER_GSER_SATA_MASK)
                     supported = 1;
                 break;
@@ -277,7 +283,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x020:   /* AHCI9*/
 			case 0x028:   /* AHCI10 */
 			case 0x030:   /* AHCI11 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(6);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,6);
                 if(gser_cfg & THUNDER_GSER_SATA_MASK)
                     supported = 1;
                 break;
@@ -285,7 +291,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x040:   /* AHCI13 */
 			case 0x048:   /* AHCI14 */
 			case 0x050:   /* AHCI15 */
-                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(7);
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,7);
                 if(gser_cfg & THUNDER_GSER_SATA_MASK)
                     supported = 1;
                 break;
@@ -297,6 +303,120 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 0;
 		}
 	}
+
+	if (ecam == 4) {
+		switch (bdf) {
+			case 0x008:   /* RSL bridge */
+			case 0x010:   /* SMMU */
+			case 0x030:   /* GPIO */
+			case 0x038:   /* MPI */
+			case 0x0A0:   /* RAD bridge */
+			case 0x0A8:   /* ZIP bridge */
+			case 0x0B0:   /* DFA bridge */
+			case 0x100:   /* MRML */
+			case 0x101:   /* RST */
+			case 0x103:   /* FUS */
+			case 0x104:   /* FUSF */
+			case 0x109:   /* L2C */
+			case 0x10A:   /* SGPIO */
+			case 0x10C:   /* EMM */
+			case 0x10D:   /* KEY */
+			case 0x10e:   /* MIO_BOOT */
+				supported = 1;
+				break;
+			case 0x180:   /* BGX0 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1,0);
+                if(gser_cfg & THUNDER_GSER_BGX_MASK)
+                    supported = 1;
+				break;
+			case 0x181:   /* BGX1 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1,1);
+                if(gser_cfg & THUNDER_GSER_BGX_MASK)
+                    supported = 1;
+				break;
+			default:
+				supported = 0;
+		}
+	} else if (ecam == 5) {
+		switch (bdf) {
+			case 0x008:   /* SMMU */
+			case 0x020:   /* AHCI0*/
+			case 0x028:   /* AHCI1 */
+			case 0x030:   /* AHCI2 */
+			case 0x038:   /* AHCI3 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1,2);
+                if(gser_cfg & THUNDER_GSER_SATA_MASK)
+                    supported = 1;
+                break;
+			case 0x040:   /* AHCI4 */
+			case 0x048:   /* AHCI5 */
+			case 0x050:   /* AHCI5 */
+			case 0x058:   /* AHCI7 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1,3);
+                if(gser_cfg & THUNDER_GSER_SATA_MASK)
+                    supported = 1;
+                break;
+			//case 0x080:   /* PCIRC0 */
+			//case 0x098:   /* PCIRC1 */
+			//case 0x0A8:   /* PCIRC2 */
+			default:
+				supported = 0;
+		}
+	} else if (ecam == 6) {
+		switch (bdf) {
+			case 0x008:   /* SMMU */
+			case 0x010:   /* NIC Bridge */
+			case 0x100:   /* NIC PF */
+			case 0x101:   /* NIC VF */
+			case 0x102:   /* NIC VF */
+			case 0x103:   /* NIC VF */
+			case 0x104:   /* NIC VF */
+			case 0x105:   /* NIC VF */
+			case 0x106:   /* NIC VF */
+			case 0x107:   /* NIC VF */
+			case 0x108:   /* NIC VF */
+			case 0x109:   /* NIC VF */
+			case 0x10A:   /* NIC VF */
+			case 0x10B:   /* NIC VF */
+			case 0x10C:   /* NIC VF */
+			case 0x10D:   /* NIC VF */
+			case 0x10E:   /* NIC VF */
+			case 0x110:   /* NIC VF */
+				supported = 1;
+				break;
+			default:
+				supported = 0;
+		}
+	} else if (ecam == 7) {
+		switch (bdf) {
+			case 0x008:   /* SMMU */
+                supported = 1;
+                break;
+			case 0x018:   /* AHCI8 */
+			case 0x020:   /* AHCI9*/
+			case 0x028:   /* AHCI10 */
+			case 0x030:   /* AHCI11 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1, 6);
+                if(gser_cfg & THUNDER_GSER_SATA_MASK)
+                    supported = 1;
+                break;
+			case 0x038:   /* AHCI12 */
+			case 0x040:   /* AHCI13 */
+			case 0x048:   /* AHCI14 */
+			case 0x050:   /* AHCI15 */
+                gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(1, 7);
+                if(gser_cfg & THUNDER_GSER_SATA_MASK)
+                    supported = 1;
+                break;
+			//case 0x080:   /* PCIRC3 */
+			//case 0x098:   /* PCIRC4 */
+			//case 0x0A8:   /* PCIRC5 */
+				break;
+			default:
+				supported = 0;
+		}
+	}
+
 	return supported;
 }
 
@@ -315,32 +435,32 @@ static int thunder_pcie_check_pem_cfg_access(int pem, unsigned int bus,
 
     switch (pem) {
     case 0:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(2);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,2);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
     case 1:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(3);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,3);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
     case 2:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(4);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0, 4);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
     case 3:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(5);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,5);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
     case 4:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(6);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,6);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
     case 5:
-        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(7);
+        gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,7);
         if(gser_cfg & THUNDER_GSER_PCIE_MASK)
             supported = 1;
         break;
@@ -588,7 +708,7 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	//thunder_pcierc_config_write(pcie->pem_base, PCIERC_CFG006, 4, 0xff0100);
 
 	/* FIXME TODO: Right now QLM num==(PEM num+2) but not always*/
-	gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(pcie->pem+2);
+	gser_cfg = *(uint64_t *)thunder_get_gser_cfg_addr(0,pcie->pem+2);
 	if(!(gser_cfg & THUNDER_GSER_PCIE_MASK))
 		return -ENODEV;
 
@@ -650,19 +770,19 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			break;
 		case THUNDER_ECAM4_CFG_BASE:
 			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 0;
+			pcie->ecam = 4;
 			break;
 		case THUNDER_ECAM5_CFG_BASE:
 			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 1;
+			pcie->ecam = 5;
 			break;
 		case THUNDER_ECAM6_CFG_BASE:
 			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 2;
+			pcie->ecam = 6;
 			break;
 		case THUNDER_ECAM7_CFG_BASE:
 			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 3;
+			pcie->ecam = 7;
 			break;
 		case THUNDER_PEM0_REG_BASE:
 			pcie->device_type = THUNDER_PEM;
@@ -690,10 +810,16 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			break;
 	}
 
-	if (gser_base == NULL)
-		gser_base = devm_ioremap(&pdev->dev,
+	if (gser_base0 == NULL)
+		gser_base0 = devm_ioremap(&pdev->dev,
 					 THUNDER_GSER_N0_BASE,
 					 THUNDER_GSER_SIZE);
+#ifdef CONFIG_NUMA
+	if (gser_base1 == NULL)
+		gser_base1 = devm_ioremap(&pdev->dev,
+					 THUNDER_GSER_N1_BASE,
+					 THUNDER_GSER_SIZE);
+#endif
 
 	if(sli0_s2m_regx_base == NULL)
 		sli0_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC,
@@ -702,14 +828,25 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		sli1_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC+(1ull<<36),
 					 SLIX_S2M_REGX_ACC_SIZE);
 
+
 	if(pcie->device_type == THUNDER_ECAM) {
 		pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base)) {
+		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base0)) {
 			ret = PTR_ERR(pcie->cfg_base);
 			goto err_ioremap;
 		}
-		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base:%llx\n", __func__,
-				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base);
+
+		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base0:%llx\n", __func__,
+				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base0);
+
+#ifdef CONFIG_NUMA
+		if ( IS_ERR(gser_base1)) {
+			ret = PTR_ERR(pcie->cfg_base);
+			goto err_ioremap;
+		}
+		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base1:%llx\n", __func__,
+				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base1);
+#endif
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				0, 255, &res, NULL);
 	}
@@ -728,8 +865,8 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 
 		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006,0x4);
-		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base:%llx primary_bus:%x\n", __func__,
-				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base,primary_bus);
+		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base0:%llx primary_bus:%x\n", __func__,
+				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base0,primary_bus);
 		primary_bus = ( primary_bus >>  0x8) & 0xff;
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				primary_bus, 255, &res, &iobase);

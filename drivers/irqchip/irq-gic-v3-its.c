@@ -427,6 +427,11 @@ static void its_send_single_command(struct its_node *its,
 	}
 	sync_col = builder(cmd, desc);
 	its_flush_cmd(its, cmd);
+#ifdef CONFIG_NUMA
+	/*  SYNC has issues on multi-node thunder.
+	 */
+	sync_col = 0;
+#endif
 
 	if (sync_col) {
 		sync_cmd = its_allocate_entry(its);
