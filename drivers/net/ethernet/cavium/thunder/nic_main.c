@@ -420,6 +420,8 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 	rssi_base = (lmac * nic->rss_ind_tbl_size) + (bgx * NIC_RSSI_PER_BGX);
 
 	/* Rx channel configuration */
+	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_BP_CFG | (chan << 3),
+		      (1ull << 63) | (vnic << 0));
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3),
 		      (cfg->cpi_alg << 62) | (cpi_base << 48));
 

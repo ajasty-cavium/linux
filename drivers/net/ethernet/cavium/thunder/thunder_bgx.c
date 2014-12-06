@@ -35,6 +35,8 @@ struct lmac {
 	unsigned int            last_link;
 	unsigned int            last_speed;
 	bool			is_sgmii;
+	struct delayed_work	dwork;
+	struct workqueue_struct *check_link;
 } lmac;
 
 struct bgx {
@@ -98,7 +100,7 @@ static void bgx_reg_modify(struct bgx *bgx, uint8_t lmac,
 static int bgx_poll_reg(struct bgx *bgx, uint8_t lmac,
 			uint64_t reg, uint64_t mask, bool zero)
 {
-	int timeout = 200;
+	int timeout = 100;
 	uint64_t reg_val;
 
 	while (timeout) {
@@ -250,7 +252,7 @@ void bgx_lmac_handler(struct net_device *netdev)
 		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid_bd,
 			phydev->speed, 
 			DUPLEX_FULL == phydev->duplex ? "Full" : "Half");
-			lmac->link_up = true;
+		lmac->link_up = true;
 	} else {
 		lmac->link_up = false;
 		pr_info("LMAC%d: Link is down\n", lmac->lmacid_bd);
@@ -583,9 +585,9 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, int lmacid, int lmac_type)
 	cfg = cfg & (~((1ULL << 25) | (1ULL << 22) | (1ULL << 12)));
 	bgx_reg_write(bgx, lmacid, BGX_SPUX_AN_ADV, cfg);
 
-	cfg = bgx_reg_read(bgx, lmacid, BGX_SPU_DBG_CONTROL);
+	cfg = bgx_reg_read(bgx, 0, BGX_SPU_DBG_CONTROL);
 	cfg &= ~SPU_DBG_CTL_AN_ARB_LINK_CHK_EN;
-	bgx_reg_write(bgx, lmacid, BGX_SPU_DBG_CONTROL, cfg);
+	bgx_reg_write(bgx, 0, BGX_SPU_DBG_CONTROL, cfg);
 
 	/* Enable lmac */
 	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG, CMR_EN);
@@ -612,9 +614,9 @@ static int bgx_xaui_check_link(struct lmac *lmac)
 	struct bgx *bgx = lmac->bgx;
 	uint64_t cfg;
 	int lmacid = lmac->lmacid;
-	int tx_link_ok, rx_link_ok, rcv_link;
+//	int tx_link_ok, rx_link_ok, rcv_link;
 	int lmac_type = bgx->lmac_type;
-
+#if 0
 	tx_link_ok = bgx_reg_read(bgx, lmacid,
 				  BGX_SMUX_TX_CTL) & SMU_TX_CTL_LNK_STATUS;
 	rx_link_ok = bgx_reg_read(bgx, lmacid,
@@ -624,7 +626,7 @@ static int bgx_xaui_check_link(struct lmac *lmac)
 
 	if ((tx_link_ok == 0) && (rx_link_ok == 0) && rcv_link)
 		return 0;
-
+#endif
 	bgx_reg_modify(bgx, lmacid, BGX_SPUX_MISC_CONTROL, SPU_MISC_CTL_RX_DIS);
 	if (bgx->use_training) {
 		cfg = bgx_reg_read(bgx, lmacid, BGX_SPUX_INT);
@@ -719,6 +721,42 @@ static int bgx_xaui_check_link(struct lmac *lmac)
 	return 0;
 }
 
+static void bgx_poll_for_link(struct work_struct *work)
+{
+	struct lmac *lmac;
+	uint64_t link;
+
+	lmac = container_of(work, struct lmac, dwork.work);
+
+	/* Receive link is latching low. Force it high and verify it */
+	bgx_reg_modify(lmac->bgx, lmac->lmacid,
+		       BGX_SPUX_STATUS1, SPU_STATUS1_RCV_LNK);
+	bgx_poll_reg(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1,
+		     SPU_STATUS1_RCV_LNK, false);
+
+	link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1);
+	if (link & SPU_STATUS1_RCV_LNK) {
+		lmac->link_up = 1;
+		lmac->last_speed = 10000;
+		lmac->last_duplex = 1;
+	} else {
+		lmac->link_up = 0;
+	}
+
+	if (lmac->last_link != lmac->link_up) {
+		lmac->last_link = lmac->link_up;
+		if (lmac->link_up) {
+			bgx_xaui_check_link(lmac);
+			pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid_bd,
+				lmac->last_speed, "Full");
+		} else {
+			pr_info("LMAC%d: Link is down\n", lmac->lmacid_bd);
+		}
+	}
+
+	queue_delayed_work(lmac->check_link, &lmac->dwork, HZ * 2);
+}
+
 static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
 	uint64_t dmac_bcast = (1ULL << 48) - 1;
@@ -760,14 +798,26 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	/* Register interrupts */
 	bgx_register_interrupts(bgx, lmacid);
 
-	lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
-				      bgx_lmac_handler, 0,
-				      PHY_INTERFACE_MODE_SGMII);
+	if ((bgx->lmac_type != BGX_MODE_XFI) &&
+	    (bgx->lmac_type != BGX_MODE_XLAUI) &&
+	    (bgx->lmac_type != BGX_MODE_40G_KR) &&
+	    (bgx->lmac_type != BGX_MODE_10G_KR)) {
+		lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
+					      bgx_lmac_handler, 0,
+					      PHY_INTERFACE_MODE_SGMII);
 
-	if (!lmac->phydev)
-		return -ENODEV;
+		if (!lmac->phydev)
+			return -ENODEV;
 
-	phy_start_aneg(lmac->phydev);
+		phy_start_aneg(lmac->phydev);
+	} else {
+		lmac->check_link = alloc_workqueue("check_link", WQ_UNBOUND |
+						   WQ_MEM_RECLAIM, 1);
+		if (!lmac->check_link)
+			return -ENOMEM;
+		INIT_DELAYED_WORK(&lmac->dwork, bgx_poll_for_link);
+		queue_delayed_work(lmac->check_link, &lmac->dwork, 0);
+	}
 
 	return 0;
 }
@@ -884,6 +934,31 @@ static void bgx_init_hw(struct bgx *bgx)
 		bgx_reg_write(bgx, 0, BGX_CMR_RX_STREERING + (i * 8), 0x00);
 }
 
+static int bgx_check_config(struct device_node *np_bgx, int bgx_id)
+{
+	const char *mode;
+	int qlm_mode;
+
+	mode = of_get_property(np_bgx, "mode", NULL);
+
+	if (bgx_id == 0)
+		qlm_mode = QLM0_MODE;
+	else
+		qlm_mode = QLM1_MODE;
+
+	switch (qlm_mode) {
+	case QLM_MODE_SGMII:
+		return strcmp(mode, "sgmii");
+	case QLM_MODE_XAUI_1X4:
+		return strcmp(mode, "xaui");
+	case QLM_MODE_XFI_4X1:
+		return strcmp(mode, "xfi");
+	default:
+		return 1;
+	}
+	return 1;
+}
+
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	int    err;
@@ -926,6 +1001,10 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Get BGX node from DT */
 	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
 	np_bgx = of_find_node_by_name(NULL, bgx_sel);
+	if (bgx_check_config(np_bgx, bgx->bgx_id)) {
+		dev_err(dev, "DTS and driver QLM modes doesn't match\n");
+		goto err_enable;
+	}
 
 	for_each_child_of_node(np_bgx, np_child) {
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
