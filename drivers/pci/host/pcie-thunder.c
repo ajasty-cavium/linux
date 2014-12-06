@@ -310,7 +310,7 @@ static int thunder_pcie_check_pem_cfg_access(int pem, unsigned int bus,
     //TODO: 8 lane config needs to be handled supperately.
     //Hoping it should work..
 
-    if(devfn)
+    if(PCI_SLOT(devfn))
         return supported;
 
     switch (pem) {
