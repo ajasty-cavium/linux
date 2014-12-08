@@ -735,13 +735,13 @@ static bool call_range_handler(struct kvm_vcpu *vcpu,
 	return ret;
 }
 
-/*
+/**
  * vgic_handle_mmio_range - handle an in-kernel MMIO access
  * @vcpu:	pointer to the vcpu performing the access
  * @run:	pointer to the kvm_run structure
  * @mmio:	pointer to the data describing the access
- * @ranges:	pointer to the register defining structure
- * @mmio_base:	base address for this mapping
+ * @ranges:	array of MMIO ranges in a given region
+ * @mmio_base:	base address of that region
  *
  * returns true if the MMIO access could be performed
  */
