@@ -694,6 +694,8 @@ static bool vgic_validate_access(const struct vgic_dist *dist,
  * We do this in a little endian fashion regardless of the host's
  * or guest's endianness, because the GIC is always LE and the rest of
  * the code (vgic_reg_access) also puts it in a LE fashion already.
+ * At this point we have already identified the handle function, so
+ * range points to that one entry and offset is relative to this.
  */
 static bool call_range_handler(struct kvm_vcpu *vcpu,
 			       struct kvm_exit_mmio *mmio,
