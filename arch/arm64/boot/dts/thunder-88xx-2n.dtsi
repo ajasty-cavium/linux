@@ -1469,7 +1469,7 @@
 		#size-cells = <0>;
 		reg = <0x97e0 0x05003800 0x0 0x30>;
 
-		phy8: lmac8 {
+		phy8: lmac0 {
 			reg = <0> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
@@ -1479,7 +1479,7 @@
 					<3 0x13 0 0x8a08>;
 
 		};
-		phy9: lmac9 {
+		phy9: lmac1 {
 			reg = <1> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1487,7 +1487,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
 		};
-		phy10: lmac10 {
+		phy10: lmac2 {
 			reg = <2> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1496,7 +1496,7 @@
 			      <3 0x13 0 0x8a08>;
 
 		};
-		phy11: lmac11 {
+		phy11: lmac3 {
 			reg = <3> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1512,7 +1512,7 @@
 		#size-cells = <0>;
 		reg = <0x97e0 0x05003880 0x0 0x30>;
 
-		phy12: lmac12 {
+		phy12: lmac4 {
 			reg = <4> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1520,7 +1520,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
 	       };
-		phy13: lmac13 {
+		phy13: lmac5 {
 			reg = <5> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1528,7 +1528,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
 	       };
-		phy14: lmac14 {
+		phy14: lmac6 {
 			reg = <6> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -1536,7 +1536,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
 		};
-		phy15: lmac15 {
+		phy15: lmac7 {
 			reg = <7> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
