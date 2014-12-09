@@ -39,6 +39,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_platform.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -351,7 +352,7 @@ struct arm_smmu_master_cfg {
 };
 
 struct arm_smmu_master {
-	struct device_node		*of_node;
+	struct device			*dev;
 	struct rb_node			node;
 	struct arm_smmu_master_cfg	cfg;
 };
@@ -441,21 +442,23 @@ static void parse_driver_options(struct arm_smmu_device *smmu)
 	} while (arm_smmu_options[++i].opt);
 }
 
-static struct device_node *dev_get_dev_node(struct device *dev)
+static struct device *dev_get_dev_node(struct device *dev)
 {
-	if (dev_is_pci(dev)) {
-		struct pci_bus *bus = to_pci_dev(dev)->bus;
 
-		while (!pci_is_root_bus(bus))
-			bus = bus->parent;
-		return bus->bridge->parent->of_node;
-	}
+	if (!dev_is_pci(dev))
+		return dev;
 
-	return dev->of_node;
+	bus = to_pci_dev(dev)->bus;
+
+	while (!pci_is_root_bus(bus))
+		bus = bus->parent;
+
+	return bus->bridge->parent;
+
 }
 
 static struct arm_smmu_master *find_smmu_master(struct arm_smmu_device *smmu,
-						struct device_node *dev_node)
+						struct device *device)
 {
 	struct rb_node *node = smmu->masters.rb_node;
 
@@ -464,9 +467,9 @@ static struct arm_smmu_master *find_smmu_master(struct arm_smmu_device *smmu,
 
 		master = container_of(node, struct arm_smmu_master, node);
 
-		if (dev_node < master->of_node)
+		if (device < master->dev)
 			node = node->rb_left;
-		else if (dev_node > master->of_node)
+		else if (device > master->dev)
 			node = node->rb_right;
 		else
 			return master;
@@ -501,9 +504,9 @@ static int insert_smmu_master(struct arm_smmu_device *smmu,
 			= container_of(*new, struct arm_smmu_master, node);
 
 		parent = *new;
-		if (master->of_node < this->of_node)
+		if (master->dev < this->dev)
 			new = &((*new)->rb_left);
-		else if (master->of_node > this->of_node)
+		else if (master->dev > this->dev)
 			new = &((*new)->rb_right);
 		else
 			return -EEXIST;
@@ -516,23 +519,25 @@ static int insert_smmu_master(struct arm_smmu_device *smmu,
 
 static int register_smmu_master(struct arm_smmu_device *smmu,
 				struct device *dev,
-				struct of_phandle_args *masterspec)
+				struct device *child_dev,
+				uint32_t streamids[],
+				int num_streamids)
 {
 	int i;
 	struct arm_smmu_master *master;
 
-	master = find_smmu_master(smmu, masterspec->np);
+	master = find_smmu_master(smmu, child_dev);
 	if (master) {
 		dev_err(dev,
 			"rejecting multiple registrations for master device %s\n",
-			masterspec->np->name);
+			dev_name(child_dev));
 		return -EBUSY;
 	}
 
-	if (masterspec->args_count > MAX_MASTER_STREAMIDS) {
+	if (num_streamids > MAX_MASTER_STREAMIDS) {
 		dev_err(dev,
 			"reached maximum number (%d) of stream IDs for master device %s\n",
-			MAX_MASTER_STREAMIDS, masterspec->np->name);
+			MAX_MASTER_STREAMIDS, dev_name(child_dev));
 		return -ENOSPC;
 	}
 
@@ -540,17 +545,17 @@ static int register_smmu_master(struct arm_smmu_device *smmu,
 	if (!master)
 		return -ENOMEM;
 
-	master->of_node			= masterspec->np;
-	master->cfg.num_streamids	= masterspec->args_count;
+	master->dev			= child_dev;
+	master->cfg.num_streamids	= num_streamids;
 
 	for (i = 0; i < master->cfg.num_streamids; ++i) {
-		u16 streamid = masterspec->args[i];
+		u16 streamid = streamids[i];
 
 		if (!(smmu->features & ARM_SMMU_FEAT_STREAM_MATCH) &&
 		     (streamid >= smmu->num_mapping_groups)) {
 			dev_err(dev,
 				"stream ID for master device %s greater than maximum allowed (%d)\n",
-				masterspec->np->name, smmu->num_mapping_groups);
+				dev_name(child_dev), smmu->num_mapping_groups);
 			return -ERANGE;
 		}
 		master->cfg.streamids[i] = streamid;
@@ -562,11 +567,11 @@ static struct arm_smmu_device *find_smmu_for_device(struct device *dev)
 {
 	struct arm_smmu_device *smmu;
 	struct arm_smmu_master *master = NULL;
-	struct device_node *dev_node = dev_get_dev_node(dev);
+	struct device *device = dev_get_dev_node(dev);
 
 	spin_lock(&arm_smmu_devices_lock);
 	list_for_each_entry(smmu, &arm_smmu_devices, list) {
-		master = find_smmu_master(smmu, dev_node);
+		master = find_smmu_master(smmu, device);
 		if (master)
 			break;
 	}
@@ -1631,7 +1636,7 @@ static int arm_smmu_add_device(struct device *dev)
 	} else {
 		struct arm_smmu_master *master;
 
-		master = find_smmu_master(smmu, dev->of_node);
+		master = find_smmu_master(smmu, dev_get_dev_node(dev));
 		if (!master) {
 			ret = -ENODEV;
 			goto out_put_group;
@@ -1915,7 +1920,6 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct arm_smmu_device *smmu;
 	struct device *dev = &pdev->dev;
-	struct rb_node *node;
 	struct of_phandle_args masterspec;
 	int num_irqs, i, err;
 
@@ -1980,11 +1984,20 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 	while (!of_parse_phandle_with_args(dev->of_node, "mmu-masters",
 					   "#stream-id-cells", i,
 					   &masterspec)) {
-		err = register_smmu_master(smmu, dev, &masterspec);
+		struct platform_device *device;
+
+		device = of_find_device_by_node(masterspec.np);
+		of_node_put(masterspec.np);
+		if (!device || !(&device->dev))
+			return -ENODEV;
+
+		err = register_smmu_master(smmu, dev, &device->dev,
+					   masterspec.args,
+					   masterspec.args_count);
 		if (err) {
 			dev_err(dev, "failed to add master %s\n",
 				masterspec.np->name);
-			goto out_put_masters;
+			return err;
 		}
 
 		i++;
@@ -1998,8 +2011,7 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 		dev_err(dev,
 			"found only %d context interrupt(s) but %d required\n",
 			smmu->num_context_irqs, smmu->num_context_banks);
-		err = -ENODEV;
-		goto out_put_masters;
+		return -ENODEV;
 	}
 
 	for (i = 0; i < smmu->num_global_irqs; ++i) {
@@ -2027,13 +2039,6 @@ out_free_irqs:
 	while (i--)
 		free_irq(smmu->irqs[i], smmu);
 
-out_put_masters:
-	for (node = rb_first(&smmu->masters); node; node = rb_next(node)) {
-		struct arm_smmu_master *master
-			= container_of(node, struct arm_smmu_master, node);
-		of_node_put(master->of_node);
-	}
-
 	return err;
 }
 
@@ -2042,7 +2047,6 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 	int i;
 	struct device *dev = &pdev->dev;
 	struct arm_smmu_device *curr, *smmu = NULL;
-	struct rb_node *node;
 
 	spin_lock(&arm_smmu_devices_lock);
 	list_for_each_entry(curr, &arm_smmu_devices, list) {
@@ -2056,12 +2060,6 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 
 	if (!smmu)
 		return -ENODEV;
-
-	for (node = rb_first(&smmu->masters); node; node = rb_next(node)) {
-		struct arm_smmu_master *master
-			= container_of(node, struct arm_smmu_master, node);
-		of_node_put(master->of_node);
-	}
 
 	if (!bitmap_empty(smmu->context_map, ARM_SMMU_MAX_CBS))
 		dev_err(dev, "removing device with active domains!\n");
