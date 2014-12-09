@@ -30,17 +30,20 @@
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
 
+#include <linux/acpi.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iommu.h>
+#include <linux/iort.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/pci.h>
+#include <linux/pci-acpi.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -444,6 +447,10 @@ static void parse_driver_options(struct arm_smmu_device *smmu)
 
 static struct device *dev_get_dev_node(struct device *dev)
 {
+	struct pci_bus *bus;
+	struct device *device;
+	struct acpi_device *adev;
+	acpi_handle handle;
 
 	if (!dev_is_pci(dev))
 		return dev;
@@ -453,8 +460,25 @@ static struct device *dev_get_dev_node(struct device *dev)
 	while (!pci_is_root_bus(bus))
 		bus = bus->parent;
 
-	return bus->bridge->parent;
+	device = bus->bridge->parent;
+	if (device)
+		return device;
 
+	/*
+	 * ACPI host bridge device is going to be found via ACPI companion
+	 * device
+	 */
+	handle = acpi_find_root_bridge_handle(to_pci_dev(dev));
+	if (!handle)
+		return NULL;
+
+	if (acpi_bus_get_device(handle, &adev)) {
+		pr_warn("Failed to get device for ACPI object %s\n",
+			dev_name(&adev->dev));
+		return NULL;
+	}
+
+	return &adev->dev;
 }
 
 static struct arm_smmu_master *find_smmu_master(struct arm_smmu_device *smmu,
@@ -1593,6 +1617,27 @@ static int __arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 	return 0; /* Continue walking */
 }
 
+static int arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
+{
+	u32 *stream_id = data;
+
+	/*
+	 * We need a way to describe the ID mappings in FDT.
+	 * Assume Stream ID == Requester ID for now.
+	 *
+	 * ACPI is using IORT ID translation map. Each SMMU is represented by
+	 * corresponding SMMU node and its children underneath.
+	 * Children are referring to parent's ID map looking for appropriate
+	 * translation rule.
+	 */
+
+	/* include domain number with pci device id */
+	if (acpi_disabled)
+		return __arm_smmu_get_pci_sid(pdev, alias, data);
+
+	return iort_map_pcidev_to_streamid(pdev, alias, stream_id);
+}
+
 static void __arm_smmu_release_pci_iommudata(void *data)
 {
 	kfree(data);
@@ -1626,12 +1671,12 @@ static int arm_smmu_add_device(struct device *dev)
 		}
 
 		cfg->num_streamids = 1;
-		/*
-		 * Assume Stream ID == Requester ID for now.
-		 * We need a way to describe the ID mappings in FDT.
-		 */
-		pci_for_each_dma_alias(pdev, __arm_smmu_get_pci_sid,
+
+		ret = pci_for_each_dma_alias(pdev, arm_smmu_get_pci_sid,
 				       &cfg->streamids[0]);
+		if (ret)
+			goto out_put_group;
+
 		releasefn = __arm_smmu_release_pci_iommudata;
 	} else {
 		struct arm_smmu_master *master;
@@ -1903,6 +1948,89 @@ static int arm_smmu_device_cfg_probe(struct arm_smmu_device *smmu)
 	return 0;
 }
 
+static int arm_smmu_acpi_probe(struct platform_device *pdev,
+			 struct arm_smmu_device *smmu)
+{
+	struct device *dev = smmu->dev;
+	struct acpi_table_iort_node_header *node =
+		*(struct acpi_table_iort_node_header **)dev_get_platdata(dev);
+	struct acpi_table_iort_node_smmu_v12 *iort_smmu;
+	int num_irqs, i, err, trigger;
+	u64 *ctx_irq;
+
+	/* Move to SMMU1/2 specific data */
+	iort_smmu = ACPI_ADD_PTR(struct acpi_table_iort_node_smmu_v12, node,
+				sizeof(struct acpi_table_iort_node_header));
+
+	smmu->version = (enum arm_smmu_arch_version)iort_smmu->model + 1;
+
+	smmu->num_global_irqs = 1;
+	smmu->num_context_irqs = iort_smmu->context_irq_number;
+	num_irqs = smmu->num_context_irqs + smmu->num_global_irqs;
+
+	if (!smmu->num_context_irqs) {
+		dev_err(dev, "found %d interrupts but expected at least %d\n",
+			num_irqs, smmu->num_global_irqs + 1);
+		return -ENODEV;
+	}
+
+	smmu->irqs = devm_kzalloc(dev, sizeof(*smmu->irqs) * num_irqs,
+				  GFP_KERNEL);
+	if (!smmu->irqs) {
+		dev_err(dev, "failed to allocate %d irqs\n", num_irqs);
+		return -ENOMEM;
+	}
+
+	trigger = iort_smmu->smmu_nsg_irpt_flags ? ACPI_EDGE_SENSITIVE:
+						   ACPI_LEVEL_SENSITIVE;
+	smmu->irqs[0] = acpi_register_gsi(NULL, iort_smmu->smmu_nsg_irpt,
+					  trigger, ACPI_ACTIVE_HIGH);
+
+	/* Time for context IRQs */
+	ctx_irq = ACPI_ADD_PTR(u64, node, iort_smmu->ref_context_irq_number);
+	for (i = 0; i < smmu->num_context_irqs; ++i) {
+		int irq = IORT_IRQ_MASK(ctx_irq[i]);
+		trigger = IORT_IRQ_TRIGGER_MASK(ctx_irq[i]);
+		smmu->irqs[i + 1] = acpi_register_gsi(NULL, irq, trigger,
+						      ACPI_ACTIVE_HIGH);
+	}
+
+	err = arm_smmu_device_cfg_probe(smmu);
+	if (err)
+		return err;
+
+	i = 0;
+	smmu->masters = RB_ROOT;
+	while (1) {
+		struct acpi_table_iort_node_header *child;
+		uint32_t streamids[MAX_MASTER_STREAMIDS];
+		struct device *child_dev;
+		int num_streamids;
+
+		child = iort_find_node_children(node, i);
+		if (!child)
+			break;
+
+		child_dev = iort_find_node_device(child);
+		if (!child_dev)
+			break;
+
+		num_streamids = iort_find_endpoint_id(child, streamids);
+		err = register_smmu_master(smmu, dev, child_dev, streamids,
+					   num_streamids);
+		if (err) {
+			dev_err(dev, "failed to add master %s\n",
+				dev_name(child_dev));
+			return err;
+		}
+
+		i++;
+	}
+	dev_notice(dev, "registered %d master devices\n", i);
+
+	return 0;
+}
+
 static const struct of_device_id arm_smmu_of_match[] = {
 	{ .compatible = "arm,smmu-v1", .data = (void *)ARM_SMMU_V1 },
 	{ .compatible = "arm,smmu-v2", .data = (void *)ARM_SMMU_V2 },
@@ -1914,30 +2042,17 @@ static const struct of_device_id arm_smmu_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
 
-static int arm_smmu_device_dt_probe(struct platform_device *pdev)
+static int arm_smmu_dt_probe(struct platform_device *pdev,
+		       struct arm_smmu_device *smmu)
 {
 	const struct of_device_id *of_id;
 	struct resource *res;
-	struct arm_smmu_device *smmu;
 	struct device *dev = &pdev->dev;
 	struct of_phandle_args masterspec;
 	int num_irqs, i, err;
 
-	smmu = devm_kzalloc(dev, sizeof(*smmu), GFP_KERNEL);
-	if (!smmu) {
-		dev_err(dev, "failed to allocate arm_smmu_device\n");
-		return -ENOMEM;
-	}
-	smmu->dev = dev;
-
 	of_id = of_match_node(arm_smmu_of_match, dev->of_node);
 	smmu->version = (enum arm_smmu_arch_version)of_id->data;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	smmu->base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(smmu->base))
-		return PTR_ERR(smmu->base);
-	smmu->size = resource_size(res);
 
 	if (of_property_read_u32(dev->of_node, "#global-interrupts",
 				 &smmu->num_global_irqs)) {
@@ -2003,6 +2118,37 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 		i++;
 	}
 	dev_notice(dev, "registered %d master devices\n", i);
+
+	return 0;
+}
+
+static int arm_smmu_device_probe(struct platform_device *pdev)
+{
+	struct resource *res;
+	struct arm_smmu_device *smmu;
+	struct device *dev = &pdev->dev;
+	int i, err;
+
+	smmu = devm_kzalloc(dev, sizeof(*smmu), GFP_KERNEL);
+	if (!smmu) {
+		dev_err(dev, "failed to allocate arm_smmu_device\n");
+		return -ENOMEM;
+	}
+	smmu->dev = dev;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	smmu->base = devm_ioremap_resource(dev, res);
+	if (IS_ERR(smmu->base))
+		return PTR_ERR(smmu->base);
+	smmu->size = resource_size(res);
+
+	if (acpi_disabled)
+		err = arm_smmu_dt_probe(pdev, smmu);
+	else
+		err = arm_smmu_acpi_probe(pdev, smmu);
+
+	if (err)
+		return err;
 
 	parse_driver_options(smmu);
 
@@ -2078,7 +2224,7 @@ static struct platform_driver arm_smmu_driver = {
 		.name		= "arm-smmu",
 		.of_match_table	= of_match_ptr(arm_smmu_of_match),
 	},
-	.probe	= arm_smmu_device_dt_probe,
+	.probe	= arm_smmu_device_probe,
 	.remove	= arm_smmu_device_remove,
 };
 
@@ -2097,6 +2243,11 @@ static int __init arm_smmu_init(void)
 #ifdef CONFIG_ARM_AMBA
 	if (!iommu_present(&amba_bustype))
 		bus_set_iommu(&amba_bustype, &arm_smmu_ops);
+#endif
+
+#ifdef CONFIG_ACPI
+	if (!acpi_disabled && !iommu_present(&acpi_bus_type))
+		bus_set_iommu(&acpi_bus_type, &arm_smmu_ops);
 #endif
 
 #ifdef CONFIG_PCI

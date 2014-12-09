@@ -15,7 +15,7 @@
  * reported to OS through BIOS via I/O Remapping Table (IORT) ACPI
  * table.
  *
- * These routines are used by ITS and PCI host bridge drivers.
+ * These routines are used by ITS, PCI host bridge and SMMU drivers.
  */
 
 #include <linux/acpi.h>
@@ -431,6 +431,58 @@ iort_find_node_device(struct acpi_table_iort_node_header *node)
 	return device;
 }
 EXPORT_SYMBOL_GPL(iort_find_node_device);
+
+static void iort_add_smmu_platform_device(struct acpi_table_iort_node_header *node)
+{
+	struct acpi_table_iort_node_smmu_v12 *smmu;
+	struct platform_device_info pdevinfo;
+	struct platform_device *pdev = NULL;
+	struct resource resources;
+
+	/* Move to SMMU1/2 specific data */
+	smmu = ACPI_ADD_PTR(struct acpi_table_iort_node_smmu_v12, node,
+				sizeof(struct acpi_table_iort_node_header));
+
+	memset(&pdevinfo, 0, sizeof(pdevinfo));
+	pdevinfo.parent = NULL;
+	pdevinfo.name = "arm-smmu";
+	pdevinfo.id = PLATFORM_DEVID_AUTO;
+
+	memset(&resources, 0, sizeof(resources));
+	resources.start = smmu->base_address;
+	resources.end = smmu->base_address + smmu->span - 1;
+	resources.flags = IORESOURCE_MEM;
+
+	pdevinfo.res = &resources;
+	pdevinfo.num_res = 1;
+
+	pdevinfo.data = &node;
+	pdevinfo.size_data = sizeof(node);
+
+	pdev = platform_device_register_full(&pdevinfo);
+	if (IS_ERR(pdev))
+		pr_err("platform device creation failed: %ld\n",
+			PTR_ERR(pdev));
+	else
+		pr_debug("Platform device arm-smmu created\n");
+}
+
+static int iort_add_smmu_devices(void)
+{
+	struct acpi_table_iort_node_header *iort_node = NULL;
+	unsigned int idx = 0;
+
+	while (1) {
+		 iort_node = iort_find_node(ACPI_IORT_TYPE_SMMU_V12, idx++);
+		 if (!iort_node)
+			 break;
+
+		 iort_add_smmu_platform_device(iort_node);
+	}
+
+	return 0;
+}
+
 static int __init iort_init(void)
 {
 	struct acpi_table_header *table;
@@ -454,6 +506,10 @@ static int __init iort_init(void)
 	}
 
 	iort_table = table;
+
+	if(IS_ENABLED(CONFIG_ARM_SMMU))
+		iort_add_smmu_devices();
+
 	return 0;
 }
 

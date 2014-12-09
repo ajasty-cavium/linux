@@ -21,6 +21,9 @@
 
 struct msi_chip;
 
+#define IORT_IRQ_MASK(irq)		(irq & 0xffffffffULL)
+#define IORT_IRQ_TRIGGER_MASK(irq)	((irq >> 32) & 0xffffffffULL)
+
 #ifdef CONFIG_IORT_TABLE
 int iort_pci_msi_chip_add(struct msi_chip *chip, u32 its_id);
 void iort_pci_msi_chip_remove(struct msi_chip *chip);
