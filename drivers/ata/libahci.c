@@ -1841,6 +1841,7 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 
 	/* sigh.  0xffffffff is a valid return from h/w */
 	irq_stat = readl(mmio + HOST_IRQ_STAT);
+redo:
 	if (!irq_stat)
 		goto out;
 
@@ -1877,9 +1878,18 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 	 * Also, use the unmasked value to clear interrupt as spurious
 	 * pending event on a dummy port might cause screaming IRQ.
 	 */
+
+	/*
+	 * Thunder handles AHCI with LPI
+	 * Clear interrupt state, so that when the next event comes it
+	 * will trigger again
+	 */
 	writel(irq_stat, mmio + HOST_IRQ_STAT);
+	irq_stat = readl(mmio + HOST_IRQ_STAT);
 
 	spin_unlock(&host->lock);
+
+	goto redo;
 out:
 	VPRINTK("EXIT\n");
 

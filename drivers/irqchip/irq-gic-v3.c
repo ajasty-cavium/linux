@@ -125,6 +125,7 @@ static u64 __maybe_unused gic_read_iar(void)
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23154
 	asm volatile("nop;nop;nop;nop;");
 #endif
+	mb();
 	return irqstat;
 }
 
