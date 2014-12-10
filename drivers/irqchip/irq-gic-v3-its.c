@@ -30,6 +30,7 @@
 #include <linux/acpi.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
+#include <linux/iort.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
 #include <linux/irqchip/arm-gic-acpi.h>
@@ -1375,15 +1376,22 @@ static int __init
 gic_acpi_parse_madt_its(struct acpi_subtable_header *header,
 			const unsigned long end)
 {
-	struct acpi_madt_generic_its *its;
+	struct acpi_madt_generic_its *its_table;
+	struct its_node *its;
 
 	if (BAD_MADT_ENTRY(header, end))
 		return -EINVAL;
 
-	its = (struct acpi_madt_generic_its *)header;
+	its_table = (struct acpi_madt_generic_its *)header;
 
-	pr_info("ITS: ID: 0x%x\n", its->its_id);
-	its_probe(its->base_address, 2 * SZ_2M);
+	pr_info("ITS: ID: 0x%x\n", its_table->its_id);
+	its = its_probe(its_table->base_address, 2 * SZ_2M);
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
+		its->msi_chip.setup_irq		= its_msi_setup_irq;
+		its->msi_chip.teardown_irq	= its_msi_teardown_irq;
+
+		iort_pci_msi_chip_add(&its->msi_chip, its_table->its_id);
+	}
 	return 0;
 }
 

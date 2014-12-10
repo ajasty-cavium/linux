@@ -27,6 +27,7 @@
 #include <linux/acpi.h>
 #include <linux/pci-acpi.h>
 #include <linux/mmconfig.h>
+#include <linux/iort.h>
 
 #include <asm/pci-bridge.h>
 
@@ -341,6 +342,7 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 		__release_pci_root_info(info);
 		return NULL;
 	}
+	pbus->msi = iort_find_pci_msi_chip(domain, 0);
 
 	pci_set_host_bridge_release(to_pci_host_bridge(pbus->bridge),
 			release_pci_root_info, info);
