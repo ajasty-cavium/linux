@@ -115,6 +115,7 @@ static u64 __maybe_unused gic_read_iar(void)
     asm volatile("nop;nop;nop;nop;");
     asm volatile("nop;nop;nop;nop;");
     asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+    mb();
 	return irqstat;
 }
 
