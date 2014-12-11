@@ -25,6 +25,15 @@ struct msi_chip;
 int iort_pci_msi_chip_add(struct msi_chip *chip, u32 its_id);
 void iort_pci_msi_chip_remove(struct msi_chip *chip);
 struct msi_chip *iort_find_pci_msi_chip(int segment, unsigned int idx);
+struct acpi_table_iort_node_header *
+iort_find_node_children(struct acpi_table_iort_node_header *parent,
+			unsigned int idx);
+int
+iort_find_endpoint_id(struct acpi_table_iort_node_header *node, u32 *streamids);
+int
+iort_map_pcidev_to_streamid(struct pci_dev *pdev, u32 req_id, u32 *stream_id);
+struct device *
+iort_find_node_device(struct acpi_table_iort_node_header *node);
 #else
 inline int
 iort_pci_msi_chip_add(struct msi_chip *chip, u32 its_id) { return 0 }
@@ -32,6 +41,17 @@ inline void
 iort_pci_msi_chip_remove(struct msi_chip *chip) {}
 struct msi_chip *
 iort_find_pci_msi_chip(int segment, unsigned int idx) { return NULL }
+inline struct acpi_table_iort_node_header *
+iort_find_node_children(struct acpi_table_iort_node_header *parent,
+			unsigned int idx) { return NULL }
+int
+iort_find_endpoint_id(struct acpi_table_iort_node_header *node, u32 *streamids)
+{ return AE_ERROR }
+int
+iort_map_pcidev_to_streamid(struct pci_dev *pdev, u32 req_id, u32 *stream_id)
+{ return AE_ERROR }
+struct device *
+iort_find_node_device(struct acpi_table_iort_node_header *node) { return NULL }
 #endif
 
 #endif /* __IORT_H__ */
