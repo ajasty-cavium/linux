@@ -970,6 +970,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct device_node *np_bgx, *np_child;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
+	if (!bgx)
+		return -ENOMEM;
 	bgx->pdev = pdev;
 
 	pci_set_drvdata(pdev, bgx);
@@ -1026,7 +1028,6 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
 		err = bgx_lmac_enable(bgx, lmac);
 		if (err) {
-			bgx_vnic[bgx->bgx_id] = NULL;
 			dev_err(dev, "BGX%d failed to enable lmac%d\n",
 				bgx->bgx_id, lmac);
 			goto err_enable;
@@ -1041,8 +1042,9 @@ err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
-	kfree(bgx);
 exit:
+	bgx_vnic[bgx->bgx_id] = NULL;
+	kfree(bgx);
 	return err;
 }
 
