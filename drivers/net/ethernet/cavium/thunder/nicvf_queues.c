@@ -125,10 +125,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 			return -ENOMEM;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
-		desc->buf_addr = pci_map_single(nic->pdev, rbuf,
-						rbdr->buf_size,
-						PCI_DMA_FROMDEVICE) >>
-						NICVF_RCV_BUF_ALIGN;
+		desc->buf_addr = virt_to_phys(rbuf) >> NICVF_RCV_BUF_ALIGN;
 	}
 	return 0;
 }
@@ -155,8 +152,6 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 		desc = GET_RBDR_DESC(rbdr, head);
 		buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
 		skb = nicvf_rb_ptr_to_skb(nic, buf_addr);
-		pci_unmap_single(nic->pdev, (dma_addr_t)buf_addr,
-				 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		dev_kfree_skb(skb);
 		head++;
 		head &= (rbdr->dmem.q_len - 1);
@@ -165,8 +160,6 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 	desc = GET_RBDR_DESC(rbdr, tail);
 	buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
 	skb = nicvf_rb_ptr_to_skb(nic, buf_addr);
-	pci_unmap_single(nic->pdev, (dma_addr_t)buf_addr,
-			 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 	dev_kfree_skb(skb);
 
 	/* Free RBDR ring */
@@ -215,9 +208,7 @@ refill:
 			break;
 
 		desc = GET_RBDR_DESC(rbdr, tail);
-		desc->buf_addr = pci_map_single(nic->pdev, rbuf, rbdr->buf_size,
-						PCI_DMA_FROMDEVICE) >>
-						NICVF_RCV_BUF_ALIGN;
+		desc->buf_addr = virt_to_phys(rbuf) >> NICVF_RCV_BUF_ALIGN;
 		refill_rb_cnt--;
 	}
 	/* Notify HW */
@@ -759,7 +750,7 @@ void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
 		atomic64_add(1, (atomic64_t *)&netdev->stats.tx_packets);
 		atomic64_add(hdr->tot_len,
 			     (atomic64_t *)&netdev->stats.tx_bytes);
-		nicvf_free_skb(nic, skb);
+		dev_kfree_skb_any(skb);
 		nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 	}
 }
@@ -935,8 +926,6 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
-		pci_unmap_single(nic->pdev, (dma_addr_t)(*rb_ptrs),
-				 rbdr->buf_size, PCI_DMA_FROMDEVICE);
 		if (!frag) {
 			/* First fragment */
 			*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;

@@ -418,26 +418,6 @@ static int nicvf_init_resources(struct nicvf *nic)
 	return 0;
 }
 
-void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb)
-{
-	int i;
-
-	if (!skb_shinfo(skb)->nr_frags)
-		goto free_skb;
-
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-		const struct skb_frag_struct *frag;
-
-		frag = &skb_shinfo(skb)->frags[i];
-		pci_unmap_single(nic->pdev, (dma_addr_t)skb_frag_address(frag),
-				 skb_frag_size(frag), PCI_DMA_TODEVICE);
-	}
-free_skb:
-	pci_unmap_single(nic->pdev, (dma_addr_t)skb->data,
-			 skb_headlen(skb), PCI_DMA_TODEVICE);
-	dev_kfree_skb_any(skb);
-}
-
 static void nicvf_snd_pkt_handler(struct net_device *netdev,
 				  struct cmp_queue *cq,
 				  void *cq_desc, int cqe_type)
@@ -461,9 +441,9 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 		cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
-	nicvf_free_skb(nic, skb);
 	nicvf_check_cqe_tx_errs(nic, cq, cq_desc);
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
+	dev_consume_skb_any(skb);
 }
 
 static void nicvf_rcv_pkt_handler(struct net_device *netdev,
