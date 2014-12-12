@@ -506,6 +506,13 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_THRESH, qidx, sq->thresh);
+
+	/* Set queue:cpu affinity for better load distribution */
+	if (cpu_online(qidx)) {
+		cpumask_set_cpu(qidx, &sq->affinity_mask);
+		netif_set_xps_queue(nic->netdev,
+				    &sq->affinity_mask, qidx);
+	}
 }
 
 static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,

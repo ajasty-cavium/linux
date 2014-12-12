@@ -885,8 +885,6 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
 		nic->drv_stats.tx_busy++;
-		netdev_info(netdev, "VF%d: TX ring full, stopping queue%d\n",
-			    nic->vf_id, qid);
 		return NETDEV_TX_BUSY;
 	}
 

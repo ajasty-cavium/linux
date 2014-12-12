@@ -288,6 +288,7 @@ struct snd_queue {
 	uint32_t	tail;
 	uint64_t	*skbuff;
 	void		*desc;
+	cpumask_t	affinity_mask;
 	struct q_desc_mem   dmem;
 	struct rx_tx_queue_stats stats;
 };
