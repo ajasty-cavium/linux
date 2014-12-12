@@ -77,6 +77,7 @@
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define RCV_BUFFER_LEN		2048 /* In multiples of 128bytes */
+#define STORE_SKB_ADDR_ALIGN	(2 * L1_CACHE_BYTES)
 
 #define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
 				 MAX_CQE_PER_PKT_XMIT)
@@ -339,7 +340,7 @@ void nicvf_sq_free_used_descs(struct net_device *netdev,
 			      struct snd_queue *sq, int qidx);
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb);
 
-struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc);
+struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx);
 void nicvf_refill_rbdr(unsigned long data);
 
 void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx);
@@ -361,7 +362,7 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic,
 void nicvf_update_rq_stats(struct nicvf *nic, int rq_idx);
 void nicvf_update_sq_stats(struct nicvf *nic, int sq_idx);
 int nicvf_check_cqe_rx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc);
+			    struct cmp_queue *cq, struct cqe_rx_t *cqe_rx);
 int nicvf_check_cqe_tx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc);
+			    struct cmp_queue *cq, struct cqe_send_t *cqe_tx);
 #endif /* NICVF_QUEUES_H */

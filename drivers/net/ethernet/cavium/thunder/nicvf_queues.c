@@ -10,6 +10,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/ip.h>
+#include <linux/etherdevice.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -64,12 +65,10 @@ static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
 	dmem->base = NULL;
 }
 
-static int nicvf_alloc_rcv_buffer(struct nicvf *nic,
-				  uint64_t buf_len, unsigned char **rbuf)
+static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic, uint64_t buf_len,
+					 unsigned char **rbuf)
 {
 	struct sk_buff *skb = NULL;
-
-	buf_len += NICVF_RCV_BUF_ALIGN_BYTES + sizeof(void *);
 
 	skb = netdev_alloc_skb(nic->netdev, buf_len);
 	if (!skb) {
@@ -77,13 +76,13 @@ static int nicvf_alloc_rcv_buffer(struct nicvf *nic,
 		return -ENOMEM;
 	}
 
-	/* Reserve bytes for storing skb address */
-	skb_reserve(skb, sizeof(void *));
 	/* Align buffer addr to cache line i.e 128 bytes */
 	skb_reserve(skb, NICVF_RCV_BUF_ALIGN_LEN((uint64_t)skb->data));
+	/* Reserve bytes for storing skb address */
+	skb_reserve(skb,  STORE_SKB_ADDR_ALIGN);
 
 	/* Store skb address */
-	*(struct sk_buff **)(skb->data - sizeof(void *)) = skb;
+	*(struct sk_buff **)(skb->data - STORE_SKB_ADDR_ALIGN) = skb;
 
 	/* Return buffer address */
 	*rbuf = skb->data;
@@ -94,8 +93,8 @@ static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, uint64_t rb_ptr)
 {
 	struct sk_buff *skb;
 
-	rb_ptr = (uint64_t)phys_to_virt(dma_to_phys(&nic->pdev->dev, rb_ptr));
-	skb = (struct sk_buff *)*(uint64_t *)(rb_ptr - sizeof(void *));
+	rb_ptr = (uint64_t)phys_to_virt(rb_ptr);
+	skb = (struct sk_buff *)*(uint64_t *)(rb_ptr - STORE_SKB_ADDR_ALIGN);
 	return skb;
 }
 
@@ -103,6 +102,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 			    int ring_len, int buf_size)
 {
 	int idx;
+	int align_size;
 	unsigned char *rbuf;
 	struct rbdr_entry_t *desc;
 
@@ -120,8 +120,10 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	rbdr->enable = true;
 	rbdr->thresh = RBDR_THRESH;
 
+	align_size = rbdr->buf_size + STORE_SKB_ADDR_ALIGN +
+				NICVF_RCV_BUF_ALIGN_BYTES;
 	for (idx = 0; idx < ring_len; idx++) {
-		if (nicvf_alloc_rcv_buffer(nic, rbdr->buf_size, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, align_size, &rbuf))
 			return -ENOMEM;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
@@ -176,6 +178,7 @@ void nicvf_refill_rbdr(unsigned long data)
 	int rbdr_idx = qs->rbdr_cnt;
 	int tail, qcount;
 	int refill_rb_cnt;
+	int align_size;
 	struct rbdr *rbdr;
 	unsigned char *rbuf;
 	struct rbdr_entry_t *desc;
@@ -189,14 +192,14 @@ refill:
 	if (!rbdr->enable)
 		goto next_rbdr;
 
-	/* check if valid descs reached or crossed threshold level */
+	align_size = rbdr->buf_size + STORE_SKB_ADDR_ALIGN +
+				NICVF_RCV_BUF_ALIGN_BYTES;
+	/* Get no of desc's to be refilled */
 	qcount = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_STATUS0, rbdr_idx);
 	qcount &= 0x7FFFF;
-	if (qcount > rbdr->thresh)
-		goto next_rbdr;
 
 	/* Get no of desc's to be refilled */
-	refill_rb_cnt = rbdr->thresh;
+	refill_rb_cnt = qs->rbdr_len - qcount - 1;
 
 	/* Start filling descs from tail */
 	tail = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_TAIL, rbdr_idx) >> 3;
@@ -204,7 +207,7 @@ refill:
 		tail++;
 		tail &= (rbdr->dmem.q_len - 1);
 
-		if (nicvf_alloc_rcv_buffer(nic, rbdr->buf_size, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, align_size, &rbuf))
 			break;
 
 		desc = GET_RBDR_DESC(rbdr, tail);
@@ -213,7 +216,7 @@ refill:
 	}
 	/* Notify HW */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_DOOR,
-			      rbdr_idx, rbdr->thresh);
+			      rbdr_idx, qs->rbdr_len - qcount - 1);
 next_rbdr:
 	if (rbdr_idx)
 		goto refill;
@@ -385,7 +388,8 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->start_qs_rbdr_idx = qs->rbdr_cnt - 1;
 	rq->cont_rbdr_qs = qs->vnic_id;
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
-	rq->caching = 1;
+	/* Load first 2 cache lines of data to L2C */
+	rq->caching = 3;
 
 	/* Send a mailbox msg to PF to config RQ */
 	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
@@ -685,7 +689,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
  *
  * returns descriptor ponter & descriptor number
  */
-static int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
+static inline int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
 {
 	int qentry;
 	struct snd_queue *sq = &qs->sq[qnum];
@@ -779,7 +783,7 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 			 int subdesc_cnt, struct sk_buff *skb)
 {
 	int qentry, proto;
-	void *desc;
+	void *desc = NULL;
 	struct snd_queue *sq;
 	struct sq_hdr_subdesc *hdr;
 
@@ -825,7 +829,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 					int sq_num, struct sk_buff *skb)
 {
 	int i;
-	void *desc;
+	void *desc = NULL;
 	struct sq_gather_subdesc *gather;
 
 	nicvf_get_sq_desc(qs, sq_num, &desc);
@@ -891,7 +895,7 @@ append_fail:
 	return 0;
 }
 
-static unsigned frag_num(unsigned i)
+static inline unsigned frag_num(unsigned i)
 {
 #ifdef __BIG_ENDIAN
 	return (i & ~3) + 3 - (i & 3);
@@ -900,26 +904,18 @@ static unsigned frag_num(unsigned i)
 #endif
 }
 
-struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
+struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 {
 	int frag;
 	int payload_len = 0;
 	struct sk_buff *skb = NULL;
 	struct sk_buff *skb_frag = NULL;
 	struct sk_buff *prev_frag = NULL;
-	struct cqe_rx_t *cqe_rx;
-	struct rbdr *rbdr;
-	struct rcv_queue *rq;
-	struct queue_set *qs = nic->qs;
 	uint16_t *rb_lens = NULL;
 	uint64_t *rb_ptrs = NULL;
 
-	cqe_rx = (struct cqe_rx_t *)cq_desc;
-
-	rq = &qs->rq[cqe_rx->rq_idx];
-	rbdr = &qs->rbdr[rq->start_qs_rbdr_idx];
-	rb_lens = cq_desc + (3 * sizeof(uint64_t)); /* Use offsetof */
-	rb_ptrs = cq_desc + (6 * sizeof(uint64_t));
+	rb_lens = (void *)cqe_rx + (3 * sizeof(uint64_t));
+	rb_ptrs = (void *)cqe_rx + (6 * sizeof(uint64_t));
 
 	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
 		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
@@ -928,12 +924,11 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc)
 		payload_len = rb_lens[frag_num(frag)];
 		if (!frag) {
 			/* First fragment */
-			*rb_ptrs = *rb_ptrs - cqe_rx->align_pad;
-			skb = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
-			if (cqe_rx->align_pad) {
-				skb->data += cqe_rx->align_pad;
-				skb->tail += cqe_rx->align_pad;
-			}
+			skb = nicvf_rb_ptr_to_skb(nic,
+						  *rb_ptrs - cqe_rx->align_pad);
+			prefetchw(skb);
+			prefetch(skb->data);
+			skb_reserve(skb, cqe_rx->align_pad);
 			skb_put(skb, payload_len);
 		} else {
 			/* Add fragments */
@@ -1131,12 +1126,10 @@ void nicvf_update_sq_stats(struct nicvf *nic, int sq_idx)
 
 /* Check for errors in the receive cmp.queue entry */
 int nicvf_check_cqe_rx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc)
+			    struct cmp_queue *cq, struct cqe_rx_t *cqe_rx)
 {
-	struct cqe_rx_t *cqe_rx;
 	struct cmp_queue_stats *stats = &cq->stats;
 
-	cqe_rx = (struct cqe_rx_t *)cq_desc;
 	if (!cqe_rx->err_level && !cqe_rx->err_opcode) {
 		stats->rx.errop.good++;
 		return 0;
@@ -1255,12 +1248,10 @@ int nicvf_check_cqe_rx_errs(struct nicvf *nic,
 
 /* Check for errors in the send cmp.queue entry */
 int nicvf_check_cqe_tx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc)
+			    struct cmp_queue *cq, struct cqe_send_t *cqe_tx)
 {
-	struct cqe_send_t *cqe_tx;
 	struct cmp_queue_stats *stats = &cq->stats;
 
-	cqe_tx = (struct cqe_send_t *)cq_desc;
 	switch (cqe_tx->send_status) {
 	case CQ_TX_ERROP_GOOD:
 		stats->tx.good++;

@@ -14,6 +14,8 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/log2.h>
+#include <linux/prefetch.h>
+#include <linux/irq.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -60,7 +62,8 @@ static void nicvf_dump_packet(struct sk_buff *skb)
 #endif
 
 #ifdef NICVF_ETHTOOL_ENABLE
-static void nicvf_set_rx_frame_cnt(struct nicvf *nic, struct sk_buff *skb)
+static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
+					  struct sk_buff *skb)
 {
 	if (skb->len <= 64)
 		nic->drv_stats.rx_frames_64++;
@@ -420,15 +423,13 @@ static int nicvf_init_resources(struct nicvf *nic)
 
 static void nicvf_snd_pkt_handler(struct net_device *netdev,
 				  struct cmp_queue *cq,
-				  void *cq_desc, int cqe_type)
+				  struct cqe_send_t *cqe_tx, int cqe_type)
 {
 	struct sk_buff *skb = NULL;
-	struct cqe_send_t *cqe_tx;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct snd_queue *sq;
 	struct sq_hdr_subdesc *hdr;
 
-	cqe_tx = (struct cqe_send_t *)cq_desc;
 	sq = &nic->qs->sq[cqe_tx->sq_idx];
 
 	hdr = (struct sq_hdr_subdesc *)GET_SQ_DESC(sq, cqe_tx->sqe_ptr);
@@ -441,7 +442,8 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 		cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
 	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
-	nicvf_check_cqe_tx_errs(nic, cq, cq_desc);
+	prefetch(skb);
+	nicvf_check_cqe_tx_errs(nic, cq, cqe_tx);
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
 	dev_consume_skb_any(skb);
 }
@@ -449,19 +451,18 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 				  struct napi_struct *napi,
 				  struct cmp_queue *cq,
-				  void *cq_desc, int cqe_type)
+				  struct cqe_rx_t *cqe_rx, int cqe_type)
 {
 	struct sk_buff *skb;
 	struct nicvf *nic = netdev_priv(netdev);
-	struct cqe_rx_t *cqe_rx = (struct cqe_rx_t *)cq_desc;
 	int err = 0;
 
 	/* Check for errors */
-	err = nicvf_check_cqe_rx_errs(nic, cq, cq_desc);
+	err = nicvf_check_cqe_rx_errs(nic, cq, cqe_rx);
 	if (err && !cqe_rx->rb_cnt)
 		return;
 
-	skb = nicvf_get_rcv_skb(nic, cq_desc);
+	skb = nicvf_get_rcv_skb(nic, cqe_rx);
 	if (!skb) {
 		nic_dbg(&nic->pdev->dev, "Packet not received\n");
 		return;
@@ -475,13 +476,15 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 	nicvf_set_rx_frame_cnt(nic, skb);
 #endif
 
-	skb->protocol = eth_type_trans(skb, netdev);
+	skb_record_rx_queue(skb, cqe_rx->rq_idx);
 	if (netdev->hw_features & NETIF_F_RXCSUM) {
 		/* HW by default verifies TCP/UDP/SCTP checksums */
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else {
 		skb_checksum_none_assert(skb);
 	}
+
+	skb->protocol = eth_type_trans(skb, netdev);
 
 	if (napi && (netdev->features & NETIF_F_GRO))
 		napi_gro_receive(napi, skb);
@@ -517,6 +520,10 @@ loop:
 	while (processed_cqe < cqe_count) {
 		/* Get the CQ descriptor */
 		cq_desc = (struct cqe_rx_t *)GET_CQ_DESC(cq, cqe_head);
+		cqe_head++;
+		cqe_head &= (cq->dmem.q_len - 1);
+		/* Initiate prefetch for next descriptor */
+		prefetch((struct cqe_rx_t *)GET_CQ_DESC(cq, cqe_head));
 
 		if ((work_done >= budget) && napi &&
 		    (cq_desc->cqe_type != CQE_TYPE_SEND)) {
@@ -533,7 +540,7 @@ loop:
 		break;
 		case CQE_TYPE_SEND:
 			nicvf_snd_pkt_handler(netdev, cq,
-					      cq_desc, CQE_TYPE_SEND);
+					      (void *)cq_desc, CQE_TYPE_SEND);
 		break;
 		case CQE_TYPE_INVALID:
 		case CQE_TYPE_RX_SPLIT:
@@ -543,8 +550,6 @@ loop:
 		break;
 		}
 		processed_cqe++;
-		cqe_head++;
-		cqe_head &= (cq->dmem.q_len - 1);
 	}
 	nic_dbg(&nic->pdev->dev, "%s processed_cqe %d work_done %d budget %d\n",
 		__func__, processed_cqe, work_done, budget);
@@ -900,6 +905,7 @@ int nicvf_stop(struct net_device *netdev)
 			continue;
 		napi_synchronize(&cq_poll->napi);
 		napi_disable(&cq_poll->napi);
+		napi_hash_del(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
 		nic->napi[qidx] = NULL;
@@ -944,6 +950,7 @@ int nicvf_open(struct net_device *netdev)
 		cq_poll->cq_idx = qidx;
 		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll,
 			       NAPI_POLL_WEIGHT);
+		napi_hash_add(&cq_poll->napi);
 		napi_enable(&cq_poll->napi);
 		nic->napi[qidx] = cq_poll;
 	}
@@ -981,8 +988,9 @@ int nicvf_open(struct net_device *netdev)
 		goto cleanup;
 
 	/* Make sure queue initialization is written */
-	smp_wmb();
+	wmb();
 
+	nicvf_reg_write(nic, NIC_VF_INT, -1);
 	/* Enable Qset err interrupt */
 	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
 
@@ -1009,6 +1017,7 @@ napi_del:
 		if (!cq_poll)
 			continue;
 		napi_disable(&cq_poll->napi);
+		napi_hash_del(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
 		nic->napi[qidx] = NULL;
@@ -1090,7 +1099,7 @@ void nicvf_update_stats(struct nicvf *nic)
 	stats->tx_ucast_frames_ok = GET_TX_STATS(TX_UCAST);
 	stats->tx_bcast_frames_ok = GET_TX_STATS(TX_BCAST);
 	stats->tx_mcast_frames_ok = GET_TX_STATS(TX_MCAST);
-	stats->tx_drops = GET_RX_STATS(TX_DROP);
+	stats->tx_drops = GET_TX_STATS(TX_DROP);
 
 	drv_stats->rx_frames_ok = stats->rx_ucast_frames_ok +
 				  stats->rx_bcast_frames_ok +
