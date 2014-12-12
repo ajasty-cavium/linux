@@ -43,33 +43,16 @@ int __weak raw_pci_write(unsigned int domain, unsigned int bus,
 	return pci_mmcfg_write(domain, bus, devfn, reg, len, val);
 }
 
-static char __iomem *pci_dev_base(unsigned int seg, unsigned int bus,
-				  unsigned int devfn)
+static inline char __iomem *pci_dev_base(struct pci_mmcfg_region *cfg,
+					 unsigned int bus, unsigned int devfn)
 {
-	struct pci_mmcfg_region *cfg = pci_mmconfig_lookup(seg, bus);
-
-	if (cfg && cfg->virt)
-		return cfg->virt + (PCI_MMCFG_BUS_OFFSET(bus) | (devfn << 12));
-	return NULL;
+	return cfg->virt + (PCI_MMCFG_BUS_OFFSET(bus) | (devfn << 12));
 }
 
-int __weak pci_mmcfg_read(unsigned int seg, unsigned int bus,
-			  unsigned int devfn, int reg, int len, u32 *value)
+static int __pci_mmcfg_read(struct pci_mmcfg_region *cfg, unsigned int bus,
+			    unsigned int devfn, int reg, int len, u32 *value)
 {
-	char __iomem *addr;
-
-	/* Why do we have this when nobody checks it. How about a BUG()!? -AK */
-	if (unlikely((bus > 255) || (devfn > 255) || (reg > 4095))) {
-err:		*value = -1;
-		return -EINVAL;
-	}
-
-	rcu_read_lock();
-	addr = pci_dev_base(seg, bus, devfn);
-	if (!addr) {
-		rcu_read_unlock();
-		goto err;
-	}
+	char __iomem *addr = pci_dev_base(cfg, bus, devfn);
 
 	switch (len) {
 	case 1:
@@ -82,26 +65,42 @@ err:		*value = -1;
 		*value = mmio_config_readl(addr + reg);
 		break;
 	}
-	rcu_read_unlock();
-
 	return 0;
 }
 
-int __weak pci_mmcfg_write(unsigned int seg, unsigned int bus,
-			   unsigned int devfn, int reg, int len, u32 value)
+int __weak pci_mmcfg_read(unsigned int seg, unsigned int bus,
+			  unsigned int devfn, int reg, int len, u32 *value)
 {
-	char __iomem *addr;
+	struct pci_mmcfg_region *cfg;
+	int ret;
 
 	/* Why do we have this when nobody checks it. How about a BUG()!? -AK */
-	if (unlikely((bus > 255) || (devfn > 255) || (reg > 4095)))
-		return -EINVAL;
-
-	rcu_read_lock();
-	addr = pci_dev_base(seg, bus, devfn);
-	if (!addr) {
-		rcu_read_unlock();
+	if (unlikely((bus > 255) || (devfn > 255) || (reg > 4095))) {
+err:		*value = -1;
 		return -EINVAL;
 	}
+
+	rcu_read_lock();
+	cfg = pci_mmconfig_lookup(seg, bus);
+	if (!cfg || !cfg->virt) {
+		rcu_read_unlock();
+		goto err;
+	}
+
+	if (cfg->read)
+		ret = (*cfg->read)(cfg, bus, devfn, reg, len, value);
+	else
+		ret = __pci_mmcfg_read(cfg, bus, devfn, reg, len, value);
+
+	rcu_read_unlock();
+
+	return ret;
+}
+
+static int __pci_mmcfg_write(struct pci_mmcfg_region *cfg, unsigned int bus,
+			     unsigned int devfn, int reg, int len, u32 value)
+{
+	char __iomem *addr = pci_dev_base(cfg, bus, devfn);
 
 	switch (len) {
 	case 1:
@@ -114,9 +113,34 @@ int __weak pci_mmcfg_write(unsigned int seg, unsigned int bus,
 		mmio_config_writel(addr + reg, value);
 		break;
 	}
+	return 0;
+}
+
+int __weak pci_mmcfg_write(unsigned int seg, unsigned int bus,
+			   unsigned int devfn, int reg, int len, u32 value)
+{
+	struct pci_mmcfg_region *cfg;
+	int ret;
+
+	/* Why do we have this when nobody checks it. How about a BUG()!? -AK */
+	if (unlikely((bus > 255) || (devfn > 255) || (reg > 4095)))
+		return -EINVAL;
+
+	rcu_read_lock();
+	cfg = pci_mmconfig_lookup(seg, bus);
+	if (!cfg || !cfg->virt) {
+		rcu_read_unlock();
+		return -EINVAL;
+	}
+
+	if (cfg->write)
+		ret = (*cfg->write)(cfg, bus, devfn, reg, len, value);
+	else
+		ret = __pci_mmcfg_write(cfg, bus, devfn, reg, len, value);
+
 	rcu_read_unlock();
 
-	return 0;
+	return ret;
 }
 
 static void __iomem *mcfg_ioremap(struct pci_mmcfg_region *cfg)
@@ -307,10 +331,15 @@ int __init __weak acpi_mcfg_check_entry(struct acpi_table_mcfg *mcfg,
 	return 0;
 }
 
+extern struct acpi_mcfg_fixup __start_acpi_mcfg_fixups[];
+extern struct acpi_mcfg_fixup __end_acpi_mcfg_fixups[];
+
 int __init pci_parse_mcfg(struct acpi_table_header *header)
 {
 	struct acpi_table_mcfg *mcfg;
 	struct acpi_mcfg_allocation *cfg_table, *cfg;
+	struct acpi_mcfg_fixup *fixup;
+	struct pci_mmcfg_region *new;
 	unsigned long i;
 	int entries;
 
@@ -332,6 +361,15 @@ int __init pci_parse_mcfg(struct acpi_table_header *header)
 		return -ENODEV;
 	}
 
+	fixup = __start_acpi_mcfg_fixups;
+	while (fixup < __end_acpi_mcfg_fixups) {
+		if (!strncmp(fixup->oem_id, header->oem_id, 6) &&
+		    !strncmp(fixup->oem_table_id, header->oem_table_id, 8))
+			break;
+		++fixup;
+	}
+
+
 	cfg_table = (struct acpi_mcfg_allocation *) &mcfg[1];
 	for (i = 0; i < entries; i++) {
 		cfg = &cfg_table[i];
@@ -340,12 +378,15 @@ int __init pci_parse_mcfg(struct acpi_table_header *header)
 			return -ENODEV;
 		}
 
-		if (pci_mmconfig_add(cfg->pci_segment, cfg->start_bus_number,
-				   cfg->end_bus_number, cfg->address) == NULL) {
+		new = pci_mmconfig_add(cfg->pci_segment, cfg->start_bus_number,
+				       cfg->end_bus_number, cfg->address);
+		if (!new) {
 			pr_warn(PREFIX "no memory for MCFG entries\n");
 			free_all_mmcfg();
 			return -ENOMEM;
 		}
+		if (fixup < __end_acpi_mcfg_fixups)
+			new->fixup = fixup->hook;
 	}
 
 	return 0;

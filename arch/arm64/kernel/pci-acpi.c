@@ -299,6 +299,7 @@ probe_pci_root_info(struct pci_root_info *info, struct acpi_device *device,
 struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 {
 	struct acpi_device *device = root->device;
+	struct pci_mmcfg_region *mcfg;
 	int domain = root->segment;
 	int bus = root->secondary.start;
 	struct pci_controller *controller;
@@ -306,6 +307,17 @@ struct pci_bus *pci_acpi_scan_root(struct acpi_pci_root *root)
 	int busnum = root->secondary.start;
 	struct pci_bus *pbus;
 	int ret;
+
+	/* we need mmconfig */
+	mcfg = pci_mmconfig_lookup(domain, busnum);
+	if (!mcfg) {
+		pr_err("pci_bus %04x:%02x has no MCFG table\n",
+		       domain, busnum);
+		return NULL;
+	}
+
+	if (mcfg->fixup)
+		(*mcfg->fixup)(root, mcfg);
 
 	controller = alloc_pci_controller(domain);
 	if (!controller)

@@ -9,9 +9,21 @@
 /* "PCI MMCONFIG %04x [bus %02x-%02x]" */
 #define PCI_MMCFG_RESOURCE_NAME_LEN (22 + 4 + 2 + 2)
 
+struct acpi_pci_root;
+struct pci_mmcfg_region;
+
+typedef int (*acpi_mcfg_fixup_t)(struct acpi_pci_root *root,
+				 struct pci_mmcfg_region *cfg);
+
 struct pci_mmcfg_region {
 	struct list_head list;
 	struct resource res;
+	int (*read)(struct pci_mmcfg_region *cfg, unsigned int bus,
+		    unsigned int devfn, int reg, int len, u32 *value);
+	int (*write)(struct pci_mmcfg_region *cfg, unsigned int bus,
+		     unsigned int devfn, int reg, int len, u32 value);
+	acpi_mcfg_fixup_t fixup;
+	void *data;
 	u64 address;
 	char __iomem *virt;
 	u16 segment;
@@ -19,6 +31,18 @@ struct pci_mmcfg_region {
 	u8 end_bus;
 	char name[PCI_MMCFG_RESOURCE_NAME_LEN];
 };
+
+struct acpi_mcfg_fixup {
+	char oem_id[7];
+	char oem_table_id[9];
+	acpi_mcfg_fixup_t hook;
+};
+
+/* Designate a routine to fix up buggy MCFG */
+#define DECLARE_ACPI_MCFG_FIXUP(oem_id, table_id, hook)	\
+	static const struct acpi_mcfg_fixup __acpi_fixup_##hook __used	\
+	__attribute__((__section__(".acpi_fixup_mcfg"), aligned((sizeof(void *))))) \
+	= { {oem_id}, {table_id}, hook };
 
 void pci_mmcfg_early_init(void);
 void pci_mmcfg_late_init(void);
