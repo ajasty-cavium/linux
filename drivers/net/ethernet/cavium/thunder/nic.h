@@ -83,6 +83,7 @@
 #define	NIC_MAX_TL1			2
 
 /* TNS bypass mode */
+#define	NIC_TL2_PER_BGX			32
 #define	NIC_TL4_PER_BGX			(NIC_MAX_TL4 / NIC_MAX_BGX)
 #define	NIC_TL4_PER_LMAC		(NIC_MAX_TL4 / NIC_CHANS_PER_INF)
 
