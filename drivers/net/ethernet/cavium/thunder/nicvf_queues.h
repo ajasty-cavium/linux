@@ -223,7 +223,7 @@ struct cmp_queue_stats {
 		u64 csum_overlap;
 		u64 csum_overflow;
 	} tx;
-};
+} ____cacheline_aligned_in_smp;
 
 enum RQ_SQ_STATS {
 	RQ_SQ_STATS_OCTS,
@@ -233,7 +233,7 @@ enum RQ_SQ_STATS {
 struct rx_tx_queue_stats {
 	u64	bytes;
 	u64	pkts;
-};
+} ____cacheline_aligned_in_smp;
 
 struct q_desc_mem {
 	dma_addr_t	dma;
@@ -252,7 +252,7 @@ struct rbdr {
 	uint32_t	head;
 	uint32_t	tail;
 	struct q_desc_mem   dmem;
-};
+} ____cacheline_aligned_in_smp;
 
 struct rcv_queue {
 	bool		enable;
@@ -267,7 +267,7 @@ struct rcv_queue {
 	uint8_t		start_qs_rbdr_idx; /* RBDR idx in the above QS */
 	uint8_t         caching;
 	struct		rx_tx_queue_stats stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct cmp_queue {
 	bool		enable;
@@ -277,7 +277,7 @@ struct cmp_queue {
 	void		*desc;
 	struct q_desc_mem   dmem;
 	struct cmp_queue_stats	stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct snd_queue {
 	bool		enable;
@@ -292,7 +292,7 @@ struct snd_queue {
 	cpumask_t	affinity_mask;
 	struct q_desc_mem   dmem;
 	struct rx_tx_queue_stats stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct queue_set {
 	bool		enable;
@@ -309,7 +309,7 @@ struct queue_set {
 	struct	cmp_queue	cq[MAX_CMP_QUEUES_PER_QS];
 	struct	snd_queue	sq[MAX_SND_QUEUES_PER_QS];
 	struct	rbdr		rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
-};
+} ____cacheline_aligned_in_smp;
 
 #define GET_RBDR_DESC(RING, idx)\
 		(&(((struct rbdr_entry_t *)((RING)->desc))[idx]))

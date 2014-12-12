@@ -162,7 +162,7 @@ struct nicvf_rss_info {
 	uint16_t rss_size;
 	uint8_t  ind_tbl[NIC_MAX_RSS_IDR_TBL_SIZE];
 	uint64_t key[RSS_HASH_KEY_SIZE];
-};
+} ____cacheline_aligned_in_smp;
 #endif
 
 enum rx_stats_reg_offset {
@@ -262,7 +262,7 @@ struct nicvf {
 	struct msix_entry	msix_entries[NIC_VF_MSIX_VECTORS];
 	char			irq_name[NIC_VF_MSIX_VECTORS][20];
 	uint8_t			irq_allocated[NIC_VF_MSIX_VECTORS];
-};
+} ____cacheline_aligned_in_smp;
 
 struct nicpf {
 	struct net_device	*netdev;
@@ -288,7 +288,7 @@ struct nicpf {
 	uint16_t		num_vec;
 	struct msix_entry	msix_entries[NIC_PF_MSIX_VECTORS];
 	uint8_t			irq_allocated[NIC_PF_MSIX_VECTORS];
-};
+} ____cacheline_aligned_in_smp;
 
 /* PF <--> VF Mailbox communication
  * Eight 64bit registers are shared between PF and VF.
@@ -406,7 +406,7 @@ struct nic_mbx {
 		uint64_t		rsvd[6];
 	} data;
 	uint64_t	   mbx_trigger_intr;
-};
+} ____cacheline_aligned_in_smp;
 
 int nicvf_set_real_num_queues(struct net_device *netdev,
 			      int tx_queues, int rx_queues);
