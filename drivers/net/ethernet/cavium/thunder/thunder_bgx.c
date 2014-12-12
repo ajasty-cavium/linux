@@ -454,6 +454,9 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 	uint64_t offset, addr;
 	struct bgx *bgx;
 
+	/* Skipping this for now to support promisc mode */
+	return;
+
 	bgx_idx += node * MAX_BGX_PER_CN88XX;
 	bgx = bgx_vnic[bgx_idx];
 
