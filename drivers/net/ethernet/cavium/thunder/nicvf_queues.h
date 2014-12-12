@@ -57,15 +57,16 @@
 
 /* Default queue count per QS, its lengths and threshold values */
 #define RBDR_CNT		1
-#define RCV_QUEUE_CNT		1
+#define RCV_QUEUE_CNT		8
 #define SND_QUEUE_CNT		8
 #define CMP_QUEUE_CNT		8 /* Max of RCV and SND qcount */
 
-#define SND_QSIZE		SND_QUEUE_SIZE3
+#define SND_QSIZE		SND_QUEUE_SIZE4
 #define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
 #define SND_QUEUE_THRESH	2ULL
 #define MIN_SQ_DESC_PER_PKT_XMIT	2
-#define MAX_CQE_PER_PKT_XMIT		2
+/* Since timestamp not enabled, otherwise 2 */
+#define MAX_CQE_PER_PKT_XMIT		1
 
 #define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))

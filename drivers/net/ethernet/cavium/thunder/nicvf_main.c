@@ -228,6 +228,8 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		mbx_addr += NIC_PF_VF_MAILBOX_SIZE;
 	}
 
+	nic_dbg(&nic->pdev->dev,
+		"Mbox message from PF, msg 0x%x\n", mbx.msg);
 	switch (mbx.msg & NIC_PF_VF_MBX_MSG_MASK) {
 	case NIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
@@ -243,6 +245,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_PF_VF_MSG_RSS_SIZE:
 		nic->rss_info.rss_size = mbx.data.rss_size.ind_tbl_size;
+		pf_acked = true;
 		break;
 #endif
 	default:

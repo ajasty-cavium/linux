@@ -40,7 +40,7 @@
 #define	VNIC_SG_SUPPORT
 #undef	VNIC_TSO_SUPPORT
 #undef	VNIC_LRO_SUPPORT
-#undef  VNIC_RSS_SUPPORT
+#define VNIC_RSS_SUPPORT
 
 /* ETHTOOL enable or disable, undef this to disable */
 #define	NICVF_ETHTOOL_ENABLE
@@ -141,7 +141,7 @@ struct nicvf_cq_poll {
 };
 
 #define	NIC_RSSI_COUNT			4096 /* Total no of RSS indices */
-#define NIC_MAX_RSS_HASH_BITS		8
+#define NIC_MAX_RSS_HASH_BITS		5
 #define NIC_MAX_RSS_IDR_TBL_SIZE	(1 << NIC_MAX_RSS_HASH_BITS)
 #define RSS_HASH_KEY_SIZE		5 /* 320 bit key */
 

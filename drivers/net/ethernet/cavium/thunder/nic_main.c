@@ -242,7 +242,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_PF_VF_MSG_RSS_SIZE:
 		nic_send_rss_size(nic, vf);
-		break;
+		return;
 	case NIC_PF_VF_MSG_RSS_CFG:
 	case NIC_PF_VF_MSG_RSS_CFG_CONT:
 		nic_config_rss(nic, &mbx.data.rss_cfg);
@@ -483,14 +483,14 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 
 	cpi_base = nic->cpi_base[cfg->vf_id];
 	cpi_cfg = nic_reg_read(nic, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3));
-	rssi_base = cpi_cfg & 0x0FFF;
+	rssi_base = (cpi_cfg & 0x0FFF) + cfg->tbl_offset;
 
-	rssi = rssi_base + cfg->tbl_offset;
+	rssi = rssi_base;
 	qset = cfg->vf_id;
 
 	for (; rssi < (rssi_base + cfg->tbl_len); rssi++) {
 		nic_reg_write(nic, NIC_PF_RSSI_0_4097_RQ | (rssi << 3),
-			      (qset << 3) | cfg->ind_tbl[idx]);
+			      (qset << 3) | (cfg->ind_tbl[idx] & 0x7));
 		idx++;
 	}
 
@@ -788,9 +788,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic_init_hw(nic);
 
 	/* Set RSS TBL size for each VF */
-	nic->rss_ind_tbl_size = max((NIC_RSSI_COUNT / nic->num_vf_en),
-				    NIC_MAX_RSS_IDR_TBL_SIZE);
-	nic->rss_ind_tbl_size = rounddown_pow_of_two(nic->rss_ind_tbl_size);
+	nic->rss_ind_tbl_size = NIC_MAX_RSS_IDR_TBL_SIZE;
 
 	/* Register interrupts */
 	if (nic_register_interrupts(nic))
