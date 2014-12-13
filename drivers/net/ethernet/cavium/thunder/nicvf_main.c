@@ -729,6 +729,7 @@ static void nicvf_disable_msix(struct nicvf *nic)
 
 static int nicvf_register_interrupts(struct nicvf *nic)
 {
+	cpumask_t  affinity_mask;
 	int irq, free, ret = 0;
 	int vector;
 
@@ -745,7 +746,23 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 			nic->vf_id, irq - NICVF_INTR_ID_RBDR);
 
 	/* Register all interrupts except mailbox */
-	for (irq = 0; irq < NICVF_INTR_ID_MISC; irq++) {
+	for (irq = 0; irq < NICVF_INTR_ID_SQ; irq++) {
+		vector = nic->msix_entries[irq].vector;
+		ret = request_irq(vector, nicvf_intr_handler,
+				  0, nic->irq_name[irq], nic);
+		if (ret)
+			break;
+		nic->irq_allocated[irq] = 1;
+
+		/* Set CQ irq affinity, 1 CQ per CPU */
+		if (cpu_online(irq) && irq_can_set_affinity(irq)) {
+			cpumask_clear(&affinity_mask);
+			cpumask_set_cpu(irq, &affinity_mask);
+			__irq_set_affinity(vector, &affinity_mask, false);
+		}
+	}
+
+	for (irq = NICVF_INTR_ID_SQ; irq < NICVF_INTR_ID_MISC; irq++) {
 		vector = nic->msix_entries[irq].vector;
 		ret = request_irq(vector, nicvf_intr_handler,
 				  0, nic->irq_name[irq], nic);
