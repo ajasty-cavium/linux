@@ -344,7 +344,7 @@ struct arm_smmu_smr {
 
 struct arm_smmu_master_cfg {
 	int				num_streamids;
-	u32				streamids[MAX_MASTER_STREAMIDS];
+	u16				streamids[MAX_MASTER_STREAMIDS];
 	struct arm_smmu_smr		*smrs;
 };
 
@@ -1570,8 +1570,7 @@ static bool arm_smmu_capable(enum iommu_cap cap)
 
 static int __arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 {
-	/* include domain number with pci device id */
-	*((u32 *)data) = ((pci_domain_nr(pdev->bus)<<16)|alias);
+	*((u16 *)data) = alias;
 	return 0; /* Continue walking */
 }
 
