@@ -57,15 +57,16 @@
 
 /* Default queue count per QS, its lengths and threshold values */
 #define RBDR_CNT		1
-#define RCV_QUEUE_CNT		1
+#define RCV_QUEUE_CNT		8
 #define SND_QUEUE_CNT		8
 #define CMP_QUEUE_CNT		8 /* Max of RCV and SND qcount */
 
-#define SND_QSIZE		SND_QUEUE_SIZE3
+#define SND_QSIZE		SND_QUEUE_SIZE4
 #define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
 #define SND_QUEUE_THRESH	2ULL
 #define MIN_SQ_DESC_PER_PKT_XMIT	2
-#define MAX_CQE_PER_PKT_XMIT		2
+/* Since timestamp not enabled, otherwise 2 */
+#define MAX_CQE_PER_PKT_XMIT		1
 
 #define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
@@ -76,6 +77,7 @@
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define RCV_BUFFER_LEN		2048 /* In multiples of 128bytes */
+#define STORE_SKB_ADDR_ALIGN	(2 * L1_CACHE_BYTES)
 
 #define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
 				 MAX_CQE_PER_PKT_XMIT)
@@ -222,7 +224,7 @@ struct cmp_queue_stats {
 		u64 csum_overlap;
 		u64 csum_overflow;
 	} tx;
-};
+} ____cacheline_aligned_in_smp;
 
 enum RQ_SQ_STATS {
 	RQ_SQ_STATS_OCTS,
@@ -232,7 +234,7 @@ enum RQ_SQ_STATS {
 struct rx_tx_queue_stats {
 	u64	bytes;
 	u64	pkts;
-};
+} ____cacheline_aligned_in_smp;
 
 struct q_desc_mem {
 	dma_addr_t	dma;
@@ -251,7 +253,7 @@ struct rbdr {
 	uint32_t	head;
 	uint32_t	tail;
 	struct q_desc_mem   dmem;
-};
+} ____cacheline_aligned_in_smp;
 
 struct rcv_queue {
 	bool		enable;
@@ -266,7 +268,7 @@ struct rcv_queue {
 	uint8_t		start_qs_rbdr_idx; /* RBDR idx in the above QS */
 	uint8_t         caching;
 	struct		rx_tx_queue_stats stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct cmp_queue {
 	bool		enable;
@@ -276,7 +278,7 @@ struct cmp_queue {
 	void		*desc;
 	struct q_desc_mem   dmem;
 	struct cmp_queue_stats	stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct snd_queue {
 	bool		enable;
@@ -288,9 +290,10 @@ struct snd_queue {
 	uint32_t	tail;
 	uint64_t	*skbuff;
 	void		*desc;
+	cpumask_t	affinity_mask;
 	struct q_desc_mem   dmem;
 	struct rx_tx_queue_stats stats;
-};
+} ____cacheline_aligned_in_smp;
 
 struct queue_set {
 	bool		enable;
@@ -307,7 +310,7 @@ struct queue_set {
 	struct	cmp_queue	cq[MAX_CMP_QUEUES_PER_QS];
 	struct	snd_queue	sq[MAX_SND_QUEUES_PER_QS];
 	struct	rbdr		rbdr[MAX_RCV_BUF_DESC_RINGS_PER_QS];
-};
+} ____cacheline_aligned_in_smp;
 
 #define GET_RBDR_DESC(RING, idx)\
 		(&(((struct rbdr_entry_t *)((RING)->desc))[idx]))
@@ -337,7 +340,7 @@ void nicvf_sq_free_used_descs(struct net_device *netdev,
 			      struct snd_queue *sq, int qidx);
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb);
 
-struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, void *cq_desc);
+struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx);
 void nicvf_refill_rbdr(unsigned long data);
 
 void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx);
@@ -359,7 +362,7 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic,
 void nicvf_update_rq_stats(struct nicvf *nic, int rq_idx);
 void nicvf_update_sq_stats(struct nicvf *nic, int sq_idx);
 int nicvf_check_cqe_rx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc);
+			    struct cmp_queue *cq, struct cqe_rx_t *cqe_rx);
 int nicvf_check_cqe_tx_errs(struct nicvf *nic,
-			    struct cmp_queue *cq, void *cq_desc);
+			    struct cmp_queue *cq, struct cqe_send_t *cqe_tx);
 #endif /* NICVF_QUEUES_H */

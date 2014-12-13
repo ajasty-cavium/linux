@@ -242,7 +242,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_PF_VF_MSG_RSS_SIZE:
 		nic_send_rss_size(nic, vf);
-		break;
+		return;
 	case NIC_PF_VF_MSG_RSS_CFG:
 	case NIC_PF_VF_MSG_RSS_CFG_CONT:
 		nic_config_rss(nic, &mbx.data.rss_cfg);
@@ -367,9 +367,6 @@ static void nic_init_hw(struct nicpf *nic)
 	nic_reg_write(nic,
 		      NIC_PF_INTF_0_1_BP_CFG + (1 << 8), (1ULL << 63) | 0x09);
 
-	for (i = 0; i < NIC_MAX_CHANS; i++)
-		nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (i << 3), 1);
-
 	if (nic->flags & NIC_TNS_ENABLED) {
 		reg = NIC_TNS_MODE << 7;
 		reg |= 0x06;
@@ -486,14 +483,14 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 
 	cpi_base = nic->cpi_base[cfg->vf_id];
 	cpi_cfg = nic_reg_read(nic, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3));
-	rssi_base = cpi_cfg & 0x0FFF;
+	rssi_base = (cpi_cfg & 0x0FFF) + cfg->tbl_offset;
 
-	rssi = rssi_base + cfg->tbl_offset;
+	rssi = rssi_base;
 	qset = cfg->vf_id;
 
 	for (; rssi < (rssi_base + cfg->tbl_len); rssi++) {
 		nic_reg_write(nic, NIC_PF_RSSI_0_4097_RQ | (rssi << 3),
-			      (qset << 3) | cfg->ind_tbl[idx]);
+			      (qset << 3) | (cfg->ind_tbl[idx] & 0x7));
 		idx++;
 	}
 
@@ -515,11 +512,14 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
  */
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 {
-	uint32_t bgx, lmac;
+	uint32_t bgx, lmac, chan;
 	uint32_t tl2, tl3, tl4;
+	uint32_t rr_quantum;
 
 	bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
+	/* 24 bytes for FCS, IPG and preamble */
+	rr_quantum = ((NIC_HW_MAX_FRS + 24) / 4);
 
 	tl4 = (lmac * NIC_TL4_PER_LMAC) + (bgx * NIC_TL4_PER_BGX);
 	tl4 += sq_idx;
@@ -528,16 +528,18 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 		      (vnic << NIC_QS_ID_SHIFT) |
 		      (sq_idx << NIC_Q_NUM_SHIFT), tl4);
 	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
-		      (vnic << 27) | (sq_idx << 24) | (NIC_HW_MAX_FRS / 4));
+		      (vnic << 27) | (sq_idx << 24) | rr_quantum);
 
-	nic_reg_write(nic, NIC_PF_TL3_0_255_CFG | (tl3 << 3),
-		      NIC_HW_MAX_FRS / 4);
-	nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3), lmac << 4);
+	nic_reg_write(nic, NIC_PF_TL3_0_255_CFG | (tl3 << 3), rr_quantum);
+	chan = (lmac * MAX_BGX_CHANS_PER_LMAC) + (bgx * NIC_CHANS_PER_INF);
+	nic_reg_write(nic, NIC_PF_TL3_0_255_CHAN | (tl3 << 3), chan);
+	/* Enable backpressure on the channel */
+	nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (chan << 3), 1);
 
-	tl2 = tl3 >> 2;
+	tl2 = lmac + (bgx * NIC_TL2_PER_BGX);
 	nic_reg_write(nic, NIC_PF_TL3A_0_63_CFG | (tl2 << 3), tl2);
-	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3),
-		      NIC_HW_MAX_FRS / 4);
+	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3), rr_quantum);
+	/* No priorities as of now */
 	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
 }
 
@@ -786,9 +788,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic_init_hw(nic);
 
 	/* Set RSS TBL size for each VF */
-	nic->rss_ind_tbl_size = max((NIC_RSSI_COUNT / nic->num_vf_en),
-				    NIC_MAX_RSS_IDR_TBL_SIZE);
-	nic->rss_ind_tbl_size = rounddown_pow_of_two(nic->rss_ind_tbl_size);
+	nic->rss_ind_tbl_size = NIC_MAX_RSS_IDR_TBL_SIZE;
 
 	/* Register interrupts */
 	if (nic_register_interrupts(nic))
