@@ -1086,10 +1086,11 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
-	if (nicvf_hw_set_mac_addr(nic, netdev))
-		return -EBUSY;
-
 	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
+
+	if (nic->msix_enabled)
+		if (nicvf_hw_set_mac_addr(nic, netdev))
+			return -EBUSY;
 
 	return 0;
 }
