@@ -47,6 +47,7 @@ static int rss_config = RSS_IP_HASH_ENA | RSS_TCP_HASH_ENA | RSS_UDP_HASH_ENA;
 
 static int nicvf_enable_msix(struct nicvf *nic);
 static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev);
+static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx);
 
 #ifdef NICVF_DUMP_PACKET
 static void nicvf_dump_packet(struct sk_buff *skb)
@@ -116,6 +117,7 @@ uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
 static bool pf_ready_to_rcv_msg;
 static bool pf_acked;
 static bool pf_nacked;
+static bool bgx_stats_acked;
 
 int nicvf_lock_mbox(struct nicvf *nic)
 {
@@ -251,6 +253,11 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		pf_acked = true;
 		break;
 #endif
+	case NIC_PF_VF_MSG_BGX_STATS:
+		nicvf_read_bgx_stats(nic, &mbx.data.bgx_stats);
+		pf_acked = true;
+		bgx_stats_acked = true;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Invalid message from PF, msg 0x%x\n", mbx.msg);
@@ -1087,6 +1094,53 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 	return 0;
 }
 
+static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx)
+{
+	if (bgx->rx)
+		nic->bgx_stats.rx_stats[bgx->idx] = bgx->stats;
+	else
+		nic->bgx_stats.tx_stats[bgx->idx] = bgx->stats;
+}
+
+void nicvf_update_lmac_stats(struct nicvf *nic)
+{
+	int stat = 0;
+	struct nic_mbx mbx = {};
+	int timeout;
+
+	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
+	mbx.data.bgx_stats.vf_id = nic->vf_id;
+	/* Rx stats */
+	mbx.data.bgx_stats.rx = 1;
+	while (stat < BGX_RX_STATS_COUNT) {
+		bgx_stats_acked = 0;
+		mbx.data.bgx_stats.idx = stat;
+		nicvf_send_msg_to_pf(nic, &mbx);
+		timeout = 0;
+		while ((!bgx_stats_acked) && (timeout < 10)) {
+			msleep(2);
+			timeout++;
+		}
+		stat++;
+	}
+
+	stat = 0;
+
+	/* Tx stats */
+	mbx.data.bgx_stats.rx = 0;
+	while (stat < BGX_TX_STATS_COUNT) {
+		bgx_stats_acked = 0;
+		mbx.data.bgx_stats.idx = stat;
+		nicvf_send_msg_to_pf(nic, &mbx);
+		timeout = 0;
+		while ((!bgx_stats_acked) && (timeout < 10)) {
+			msleep(2);
+			timeout++;
+		}
+		stat++;
+	}
+}
+
 void nicvf_update_stats(struct nicvf *nic)
 {
 	int qidx;
@@ -1126,7 +1180,7 @@ void nicvf_update_stats(struct nicvf *nic)
 				  stats->tx_mcast_frames_ok;
 	drv_stats->rx_drops = stats->rx_drop_red +
 			      stats->rx_drop_overrun;
-	drv_stats->rx_drops = stats->tx_drops;
+	drv_stats->tx_drops = stats->tx_drops;
 
 	/* Update RQ and SQ stats */
 	for (qidx = 0; qidx < qs->rq_cnt; qidx++)

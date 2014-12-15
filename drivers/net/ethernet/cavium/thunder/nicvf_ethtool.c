@@ -15,6 +15,7 @@
 #include "nic.h"
 #include "nicvf_queues.h"
 #include "q_struct.h"
+#include "thunder_bgx.h"
 
 #define DRV_NAME	"thunder-nicvf"
 #define DRV_VERSION     "1.0"
@@ -168,6 +169,16 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 			data += ETH_GSTRING_LEN;
 		}
 	}
+
+	for (stats = 0; stats < BGX_RX_STATS_COUNT; stats++) {
+		sprintf(data, "bgx_rxstat%d: ", stats);
+		data += ETH_GSTRING_LEN;
+	}
+
+	for (stats = 0; stats < BGX_TX_STATS_COUNT; stats++) {
+		sprintf(data, "bgx_txstat%d: ", stats);
+		data += ETH_GSTRING_LEN;
+	}
 }
 
 static int nicvf_get_sset_count(struct net_device *netdev, int sset)
@@ -177,7 +188,8 @@ static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 
 	return nicvf_n_hw_stats + nicvf_n_drv_stats +
 		(nicvf_n_queue_stats *
-		 (MAX_RCV_QUEUES_PER_QS + MAX_SND_QUEUES_PER_QS));
+		 (MAX_RCV_QUEUES_PER_QS + MAX_SND_QUEUES_PER_QS)) +
+		BGX_RX_STATS_COUNT + BGX_TX_STATS_COUNT;
 }
 
 static void nicvf_get_ethtool_stats(struct net_device *netdev,
@@ -187,6 +199,9 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 	int stat, qidx;
 
 	nicvf_update_stats(nic);
+
+	/* Update LMAC stats */
+	nicvf_update_lmac_stats(nic);
 
 	for (stat = 0; stat < nicvf_n_hw_stats; stat++)
 		*(data++) = ((u64 *)&nic->stats)
@@ -206,6 +221,11 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 			*(data++) = ((u64 *)&nic->qs->sq[qidx].stats)
 					[nicvf_queue_stats[stat].index];
 	}
+
+	for (stat = 0; stat < BGX_RX_STATS_COUNT; stat++)
+		*(data++) = nic->bgx_stats.rx_stats[stat];
+	for (stat = 0; stat < BGX_TX_STATS_COUNT; stat++)
+		*(data++) = nic->bgx_stats.tx_stats[stat];
 }
 
 static int nicvf_get_regs_len(struct net_device *dev)

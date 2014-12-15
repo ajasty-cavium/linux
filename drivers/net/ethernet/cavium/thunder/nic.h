@@ -254,6 +254,7 @@ struct nicvf {
 
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
+	struct bgx_stats	bgx_stats;
 	struct work_struct	reset_task;
 
 	/* MSI-X  */
@@ -316,6 +317,7 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
 #define	NIC_PF_VF_MSG_RQ_BP_CFG		0x0E
 #define	NIC_PF_VF_MSG_RQ_SW_SYNC	0x0F
+#define	NIC_PF_VF_MSG_BGX_STATS		0x10
 
 struct nic_cfg_msg {
 	uint64_t   vf_id;
@@ -380,6 +382,15 @@ struct rss_cfg_msg {
 };
 #endif
 
+struct bgx_stats_msg {
+	uint8_t    vf_id;
+	uint8_t    rx;
+	uint8_t    idx;
+	uint8_t    rsvd0;
+	uint32_t   rsvd1;
+	uint64_t   stats;
+};
+
 /* Maximum 8 64bit locations */
 struct nic_mbx {
 #define	NIC_PF_VF_MBX_MSG_MASK		0xFFFF
@@ -403,6 +414,7 @@ struct nic_mbx {
 		struct rss_sz_msg	rss_size;
 		struct rss_cfg_msg	rss_cfg;
 #endif
+		struct bgx_stats_msg    bgx_stats;
 		uint64_t		rsvd[6];
 	} data;
 	uint64_t	   mbx_trigger_intr;
@@ -422,6 +434,7 @@ void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 #endif
 void nicvf_update_stats(struct nicvf *nic);
+void nicvf_update_lmac_stats(struct nicvf *nic);
 
 /* Debug */
 #undef	NIC_DEBUG

@@ -318,6 +318,24 @@ static void bgx_disable_msix(struct bgx *bgx)
 	}
 }
 
+uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
+{
+	struct bgx *bgx;
+
+	bgx = bgx_vnic[bgx_idx];
+	return bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT0 + (idx * 8));
+}
+EXPORT_SYMBOL(bgx_get_rx_stats);
+
+uint64_t bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
+{
+	struct bgx *bgx;
+
+	bgx = bgx_vnic[bgx_idx];
+	return bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT0 + (idx * 8));
+}
+EXPORT_SYMBOL(bgx_get_tx_stats);
+
 void bgx_print_stats(int bgx_idx, int lmac)
 {
 	struct bgx *bgx;
@@ -379,15 +397,12 @@ void bgx_print_stats(int bgx_idx, int lmac)
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT6));
 	dev_info(&bgx->pdev->dev, "BGX RX STATS7 0x%llx\n",
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT7));
-	/* FIX me: These stats cause a kernel crash */
-#if 0
 	dev_info(&bgx->pdev->dev, "BGX RX STATS8 0x%llx\n",
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT8));
 	dev_info(&bgx->pdev->dev, "BGX RX STATS9 0x%llx\n",
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT9));
 	dev_info(&bgx->pdev->dev, "BGX RX STATS10 0x%llx\n",
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT10));
-#endif
 	dev_info(&bgx->pdev->dev, "BGX RX BP_DROP 0x%llx\n",
 		 bgx_reg_read(bgx, lmac, BGX_CMRX_RX_BP_DROP));
 }

@@ -29,6 +29,7 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg);
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx);
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
 static int nic_rcv_queue_sw_sync(struct nicpf *nic);
+static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx);
 
 /* Supported devices */
 static const struct pci_device_id nic_id_table[] = {
@@ -248,6 +249,9 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_config_rss(nic, &mbx.data.rss_cfg);
 		break;
 #endif
+	case NIC_PF_VF_MSG_BGX_STATS:
+		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
+		return;
 	default:
 		netdev_err(nic->netdev,
 			   "Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg);
@@ -277,6 +281,27 @@ static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 		return 1;
 	}
 	return 0;
+}
+
+static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
+{
+	int bgx_idx, lmac;
+	struct nic_mbx mbx = {};
+
+	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
+	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
+
+	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
+	mbx.data.bgx_stats.vf_id = bgx->vf_id;
+	mbx.data.bgx_stats.rx = bgx->rx;
+	mbx.data.bgx_stats.idx = bgx->idx;
+	if (bgx->rx)
+		mbx.data.bgx_stats.stats = bgx_get_rx_stats(bgx_idx,
+							    lmac, bgx->idx);
+	else
+		mbx.data.bgx_stats.stats = bgx_get_tx_stats(bgx_idx,
+							    lmac, bgx->idx);
+	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx, false);
 }
 
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
