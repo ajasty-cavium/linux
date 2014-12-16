@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mmconfig.h>
 #include <linux/interrupt.h>
 #include <linux/of_irq.h>
 #include <linux/of_pci.h>
@@ -94,38 +95,43 @@ struct sli_mem_addr {
 	uint64_t reserved_48_63:16;
 };
 
+static int pci_requester_id_ecam(struct pci_dev *dev)
+{
+	return (((pci_domain_nr(dev->bus) >> 2) << 19) |
+		((pci_domain_nr(dev->bus) % 4) << 16) |
+		(dev->bus->number << 8) | dev->devfn);
+}
+
 int pci_requester_id(struct pci_dev *dev)
 {
 	struct thunder_pcie *pcie = dev->bus->sysdata;
 
-	if(pcie->device_type == THUNDER_ECAM) {
-		/* this is easy case */
-		return (((pci_domain_nr(dev->bus) >> 2) << 19) |
-				((pci_domain_nr(dev->bus) % 4) << 16) |
-				((dev)->bus->number << 8) | (dev)->devfn);
-	}
-	else {
-		if(pcie->pem < 3 )
-			return ((1 << 16) |
-					((dev)->bus->number << 8) |
-					(dev)->devfn);
-		 else if(pcie->pem < 6 )
-			return ((3 << 16) |
-					((dev)->bus->number << 8) |
-					(dev)->devfn);
-		 else if(pcie->pem < 9 )
-			return ((1 << 19) | (1 << 16) |
-					((dev)->bus->number << 8) |
-					(dev)->devfn);
-		 else if(pcie->pem < 12 )
-			return ((1 << 19) |
-					(3 << 16) |
-					((dev)->bus->number << 8) |
-					(dev)->devfn);
-		 else
-			WARN_ON("Not Valid PEM id");
-			return -ENODEV;
-	}
+	if(pcie->device_type == THUNDER_ECAM)
+		return pci_requester_id_ecam(dev);
+
+	if(pcie->pem < 3 )
+		return ((1 << 16) |
+			((dev)->bus->number << 8) |
+			(dev)->devfn);
+
+	if(pcie->pem < 6 )
+		return ((3 << 16) |
+			((dev)->bus->number << 8) |
+			(dev)->devfn);
+
+	if(pcie->pem < 9 )
+		return ((1 << 19) | (1 << 16) |
+			((dev)->bus->number << 8) |
+			(dev)->devfn);
+
+	if(pcie->pem < 12 )
+		return ((1 << 19) |
+			(3 << 16) |
+			((dev)->bus->number << 8) |
+			(dev)->devfn);
+
+	WARN_ON("Not Valid PEM id");
+	return -ENODEV;
 }
 EXPORT_SYMBOL(pci_requester_id);
 
@@ -1151,6 +1157,187 @@ static struct platform_driver thunder_pcie_driver = {
 	.probe = thunder_pcie_probe,
 };
 module_platform_driver(thunder_pcie_driver);
+
+#ifdef CONFIG_ACPI
+
+static int thunder_mmcfg_read_config(struct pci_mmcfg_region *cfg, unsigned int bus,
+		    unsigned int devfn, int reg, int len, u32 *value)
+{
+	struct thunder_pcie *pcie = cfg->data;
+	void __iomem *addr;
+	int supported;
+
+	addr = thunder_pcie_cfg_base(pcie, bus, devfn) + reg;
+
+	if(pcie->device_type == THUNDER_ECAM) {
+		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, bus, devfn);
+	}
+	else if(pcie->device_type == THUNDER_PEM) {
+		/* Not support for now */
+		pr_err("RC PEM not supported !!!\n");
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	}
+	else {
+		supported = 0;
+	}
+
+	switch (len) {
+	case 1:
+		if (!supported)
+			*value = 0xff;
+		else
+			*value = readb(addr);
+		break;
+	case 2:
+		if (!supported)
+			*value = 0xffff;
+		else
+			*value = readw(addr);
+		break;
+	case 4:
+		if (!supported)
+			*value = 0xffffffff;
+		else
+			*value = readl(addr);
+		break;
+	default:
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	}
+
+	return PCIBIOS_SUCCESSFUL;
+}
+
+static int thunder_mmcfg_write_config(struct pci_mmcfg_region *cfg,
+		unsigned int bus, unsigned int devfn, int reg, int len,
+		u32 value) {
+	struct thunder_pcie *pcie = cfg->data;
+	void __iomem *addr;
+	int supported;
+
+	if (pcie->device_type == THUNDER_ECAM) {
+		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, bus,
+								devfn);
+		addr = thunder_pcie_cfg_base(pcie, bus, devfn) + reg;
+	} else if (pcie->device_type == THUNDER_PEM) {
+		/* Not support for now */
+		pr_err("RC PEM not supported !!!\n");
+		return PCIBIOS_DEVICE_NOT_FOUND;
+	} else {
+		supported = 0;
+	}
+
+	if (!supported)
+		return PCIBIOS_SUCCESSFUL;
+
+	switch (len) {
+	case 1:
+		writeb(value, addr);
+		break;
+	case 2:
+		writew(value, addr);
+		break;
+	case 4:
+		writel(value, addr);
+		break;
+	default:
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	}
+
+	return PCIBIOS_SUCCESSFUL;
+}
+
+int thunder_acpi_mcfg_fixup(struct acpi_pci_root *root,
+			    struct pci_mmcfg_region *cfg)
+{
+	struct thunder_pcie *pcie;
+
+	pcie = kzalloc(sizeof(*pcie), GFP_KERNEL);
+	if (!pcie) {
+		dev_err(&root->device->dev,
+			"pci_bus %04x:%02x: ignored (out of memory)\n",
+			(int)root->segment, (int)root->secondary.start);
+		return -ENOMEM;
+	}
+
+	if (gser_base0 == NULL)
+		gser_base0 = devm_ioremap(&root->device->dev,
+					 THUNDER_GSER_N0_BASE,
+					 THUNDER_GSER_SIZE);
+#ifdef CONFIG_NUMA
+	if (gser_base1 == NULL)
+		gser_base1 = devm_ioremap(&root->device->dev,
+					 THUNDER_GSER_N1_BASE,
+					 THUNDER_GSER_SIZE);
+#endif
+
+	switch(cfg->address) {
+		case THUNDER_ECAM0_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 0;
+			break;
+		case THUNDER_ECAM1_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 1;
+			break;
+		case THUNDER_ECAM2_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 2;
+			break;
+		case THUNDER_ECAM3_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 3;
+			break;
+		case THUNDER_ECAM4_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 4;
+			break;
+		case THUNDER_ECAM5_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 5;
+			break;
+		case THUNDER_ECAM6_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 6;
+			break;
+		case THUNDER_ECAM7_CFG_BASE:
+			pcie->device_type = THUNDER_ECAM;
+			pcie->ecam = 7;
+			break;
+		case THUNDER_PEM0_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 0;
+			break;
+		case THUNDER_PEM1_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 1;
+			break;
+		case THUNDER_PEM2_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 2;
+			break;
+		case THUNDER_PEM3_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 3;
+			break;
+		case THUNDER_PEM4_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 4;
+			break;
+		case THUNDER_PEM5_REG_BASE:
+			pcie->device_type = THUNDER_PEM;
+			pcie->pem = 5;
+			break;
+	}
+
+	pcie->cfg_base = cfg->virt;
+	cfg->data = pcie;
+	cfg->read = thunder_mmcfg_read_config;
+	cfg->write = thunder_mmcfg_write_config;
+
+	return 0;
+}
+DECLARE_ACPI_MCFG_FIXUP("CAVIUM", "THUNDERX", thunder_acpi_mcfg_fixup);
+#endif
 
 MODULE_AUTHOR("Sunil Goutham");
 MODULE_DESCRIPTION("Cavium Thunder PCIe host controller driver");
