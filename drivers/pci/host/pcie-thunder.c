@@ -752,6 +752,14 @@ static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
 	void __iomem *address;
 
 	address = pcie->pem_base;
+
+	/* check whether PEM is safe to access. */
+	regval = readq(pcie->pem_base+0x420); //PEMx_ON
+	if((regval & 0x3) != 0x3) {
+		printk("PEM%d is not ON\n",pcie->pem);
+		return -ENODEV;
+	}
+		
 	regval = readq(pcie->pem_base);
 	regval |= 0x10; // Set Link Enable bit
 	writeq(regval, address);
