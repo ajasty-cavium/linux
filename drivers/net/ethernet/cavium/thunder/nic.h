@@ -35,11 +35,6 @@
 #define	NIC_TNS_ENABLED			(1 << 1)
 
 /* VNIC HW optimiation features */
-#define	VNIC_RX_CSUM_OFFLOAD_SUPPORT
-#define	VNIC_TX_CSUM_OFFLOAD_SUPPORT
-#define	VNIC_SG_SUPPORT
-#undef	VNIC_TSO_SUPPORT
-#undef	VNIC_LRO_SUPPORT
 #define VNIC_RSS_SUPPORT
 
 /* ETHTOOL enable or disable, undef this to disable */

@@ -845,54 +845,17 @@ static int nicvf_register_misc_interrupt(struct nicvf *nic)
 	return 0;
 }
 
-#ifdef VNIC_TSO_SUPPORT
-static int nicvf_sw_tso(struct sk_buff *skb, struct net_device *netdev)
-{
-	struct sk_buff *segs, *nskb;
-	struct nicvf *nic = netdev_priv(netdev);
-
-	if (!skb_shinfo(skb)->gso_size)
-		return 1;
-
-	nic->drv_stats.tx_tso++;
-	/* Segment the large frame */
-	segs = skb_gso_segment(skb, netdev->features & ~NETIF_F_TSO);
-	if (IS_ERR(segs))
-		goto gso_err;
-
-	do {
-		nskb = segs;
-		segs = segs->next;
-		nskb->next = NULL;
-		nicvf_xmit(nskb, netdev);
-	} while (segs);
-
-gso_err:
-	dev_kfree_skb(skb);
-
-	return NETDEV_TX_OK;
-}
-#endif
-
 static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct nicvf *nic = netdev_priv(netdev);
 	int qid = skb_get_queue_mapping(skb);
 	struct netdev_queue *txq = netdev_get_tx_queue(netdev, qid);
-	int ret = 1;
 
 	/* Check for minimum packet length */
 	if (skb->len <= ETH_HLEN) {
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
-
-#ifdef VNIC_TSO_SUPPORT
-	if (netdev->features & NETIF_F_TSO)
-		ret = nicvf_sw_tso(skb, netdev);
-#endif
-	if (ret == NETDEV_TX_OK)
-		return NETDEV_TX_OK;
 
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
@@ -1308,19 +1271,10 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (err)
 		goto err_unmap_resources;
 
-#ifdef VNIC_RX_CSUM_OFFLOAD_SUPPORT
-	netdev->hw_features |= NETIF_F_RXCSUM;
-#endif
-#ifdef VNIC_TX_CSUM_OFFLOAD_SUPPORT
-	netdev->hw_features |= NETIF_F_IP_CSUM;
-#endif
-#ifdef VNIC_SG_SUPPORT
-	netdev->hw_features |= NETIF_F_SG;
-#endif
-#ifdef VNIC_TSO_SUPPORT
-	netdev->hw_features |= NETIF_F_TSO | NETIF_F_SG | NETIF_F_IP_CSUM;
-#endif
-	netdev->features |= netdev->hw_features;
+	netdev->features |= (NETIF_F_RXCSUM | NETIF_F_IP_CSUM | NETIF_F_SG |
+			     NETIF_F_GSO | NETIF_F_GRO);
+	netdev->hw_features = netdev->features;
+
 	netdev->netdev_ops = &nicvf_netdev_ops;
 
 	INIT_WORK(&nic->reset_task, nicvf_reset_task);

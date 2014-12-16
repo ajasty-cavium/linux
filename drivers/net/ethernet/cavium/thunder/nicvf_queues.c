@@ -635,7 +635,11 @@ int nicvf_set_qset_resources(struct nicvf *nic)
 
 	/* Set count of each queue */
 	qs->rbdr_cnt = RBDR_CNT;
+#ifdef VNIC_RSS_SUPPORT
 	qs->rq_cnt = RCV_QUEUE_CNT;
+#else
+	qs->rq_cnt = 1;
+#endif
 	qs->sq_cnt = SND_QUEUE_CNT;
 	qs->cq_cnt = CMP_QUEUE_CNT;
 
