@@ -231,6 +231,7 @@ struct nicvf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
 	uint8_t			vf_id;
+	uint8_t			node;
 	uint8_t			tns_mode;
 	uint16_t		mtu;
 	struct queue_set	*qs;
@@ -318,6 +319,7 @@ struct nic_cfg_msg {
 	uint64_t   vf_id;
 	uint64_t   tns_mode;
 	uint64_t   mac_addr;
+	uint64_t   node_id;
 };
 
 /* Qset configuration */

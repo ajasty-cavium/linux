@@ -147,6 +147,7 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 	else
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
 
+	mbx.data.nic_cfg.node_id = nic->node;
 	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
 

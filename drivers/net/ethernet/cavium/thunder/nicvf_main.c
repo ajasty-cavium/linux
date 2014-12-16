@@ -240,6 +240,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		pf_ready_to_rcv_msg = true;
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
+		nic->node = mbx.data.nic_cfg.node_id;
 		break;
 	case NIC_PF_VF_MSG_ACK:
 		pf_acked = true;
