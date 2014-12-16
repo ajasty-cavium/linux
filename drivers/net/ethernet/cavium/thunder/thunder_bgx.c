@@ -41,6 +41,7 @@ struct lmac {
 
 struct bgx {
 	uint8_t			bgx_id;
+	uint8_t			qlm_mode;
 	struct	lmac		lmac[MAX_LMAC_PER_BGX];
 	int			lmac_count;
 	int                     lmac_type;
@@ -859,9 +860,9 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 	lmac->phydev = NULL;
 }
 
-static void bgx_set_num_ports(struct bgx *bgx, int qlm_mode)
+static void bgx_set_num_ports(struct bgx *bgx)
 {
-	switch (qlm_mode) {
+	switch (bgx->qlm_mode) {
 	case QLM_MODE_SGMII:
 		bgx->lmac_count = 4;
 		bgx->lmac_type = BGX_MODE_SGMII;
@@ -910,10 +911,7 @@ static void bgx_init_hw(struct bgx *bgx)
 {
 	int i;
 
-	if (bgx->bgx_id == 0)
-		bgx_set_num_ports(bgx, QLM0_MODE);
-	else
-		bgx_set_num_ports(bgx, QLM1_MODE);
+	bgx_set_num_ports(bgx);
 
 	bgx_reg_modify(bgx, 0, BGX_CMR_GLOBAL_CFG, CMR_GLOBAL_CFG_FCS_STRIP);
 	if (bgx_reg_read(bgx, 0, BGX_CMR_BIST_STATUS))
@@ -952,29 +950,29 @@ static void bgx_init_hw(struct bgx *bgx)
 		bgx_reg_write(bgx, 0, BGX_CMR_RX_STREERING + (i * 8), 0x00);
 }
 
-static int bgx_check_config(struct device_node *np_bgx, int bgx_id)
+static void bgx_get_qlm_mode(struct device_node *np_bgx, struct bgx *bgx)
 {
 	const char *mode;
-	int qlm_mode;
 
 	mode = of_get_property(np_bgx, "mode", NULL);
-
-	if (bgx_id == 0)
-		qlm_mode = QLM0_MODE;
-	else
-		qlm_mode = QLM1_MODE;
-
-	switch (qlm_mode) {
-	case QLM_MODE_SGMII:
-		return strcmp(mode, "sgmii");
-	case QLM_MODE_XAUI_1X4:
-		return strcmp(mode, "xaui");
-	case QLM_MODE_XFI_4X1:
-		return strcmp(mode, "xfi");
-	default:
-		return 1;
+	if(!mode) {
+		dev_err(&bgx->pdev->dev, "QLM mode not specified in DTS\n");
+		return;
 	}
-	return 1;
+
+	if (!strcmp(mode, "sgmii")) { 
+		bgx->qlm_mode = QLM_MODE_SGMII;
+		dev_info(&bgx->pdev->dev, "QLM mode: SGMII\n");
+	} else if (!strcmp(mode, "xaui")) {
+		bgx->qlm_mode = QLM_MODE_XAUI_1X4;
+		dev_info(&bgx->pdev->dev, "QLM mode: XAUI\n");
+	} else if (!strcmp(mode, "xfi")) {
+		bgx->qlm_mode = QLM_MODE_XFI_4X1;
+		dev_info(&bgx->pdev->dev, "QLM mode: XFI\n");
+	} else if (!strcmp(mode, "xlaui")) {
+		bgx->qlm_mode = QLM_MODE_XLAUI_1X4;
+		dev_info(&bgx->pdev->dev, "QLM mode: XLAUI\n");
+	}
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -984,7 +982,6 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct bgx *bgx = NULL;
 	uint8_t lmac = 0;
 	char bgx_sel[5];
-	const __be32 *reg;
 	struct device_node *np_bgx, *np_child;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
@@ -1021,18 +1018,14 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Get BGX node from DT */
 	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
 	np_bgx = of_find_node_by_name(NULL, bgx_sel);
-	if (bgx_check_config(np_bgx, bgx->bgx_id)) {
-		dev_err(dev, "DTS and driver QLM modes doesn't match\n");
-		goto err_enable;
-	}
+	bgx_get_qlm_mode(np_bgx, bgx);
 
 	for_each_child_of_node(np_bgx, np_child) {
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
 		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
 							  "phy-handle", 0);
-		reg = of_get_property(np_child, "reg", NULL);
-		bgx->lmac[lmac].lmacid_bd = be32_to_cpup(reg);
 		bgx->lmac[lmac].lmacid = lmac;
+		bgx->lmac[lmac].lmacid_bd = bgx->lmac_count;
 		bgx->lmac_count++;
 		lmac++;
 	}
