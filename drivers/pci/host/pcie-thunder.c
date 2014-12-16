@@ -235,6 +235,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x010:   /* SMMU */
 			case 0x030:   /* GPIO */
 			case 0x038:   /* MPI */
+			case 0x080:   /* USB0 */
+			case 0x088:   /* USB1 */
 			case 0x0A0:   /* RAD bridge */
 			case 0x0A8:   /* ZIP bridge */
 			case 0x0B0:   /* DFA bridge */
@@ -348,6 +350,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x010:   /* SMMU */
 			case 0x030:   /* GPIO */
 			case 0x038:   /* MPI */
+			case 0x080:   /* USB0 */
+			case 0x088:   /* USB1 */
 			case 0x0A0:   /* RAD bridge */
 			case 0x0A8:   /* ZIP bridge */
 			case 0x0B0:   /* DFA bridge */
