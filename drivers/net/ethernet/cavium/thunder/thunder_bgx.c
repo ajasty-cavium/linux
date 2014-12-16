@@ -14,6 +14,7 @@
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
+#include <linux/acpi.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -30,7 +31,6 @@ struct lmac {
 	int			lmacid_bd; /* ID on board */
 	struct net_device       netdev;
 	struct phy_device       *phydev;
-	struct device_node      *phy_np;     
 	unsigned int            last_duplex;
 	unsigned int            last_link;
 	unsigned int            last_speed;
@@ -830,11 +830,14 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	    (bgx->lmac_type != BGX_MODE_XLAUI) &&
 	    (bgx->lmac_type != BGX_MODE_40G_KR) &&
 	    (bgx->lmac_type != BGX_MODE_10G_KR)) {
-		lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
-					      bgx_lmac_handler, 0,
-					      PHY_INTERFACE_MODE_SGMII);
-
 		if (!lmac->phydev)
+			return -ENODEV;
+
+		lmac->phydev->dev_flags = 0;
+
+		if (phy_connect_direct(&lmac->netdev, lmac->phydev,
+				       bgx_lmac_handler,
+				       PHY_INTERFACE_MODE_SGMII))
 			return -ENODEV;
 
 		phy_start_aneg(lmac->phydev);
@@ -961,7 +964,7 @@ static void bgx_init_hw(struct bgx *bgx)
 		bgx_reg_write(bgx, 0, BGX_CMR_RX_STREERING + (i * 8), 0x00);
 }
 
-static void bgx_get_qlm_mode(struct device_node *np_bgx, struct bgx *bgx)
+static void bgx_get_qlm_mode(struct bgx *bgx)
 {
 	int lmac_type;
 
@@ -991,14 +994,139 @@ static void bgx_get_qlm_mode(struct device_node *np_bgx, struct bgx *bgx)
 	}
 }
 
-static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+#ifdef CONFIG_ACPI
+static int
+bgx_match_phy_id(struct device *dev, void *data)
 {
-	int    err;
-	struct device *dev = &pdev->dev;
-	struct bgx *bgx = NULL;
+	struct phy_device *phydev = to_phy_device(dev);
+	u32 *phy_id = data;
+
+	if (phydev->addr == *phy_id)
+		return 1;
+
+	return 0;
+}
+
+static acpi_status
+bgx_acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
+{
+	struct acpi_reference_args args;
+	struct bgx *bgx = context;
+	struct acpi_device *adev;
+	struct device *phy_dev;
+	u32 phy_id;
+
+	if (acpi_bus_get_device(handle, &adev))
+		return AE_OK;
+
+	if (acpi_dev_get_property_reference(adev, "phy-handle", NULL, 0, &args))
+		return AE_OK;
+
+	if (acpi_dev_prop_read(args.adev, "phy-channel", DEV_PROP_U32, &phy_id))
+		return AE_OK;
+
+	phy_dev = bus_find_device(&mdio_bus_type, NULL, (void *)&phy_id,
+				  bgx_match_phy_id);
+	if (!phy_dev)
+		return AE_OK;
+
+	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
+	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
+
+	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
+	bgx->lmac_count++;
+
+	return AE_OK;
+}
+
+static acpi_status
+bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
+{
+	struct acpi_buffer string = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct bgx *bgx = context;
+	char bgx_sel[5];
+
+	snprintf(bgx_sel, 5, "BGX%d", bgx->bgx_id);
+	if (ACPI_FAILURE(acpi_get_name(handle, ACPI_SINGLE_NAME, &string))) {
+		pr_warn("Invalid link device\n");
+		return AE_OK;
+	}
+
+	if(strncmp(string.pointer, bgx_sel, 4))
+		return AE_OK;
+
+	acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, 1,
+			    bgx_acpi_register_phy, NULL, bgx, NULL);
+
+	kfree(string.pointer);
+	return AE_CTRL_TERMINATE;
+}
+static int
+bgx_init_acpi_phy(struct bgx *bgx)
+{
+	acpi_get_devices(NULL, bgx_acpi_match_id, bgx, (void **)NULL);
+	return 0;
+}
+
+#else
+static int
+bgx_init_acpi_phy(struct bgx *bgx)
+{
+	return -ENODEV;
+}
+#endif
+
+#ifdef CONFIG_OF_MDIO
+static int
+bgx_init_of_phy(struct bgx *bgx)
+{
+	struct device_node *np;
+	struct device_node *np_child;
 	uint8_t lmac = 0;
 	char bgx_sel[5];
-	struct device_node *np_bgx, *np_child;
+
+	/* Get BGX node from DT */
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np = of_find_node_by_name(NULL, bgx_sel);
+	if (!np)
+		return -ENODEV;
+
+	for_each_child_of_node(np, np_child) {
+		struct device_node *phy_np = of_parse_phandle(np_child,
+							      "phy-handle", 0);
+		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+
+		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &bgx->pdev->dev);
+		bgx->lmac[lmac].lmacid = lmac;
+		bgx->lmac_count++;
+		lmac++;
+	}
+	return 0;
+}
+#else
+static int
+bgx_init_of_phy(struct bgx *bgx)
+{
+	return -ENODEV;
+}
+#endif
+
+static int bgx_init_phy(struct bgx *bgx)
+{
+	int err = bgx_init_of_phy(bgx);
+
+	if (err != -ENODEV)
+		return err;
+
+	return bgx_init_acpi_phy(bgx);
+}
+
+static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+{
+	int err;
+	struct device *dev = &pdev->dev;
+	struct bgx *bgx = NULL;
+	uint8_t lmac;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
 	if (!bgx)
@@ -1030,20 +1158,11 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx->bgx_id += NODE_ID(pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM))
 							* MAX_BGX_PER_CN88XX;
 	bgx_vnic[bgx->bgx_id] = bgx;
+	bgx_get_qlm_mode(bgx);
 
-	/* Get BGX node from DT */
-	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
-	np_bgx = of_find_node_by_name(NULL, bgx_sel);
-	bgx_get_qlm_mode(np_bgx, bgx);
-
-	for_each_child_of_node(np_bgx, np_child) {
-		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
-		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
-							  "phy-handle", 0);
-		bgx->lmac[lmac].lmacid = lmac;
-		bgx->lmac_count++;
-		lmac++;
-	}
+	err = bgx_init_phy(bgx);
+	if (err)
+		goto err_enable;
 
 	bgx_init_hw(bgx);
 
