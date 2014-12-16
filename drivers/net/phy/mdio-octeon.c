@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
 #include <linux/of.h>
+#include <linux/acpi.h>
 #include <linux/of_mdio.h>
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -188,56 +189,99 @@ static int octeon_mdiobus_write(struct mii_bus *bus, int phy_id,
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
+static acpi_status
+acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
+{
+	struct mii_bus *mdio = context;
+	struct acpi_device *adev;
+	struct phy_device *phy;
+	u32 phy_id;
+
+	if (acpi_bus_get_device(handle, &adev))
+		return AE_OK;
+
+	if (acpi_dev_prop_read(adev, "phy-channel", DEV_PROP_U32, &phy_id))
+		return AE_OK;
+
+	phy = get_phy_device(mdio, phy_id, false);
+	if (!phy || IS_ERR(phy))
+		return AE_OK;
+
+	if (phy_device_register(phy))
+		phy_device_free(phy);
+
+	return AE_OK;
+}
+
+static int
+acpi_mdiobus_register(struct mii_bus *mdio)
+{
+	int i, ret;
+
+	/* Mask out all PHYs from auto probing. */
+	mdio->phy_mask = ~0;
+
+	/* Clear all the IRQ properties */
+	if (mdio->irq)
+		for (i = 0; i < PHY_MAX_ADDR; i++)
+			mdio->irq[i] = PHY_POLL;
+
+	/* Register the MDIO bus */
+	ret = mdiobus_register(mdio);
+	if (ret)
+		return ret;
+
+	acpi_walk_namespace(ACPI_TYPE_DEVICE, ACPI_HANDLE(mdio->parent), 1,
+			    acpi_register_phy, NULL, mdio, NULL);
+	return 0;
+}
+#else
+static int
+acpi_mdiobus_register(struct mii_bus *mdio)
+{
+	return 0;
+}
+#endif
+
 static int octeon_mdiobus_probe(struct platform_device *pdev)
 {
 	struct octeon_mdiobus *bus;
-#if 0
 	struct resource *res_mem;
-#endif
 	union cvmx_smix_en smi_en;
 	int err = -ENOENT;
-	const __be32 *reg;
-	uint64_t  addr, size;
 
 	bus = devm_kzalloc(&pdev->dev, sizeof(*bus), GFP_KERNEL);
 	if (!bus)
 		return -ENOMEM;
 
-	reg = of_get_property(pdev->dev.of_node, "reg", NULL);
-	addr = of_translate_address(pdev->dev.of_node, reg);
-	pr_err("%s: mdio addr 0x%llx\n",__func__, addr);
-	size = of_read_number(reg + 2, 2);
-	pr_err("%s: size 0x%llx\n",__func__, size);
-
-#if 0
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-
 	if (res_mem == NULL) {
 		dev_err(&pdev->dev, "found no memory resource\n");
-		err = -ENXIO;
-		goto fail;
+		return -ENXIO;
 	}
 	bus->mdio_phys = res_mem->start;
 	bus->regsize = resource_size(res_mem);
 	if (!devm_request_mem_region(&pdev->dev, bus->mdio_phys, bus->regsize,
 				     res_mem->name)) {
 		dev_err(&pdev->dev, "request_mem_region failed\n");
-		goto fail;
+		return -EBUSY;
 	}
 	bus->register_base =
 		(u64)devm_ioremap(&pdev->dev, bus->mdio_phys, bus->regsize);
-#endif
-	
-	bus->register_base = (u64) devm_ioremap(&pdev->dev, addr, size);
+	if (!bus->register_base) {
+		dev_err(&pdev->dev, "ioremap resource failed\n");
+		return -ENOMEM;
+	}
 
 	bus->mii_bus = mdiobus_alloc();
-
 	if (!bus->mii_bus)
 		goto fail;
 
 	smi_en.u64 = 0;
 	smi_en.s.en = 1;
 	cvmx_write_csr(bus->register_base + SMI_EN, smi_en.u64);
+
 
 	bus->mii_bus->priv = bus;
 	bus->mii_bus->irq = bus->phy_irq;
@@ -250,7 +294,10 @@ static int octeon_mdiobus_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, bus);
 
-	err = of_mdiobus_register(bus->mii_bus, pdev->dev.of_node);
+	if (pdev->dev.of_node)
+		err = of_mdiobus_register(bus->mii_bus, pdev->dev.of_node);
+	else
+		err = acpi_mdiobus_register(bus->mii_bus);
 	if (err)
 		goto fail_register;
 
