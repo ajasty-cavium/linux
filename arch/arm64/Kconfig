@@ -154,6 +154,13 @@ config ARCH_THUNDER
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
 	select ARM64_VA_BITS_48 if NUMA
 
+config THUNDERX_PASS1_ERRATA_22558
+	bool "Cavium ThunderX erratum 22558"
+	default n
+	help
+	Enable workaround for erratum 22558.
+	def_bool ARCH_THUNDER
+
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
 	select ARCH_REQUIRE_GPIOLIB
