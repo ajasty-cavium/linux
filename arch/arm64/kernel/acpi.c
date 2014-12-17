@@ -37,6 +37,7 @@ EXPORT_SYMBOL(acpi_pci_disabled);
 
 static int enabled_cpus;	/* Processors (GICC) with enabled flag in MADT */
 
+int acpi_gic_ver;
 /*
  * Since we're on ARM, the default interrupt routing model
  * clearly has to be GIC.
@@ -316,12 +317,27 @@ void __init acpi_boot_table_init(void)
 		pr_err("Can't find FADT or error happened during parsing FADT\n");
 }
 
+static int __init
+gic_acpi_find_ver(struct acpi_subtable_header *header,
+				const unsigned long end)
+{
+	struct acpi_madt_generic_distributor *dist;
+
+	dist = (struct acpi_madt_generic_distributor *)header;
+
+	if (BAD_MADT_ENTRY(dist, end))
+		return -EINVAL;
+
+	acpi_gic_ver = dist->gic_version;
+	return 0;
+}
+
 void __init acpi_gic_init(void)
 {
 	struct acpi_table_header *table;
 	acpi_status status;
 	acpi_size tbl_size;
-	int err;
+	int err, count;;
 
 	if (acpi_disabled)
 		return;
@@ -334,9 +350,17 @@ void __init acpi_gic_init(void)
 		return;
 	}
 
-	err = gic_v3_acpi_init(table);
-	if (err)
-		err = gic_v2_acpi_init(table);
+	count = acpi_parse_entries(sizeof(struct acpi_table_madt),
+				   gic_acpi_find_ver, table,
+				   ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR, 0);
+	if (count <= 0) {
+		pr_info("Error during GICD entries parsing, assuming GICv2\n");
+		acpi_gic_ver = ACPI_MADT_GIC_VER_V2;
+	}
+
+	err = acpi_gic_ver < ACPI_MADT_GIC_VER_V3 ?
+			gic_v2_acpi_init(table) :
+			gic_v3_acpi_init(table) ;
 	if (err)
 		pr_err("Failed to initialize GIC IRQ controller");
 

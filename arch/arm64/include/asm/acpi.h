@@ -21,6 +21,8 @@ extern int acpi_disabled;
 extern int acpi_noirq;
 extern int acpi_pci_disabled;
 
+extern int acpi_gic_ver;
+
 /* 1 to indicate PSCI 0.2+ is implemented */
 static inline bool acpi_psci_present(void)
 {
@@ -90,6 +92,7 @@ static inline void arch_fix_phys_package_id(int num, u32 slot) { }
 void __init acpi_smp_init_cpus(void);
 
 #else
+#define acpi_gic_ver	0
 static inline void disable_acpi(void) { }
 static inline bool acpi_psci_present(void) { return false; }
 static inline bool acpi_psci_use_hvc(void) { return false; }
