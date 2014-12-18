@@ -1073,6 +1073,9 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	struct nic_mbx mbx = {};
 	int timeout;
 
+	if (!netif_running(nic->netdev))
+		return;
+
 	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
 	mbx.data.bgx_stats.vf_id = nic->vf_id;
 	/* Rx stats */

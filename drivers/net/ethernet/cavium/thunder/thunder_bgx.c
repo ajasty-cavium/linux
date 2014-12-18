@@ -324,6 +324,8 @@ uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
 	struct bgx *bgx;
 
 	bgx = bgx_vnic[bgx_idx];
+	if (idx > 8)
+		lmac = 0;
 	return bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT0 + (idx * 8));
 }
 EXPORT_SYMBOL(bgx_get_rx_stats);
@@ -955,12 +957,12 @@ static void bgx_get_qlm_mode(struct device_node *np_bgx, struct bgx *bgx)
 	const char *mode;
 
 	mode = of_get_property(np_bgx, "mode", NULL);
-	if(!mode) {
+	if (!mode) {
 		dev_err(&bgx->pdev->dev, "QLM mode not specified in DTS\n");
 		return;
 	}
 
-	if (!strcmp(mode, "sgmii")) { 
+	if (!strcmp(mode, "sgmii")) {
 		bgx->qlm_mode = QLM_MODE_SGMII;
 		dev_info(&bgx->pdev->dev, "QLM mode: SGMII\n");
 	} else if (!strcmp(mode, "xaui")) {
