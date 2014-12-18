@@ -17,6 +17,13 @@
 #include "q_struct.h"
 #include "nicvf_queues.h"
 
+struct rbuf_info {
+	void	*data;
+	uint64_t offset;
+};
+
+#define GET_RBUF_INFO(x) ((struct rbuf_info *)(x - NICVF_RCV_BUF_ALIGN_BYTES))
+
 static int nicvf_poll_reg(struct nicvf *nic, int qidx,
 			  uint64_t reg, int bit_pos, int bits, int val)
 {
@@ -66,35 +73,50 @@ static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
 }
 
 static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic, uint64_t buf_len,
-					 unsigned char **rbuf)
+					 uint64_t **rbuf)
 {
-	struct sk_buff *skb = NULL;
+	uint64_t data;
+	struct rbuf_info *rinfo;
 
-	skb = netdev_alloc_skb(nic->netdev, buf_len);
-	if (!skb) {
+	data = (uint64_t)netdev_alloc_frag(buf_len);
+	if (!data) {
 		netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
 		return -ENOMEM;
 	}
 
 	/* Align buffer addr to cache line i.e 128 bytes */
-	skb_reserve(skb, NICVF_RCV_BUF_ALIGN_LEN((uint64_t)skb->data));
-	/* Reserve bytes for storing skb address */
-	skb_reserve(skb,  STORE_SKB_ADDR_ALIGN);
+	rinfo = (struct rbuf_info *)(data + NICVF_RCV_BUF_ALIGN_LEN(data));
+	/* Store start address for later retrieval */
+	rinfo->data = (void *)data;
+	/* Store alignment offset */
+	rinfo->offset = NICVF_RCV_BUF_ALIGN_LEN(data);
 
-	/* Store skb address */
-	*(struct sk_buff **)(skb->data - STORE_SKB_ADDR_ALIGN) = skb;
+	data += rinfo->offset;
 
-	/* Return buffer address */
-	*rbuf = skb->data;
+	/* Give next aligned address to hw for DMA */
+	*rbuf = (uint64_t *)(data + NICVF_RCV_BUF_ALIGN_BYTES);
 	return 0;
 }
 
 static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, uint64_t rb_ptr)
 {
 	struct sk_buff *skb;
+	struct rbuf_info *rinfo;
 
 	rb_ptr = (uint64_t)phys_to_virt(rb_ptr);
-	skb = (struct sk_buff *)*(uint64_t *)(rb_ptr - STORE_SKB_ADDR_ALIGN);
+	/* Get buffer start address and alignment offset */
+	rinfo = GET_RBUF_INFO(rb_ptr);
+
+	/* Now build an skb to give to stack */
+	skb = build_skb(rinfo->data, RCV_FRAG_LEN);
+	if (!skb) {
+		put_page(virt_to_head_page(rinfo->data));
+		return NULL;
+	}
+	/* Set correct skb->data */
+	skb_reserve(skb, rinfo->offset + NICVF_RCV_BUF_ALIGN_BYTES);
+
+	prefetch((void *)rb_ptr);
 	return skb;
 }
 
@@ -102,8 +124,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 			    int ring_len, int buf_size)
 {
 	int idx;
-	int align_size;
-	unsigned char *rbuf;
+	uint64_t *rbuf;
 	struct rbdr_entry_t *desc;
 
 	if (nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
@@ -116,14 +137,12 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 
 	rbdr->desc = rbdr->dmem.base;
 	/* Buffer size has to be in multiples of 128 bytes */
-	rbdr->buf_size = buf_size;
+	rbdr->dma_size = buf_size;
 	rbdr->enable = true;
 	rbdr->thresh = RBDR_THRESH;
 
-	align_size = rbdr->buf_size + STORE_SKB_ADDR_ALIGN +
-				NICVF_RCV_BUF_ALIGN_BYTES;
 	for (idx = 0; idx < ring_len; idx++) {
-		if (nicvf_alloc_rcv_buffer(nic, align_size, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, RCV_FRAG_LEN, &rbuf))
 			return -ENOMEM;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
@@ -135,9 +154,9 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 {
 	int head, tail;
-	struct sk_buff *skb;
 	uint64_t buf_addr;
 	struct rbdr_entry_t *desc;
+	struct rbuf_info *rinfo;
 
 	if (!rbdr)
 		return;
@@ -153,16 +172,16 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 	while (head != tail) {
 		desc = GET_RBDR_DESC(rbdr, head);
 		buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
-		skb = nicvf_rb_ptr_to_skb(nic, buf_addr);
-		dev_kfree_skb(skb);
+		rinfo = GET_RBUF_INFO((uint64_t)phys_to_virt(buf_addr));
+		put_page(virt_to_head_page(rinfo->data));
 		head++;
 		head &= (rbdr->dmem.q_len - 1);
 	}
 	/* Free SKB of tail desc */
 	desc = GET_RBDR_DESC(rbdr, tail);
 	buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
-	skb = nicvf_rb_ptr_to_skb(nic, buf_addr);
-	dev_kfree_skb(skb);
+	rinfo = GET_RBUF_INFO((uint64_t)phys_to_virt(buf_addr));
+	put_page(virt_to_head_page(rinfo->data));
 
 	/* Free RBDR ring */
 	nicvf_free_q_desc_mem(nic, &rbdr->dmem);
@@ -178,9 +197,8 @@ void nicvf_refill_rbdr(unsigned long data)
 	int rbdr_idx = qs->rbdr_cnt;
 	int tail, qcount;
 	int refill_rb_cnt;
-	int align_size;
 	struct rbdr *rbdr;
-	unsigned char *rbuf;
+	uint64_t *rbuf;
 	struct rbdr_entry_t *desc;
 
 refill:
@@ -192,8 +210,6 @@ refill:
 	if (!rbdr->enable)
 		goto next_rbdr;
 
-	align_size = rbdr->buf_size + STORE_SKB_ADDR_ALIGN +
-				NICVF_RCV_BUF_ALIGN_BYTES;
 	/* Get no of desc's to be refilled */
 	qcount = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_STATUS0, rbdr_idx);
 	qcount &= 0x7FFFF;
@@ -207,7 +223,7 @@ refill:
 		tail++;
 		tail &= (rbdr->dmem.q_len - 1);
 
-		if (nicvf_alloc_rcv_buffer(nic, align_size, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, RCV_FRAG_LEN, &rbuf))
 			break;
 
 		desc = GET_RBDR_DESC(rbdr, tail);
@@ -532,7 +548,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 	rbdr_cfg.ldwb = 0;
 	rbdr_cfg.qsize = RBDR_SIZE;
 	rbdr_cfg.avg_con = 0;
-	rbdr_cfg.lines = rbdr->buf_size / 128;
+	rbdr_cfg.lines = rbdr->dma_size / 128;
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
 			      qidx, *(u64 *)&rbdr_cfg);
 
@@ -602,7 +618,7 @@ static int nicvf_alloc_resources(struct nicvf *nic)
 	/* Alloc receive buffer descriptor ring */
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
 		if (nicvf_init_rbdr(nic, &qs->rbdr[qidx], qs->rbdr_len,
-				    RCV_BUFFER_LEN))
+				    DMA_BUFFER_LEN))
 			goto alloc_fail;
 	}
 
@@ -930,13 +946,18 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 			/* First fragment */
 			skb = nicvf_rb_ptr_to_skb(nic,
 						  *rb_ptrs - cqe_rx->align_pad);
-			prefetchw(skb);
-			prefetch(skb->data);
+			if (!skb)
+				return NULL;
 			skb_reserve(skb, cqe_rx->align_pad);
 			skb_put(skb, payload_len);
 		} else {
 			/* Add fragments */
 			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
+			if (!skb_frag) {
+				dev_kfree_skb(skb);
+				return NULL;
+			}
+
 			if (!skb_shinfo(skb)->frag_list)
 				skb_shinfo(skb)->frag_list = skb_frag;
 			else
