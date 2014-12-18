@@ -739,7 +739,7 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003800 0x0 0x30>;
 
-		phy0: lmac0 {
+		phy0: sgmii0 {
 			reg = <0> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	      		/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
@@ -749,7 +749,7 @@
 					<3 0x13 0 0x8a08>;
 
       		};
-		phy1: lmac1 {
+		phy1: sgmii1 {
 			reg = <1> ;
 	   		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	      		marvell,reg-init = <3 0x10 0 0x8665>,
@@ -757,7 +757,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy2: lmac2 {
+		phy2: sgmii2 {
 			reg = <2> ;
 		      	compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -766,7 +766,7 @@
 			      <3 0x13 0 0x8a08>;
 
       		};
-		phy3: lmac3 {
+		phy3: sgmii3 {
 			reg = <3> ;
 	      		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	 	     	marvell,reg-init = <3 0x10 0 0x8665>,
@@ -776,7 +776,7 @@
       		};
 
 		/* For XAUI */
-		/* phy100: lmac0 {
+		/* phy100: xaui0 {
 			reg = <0> ;
 			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
@@ -789,7 +789,7 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003880 0x0 0x30>;
 
-		phy4: lmac4 {
+		phy4: sgmii4 {
 			reg = <4> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -797,7 +797,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy5: lmac5 {
+		phy5: sgmii5 {
 			reg = <5> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -806,7 +806,7 @@
 			      <3 0x13 0 0x8a08>;
 
       		};
-		phy6: lmac6 {
+		phy6: sgmii6 {
 			reg = <6> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -814,7 +814,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy7: lmac7 {
+		phy7: sgmii7 {
 			reg = <7> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -823,7 +823,7 @@
 			      <3 0x13 0 0x8a08>;
       		};
 		/* For XAUI */
-		/* phy104: lmac1 {
+		/* phy104: xaui1 {
 			reg = <4> ;
 			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
