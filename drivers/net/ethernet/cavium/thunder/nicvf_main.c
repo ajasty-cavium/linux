@@ -869,7 +869,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 int nicvf_stop(struct net_device *netdev)
 {
-	int qidx;
+	int irq, qidx;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
@@ -883,6 +883,10 @@ int nicvf_stop(struct net_device *netdev)
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
 	nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
+
+	/* Wait for pending IRQ handlers to finish */
+	for (irq = 0; irq < nic->num_vec; irq++)
+		synchronize_irq(nic->msix_entries[irq].vector);
 
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
@@ -1197,6 +1201,7 @@ static void nicvf_reset_task(struct work_struct *work)
 
 	nicvf_stop(nic->netdev);
 	nicvf_open(nic->netdev);
+	nic->netdev->trans_start = jiffies;
 }
 
 static const struct net_device_ops nicvf_netdev_ops = {
