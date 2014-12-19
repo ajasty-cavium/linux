@@ -562,7 +562,7 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 	/* Enable backpressure on the channel */
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_TX_CFG | (chan << 3), 1);
 
-	tl2 = lmac + (bgx * NIC_TL2_PER_BGX);
+	tl2 = tl3 >> 2;
 	nic_reg_write(nic, NIC_PF_TL3A_0_63_CFG | (tl2 << 3), tl2);
 	nic_reg_write(nic, NIC_PF_TL2_0_63_CFG | (tl2 << 3), rr_quantum);
 	/* No priorities as of now */
