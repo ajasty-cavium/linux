@@ -1181,6 +1181,7 @@ struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
 	return stats;
 }
 
+#ifdef NICVF_TX_TIMEOUT
 static void nicvf_tx_timeout(struct net_device *dev)
 {
 	struct nicvf *nic = netdev_priv(dev);
@@ -1203,6 +1204,7 @@ static void nicvf_reset_task(struct work_struct *work)
 	nicvf_open(nic->netdev);
 	nic->netdev->trans_start = jiffies;
 }
+#endif
 
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
@@ -1211,7 +1213,9 @@ static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
 	.ndo_get_stats64	= nicvf_get_stats64,
+#ifdef NICVF_TX_TIMEOUT
 	.ndo_tx_timeout         = nicvf_tx_timeout,
+#endif
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1286,7 +1290,9 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	netdev->netdev_ops = &nicvf_netdev_ops;
 
+#ifdef NICVF_TX_TIMEOUT
 	INIT_WORK(&nic->reset_task, nicvf_reset_task);
+#endif
 
 	err = register_netdev(netdev);
 	if (err) {
