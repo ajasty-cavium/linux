@@ -249,6 +249,9 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			case 0x10C:   /* EMM */
 			case 0x10D:   /* KEY */
 			case 0x10e:   /* MIO_BOOT */
+			case 0x200:   /* RAD */
+			case 0x300:   /* ZIP */
+			case 0x400:   /* HFA */
 				supported = 1;
 				break;
 			case 0x180:   /* BGX0 */
