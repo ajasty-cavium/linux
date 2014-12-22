@@ -386,6 +386,12 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	struct nic_mbx mbx = {};
 	struct rcv_queue *rq;
 	struct rq_cfg rq_cfg;
+#ifdef CONFIG_RPS
+	struct netdev_rx_queue *rxqueue;
+	struct rps_map *map, *oldmap;
+	cpumask_var_t rps_mask;
+	int i, cpu;
+#endif
 
 	rq = &qs->rq[qidx];
 	rq->enable = enable;
@@ -434,6 +440,34 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq_cfg.ena = 1;
 	rq_cfg.tcp_ena = 0;
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, *(u64 *)&rq_cfg);
+
+#ifdef CONFIG_RPS
+	/* Set RPS CPU map */
+	cpumask_copy(rps_mask, cpu_online_mask);
+	cpumask_clear_cpu(qidx, rps_mask);
+
+	rxqueue = nic->netdev->_rx + qidx;
+	oldmap = rcu_dereference(rxqueue->rps_map);
+
+	map = kzalloc(max_t(unsigned int,
+			    RPS_MAP_SIZE(cpumask_weight(rps_mask)),
+			    L1_CACHE_BYTES), GFP_KERNEL);
+	if (!map)
+		return;
+
+	i = 0;
+	for_each_cpu_and(cpu, rps_mask, cpu_online_mask)
+		map->cpus[i++] = cpu;
+	map->len = i;
+
+	static_key_slow_inc(&rps_needed);
+	rcu_assign_pointer(rxqueue->rps_map, map);
+
+	if (oldmap) {
+		kfree_rcu(oldmap, rcu);
+		static_key_slow_dec(&rps_needed);
+	}
+#endif
 }
 
 void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
