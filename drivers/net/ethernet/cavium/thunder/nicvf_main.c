@@ -735,9 +735,26 @@ static void nicvf_disable_msix(struct nicvf *nic)
 	}
 }
 
-static int nicvf_register_interrupts(struct nicvf *nic)
+static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 {
 	cpumask_t  affinity_mask;
+	int cpu;
+
+	if (num_online_cpus() > nic->netdev->real_num_rx_queues)
+		cpu = qidx;
+	else
+		cpu = qidx % num_online_cpus();
+
+	if (!(cpu_online(cpu) && irq_can_set_affinity(cpu)))
+		cpu = 0;
+
+	cpumask_clear(&affinity_mask);
+	cpumask_set_cpu(cpu, &affinity_mask);
+	__irq_set_affinity(irq, &affinity_mask, false);
+}
+
+static int nicvf_register_interrupts(struct nicvf *nic)
+{
 	int irq, free, ret = 0;
 	int vector;
 
@@ -762,12 +779,8 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 			break;
 		nic->irq_allocated[irq] = 1;
 
-		/* Set CQ irq affinity, 1 CQ per CPU */
-		if (cpu_online(irq) && irq_can_set_affinity(irq)) {
-			cpumask_clear(&affinity_mask);
-			cpumask_set_cpu(irq, &affinity_mask);
-			__irq_set_affinity(vector, &affinity_mask, false);
-		}
+		/* Set CQ irq affinity */
+		nicvf_set_cq_irq_affinity(nic, irq, vector);
 	}
 
 	for (irq = NICVF_INTR_ID_SQ; irq < NICVF_INTR_ID_MISC; irq++) {
