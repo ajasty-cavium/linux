@@ -881,7 +881,7 @@ static void bgx_set_num_ports(struct bgx *bgx)
 		bgx->lane_to_sds = 0xE4;
 			break;
 	case QLM_MODE_XFI_4X1:
-		bgx->lmac_count = 4;
+		bgx->lmac_count = 2;
 		bgx->lmac_type = BGX_MODE_XFI;
 		bgx->lane_to_sds = 0;
 		break;
@@ -954,26 +954,31 @@ static void bgx_init_hw(struct bgx *bgx)
 
 static void bgx_get_qlm_mode(struct device_node *np_bgx, struct bgx *bgx)
 {
-	const char *mode;
+	int lmac_type;
 
-	mode = of_get_property(np_bgx, "mode", NULL);
-	if (!mode) {
-		dev_err(&bgx->pdev->dev, "QLM mode not specified in DTS\n");
-		return;
-	}
-
-	if (!strcmp(mode, "sgmii")) {
+	/* Read LMAC0 type to figure out QLM mode
+	 * This is configured by low level firmware
+	 */
+	lmac_type = bgx_reg_read(bgx, 0, BGX_CMRX_CFG);
+	lmac_type = (lmac_type >> 8) & 0xFF;
+	
+	switch(lmac_type) {
+	case BGX_MODE_SGMII:
 		bgx->qlm_mode = QLM_MODE_SGMII;
 		dev_info(&bgx->pdev->dev, "QLM mode: SGMII\n");
-	} else if (!strcmp(mode, "xaui")) {
+		break;
+	case BGX_MODE_XAUI:
 		bgx->qlm_mode = QLM_MODE_XAUI_1X4;
 		dev_info(&bgx->pdev->dev, "QLM mode: XAUI\n");
-	} else if (!strcmp(mode, "xfi")) {
+		break;
+	case BGX_MODE_XFI:
 		bgx->qlm_mode = QLM_MODE_XFI_4X1;
 		dev_info(&bgx->pdev->dev, "QLM mode: XFI\n");
-	} else if (!strcmp(mode, "xlaui")) {
+		break;
+	case BGX_MODE_XLAUI:
 		bgx->qlm_mode = QLM_MODE_XLAUI_1X4;
 		dev_info(&bgx->pdev->dev, "QLM mode: XLAUI\n");
+		break;
 	}
 }
 
