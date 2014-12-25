@@ -59,6 +59,7 @@ struct bgx {
 } bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
+static int lmac_count = 0; /* Total no of LMACs in system */
 
 static int bgx_xaui_check_link(struct lmac *lmac);
 
@@ -932,6 +933,8 @@ static void bgx_init_hw(struct bgx *bgx)
 		}
 		bgx_reg_write(bgx, i, BGX_CMRX_CFG,
 			      (bgx->lmac_type << 8) | (bgx->lane_to_sds + i));
+		bgx->lmac[i].lmacid_bd = lmac_count;
+		lmac_count++;
 	}
 
 	bgx_reg_write(bgx, 0, BGX_CMR_TX_LMACS, bgx->lmac_count);
@@ -1032,7 +1035,6 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
 							  "phy-handle", 0);
 		bgx->lmac[lmac].lmacid = lmac;
-		bgx->lmac[lmac].lmacid_bd = bgx->lmac_count;
 		bgx->lmac_count++;
 		lmac++;
 	}
