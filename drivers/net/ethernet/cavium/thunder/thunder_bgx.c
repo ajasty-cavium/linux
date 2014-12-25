@@ -759,7 +759,10 @@ static void bgx_poll_for_link(struct work_struct *work)
 	link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1);
 	if (link & SPU_STATUS1_RCV_LNK) {
 		lmac->link_up = 1;
-		lmac->last_speed = 10000;
+		if (lmac->bgx->lmac_type == BGX_MODE_XLAUI)
+			lmac->last_speed = 40000;
+		else
+			lmac->last_speed = 10000;
 		lmac->last_duplex = 1;
 	} else {
 		lmac->link_up = 0;
