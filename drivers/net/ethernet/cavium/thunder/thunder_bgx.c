@@ -814,9 +814,6 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG,
 		       CMR_EN | CMR_PKT_RX_EN | CMR_PKT_TX_EN);
 
-	/* Restore default cfg, incase low level firmware changed it */
-	bgx_reg_write(bgx, lmac, BGX_CMRX_RX_DMAC_CTL, 0x03);
-
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
 
