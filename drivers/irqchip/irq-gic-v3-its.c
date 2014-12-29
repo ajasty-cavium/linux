@@ -427,11 +427,6 @@ static void its_send_single_command(struct its_node *its,
 	}
 	sync_col = builder(cmd, desc);
 	its_flush_cmd(its, cmd);
-#ifdef CONFIG_NUMA
-	/*  SYNC has issues on multi-node thunder.
-	 */
-	sync_col = 0;
-#endif
 
 	if (sync_col) {
 		sync_cmd = its_allocate_entry(its);
@@ -600,6 +595,16 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	struct its_device *its_dev = irq_data_get_irq_handler_data(d);
 	struct its_collection *target_col;
 	u32 id;
+
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+	u32 node = (its_dev->its->phys_base >> 44) & 0x3;
+	if (!cpumask_intersects(mask_val, cpumask_of_node(node))) {
+		pr_warn("Affinity not Set to CPU %d, not belongs to same NODE %d\n",
+				cpu, node);
+		return IRQ_SET_MASK_OK;
+	}
+	cpu = cpumask_any_and(mask_val, cpumask_of_node(node));
+#endif
 
 	if (cpu >= nr_cpu_ids)
 		return -EINVAL;
@@ -993,6 +998,11 @@ static void its_cpu_init_collection(void)
 	list_for_each_entry(its, &its_nodes, entry) {
 		u64 target;
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+		/* avoid cross node core and its mapping*/
+		if (((its->phys_base >> 44) & 0x3) != MPIDR_AFFINITY_LEVEL(read_cpuid_mpidr(), 2))
+			continue;
+#endif
 		/*
 		 * We now have to bind each collection to its target
 		 * redistributor.
@@ -1077,8 +1087,13 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	list_add(&dev->entry, &its->its_device_list);
 	raw_spin_unlock(&its->lock);
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+	/* Bind the device to the first possible CPU of same NODE*/
+	cpu = cpumask_first(cpumask_of_node((its->phys_base >> 44) & 0x3));
+#else
 	/* Bind the device to the first possible CPU */
 	cpu = cpumask_first(cpu_online_mask);
+#endif
 	dev->collection = &its->collections[cpu];
 
 	/* Map device to its ITT */

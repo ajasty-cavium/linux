@@ -161,6 +161,12 @@ config THUNDERX_PASS1_ERRATA_22558
 	Enable workaround for erratum 22558.
 	def_bool ARCH_THUNDER
 
+config THUNDERX_PASS1_ERRATA_23144
+	bool "Cavium ThunderX erratum 23144"
+	default n
+	help
+		Enable workaround for erratum 23144.
+
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
 	select ARCH_REQUIRE_GPIOLIB
