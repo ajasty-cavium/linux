@@ -278,9 +278,11 @@ static int xhci_setup_msix(struct xhci_hcd *xhci)
 	xhci->msix_count = min(num_online_cpus() + 1,
 				HCS_MAX_INTRS(xhci->hcs_params1));
 
-#ifdef CONFIG_ARCH_THUNDER
-	xhci->msix_count = pci_msix_vec_count(pdev);
-#endif
+	/* TODO: */
+	/* Errata 23238 */
+	if(pdev->vendor == PCI_VENDOR_ID_CAVIUM)
+		xhci->msix_count = pci_msix_vec_count(pdev);
+	
 	xhci->msix_entries =
 		kmalloc((sizeof(struct msix_entry))*xhci->msix_count,
 				GFP_KERNEL);
