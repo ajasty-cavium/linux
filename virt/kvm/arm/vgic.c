@@ -1608,7 +1608,7 @@ static int init_vgic_model(struct kvm *kvm, int type)
 
 int kvm_vgic_create(struct kvm *kvm, u32 type)
 {
-	int i, vcpu_lock_idx = -1, ret = 0;
+	int i, vcpu_lock_idx = -1, ret;
 	struct kvm_vcpu *vcpu;
 
 	mutex_lock(&kvm->lock);
@@ -1623,6 +1623,7 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	 * vcpu->mutex.  By grabbing the vcpu->mutex of all VCPUs we ensure
 	 * that no other VCPUs are run while we create the vgic.
 	 */
+	ret = -EBUSY;
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		if (!mutex_trylock(&vcpu->mutex))
 			goto out_unlock;
@@ -1630,11 +1631,10 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	}
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (vcpu->arch.has_run_once) {
-			ret = -EBUSY;
+		if (vcpu->arch.has_run_once)
 			goto out_unlock;
-		}
 	}
+	ret = 0;
 
 	ret = init_vgic_model(kvm, type);
 	if (ret)
