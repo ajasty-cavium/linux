@@ -1904,15 +1904,8 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 	 * Also, use the unmasked value to clear interrupt as spurious
 	 * pending event on a dummy port might cause screaming IRQ.
 	 */
-
-    /* 
-     * Thnunder handles AHCI with LPI
-     * Clear interrupt state, so that when the next event comes it will trigger agiain
-     * */
-
-    irq_stat = -1;
-
 	writel(irq_stat, mmio + HOST_IRQ_STAT);
+
 	VPRINTK("EXIT\n");
 
 	return handled ? IRQ_WAKE_THREAD : IRQ_NONE;
