@@ -1870,9 +1870,6 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 
 	/* sigh.  0xffffffff is a valid return from h/w */
 	irq_stat = readl(mmio + HOST_IRQ_STAT);
-
-    do {
-
 	if (!irq_stat)
 		return IRQ_NONE;
 
@@ -1913,9 +1910,9 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
      * Clear interrupt state, so that when the next event comes it will trigger agiain
      * */
 
+    irq_stat = -1;
+
 	writel(irq_stat, mmio + HOST_IRQ_STAT);
-	irq_stat = readl(mmio + HOST_IRQ_STAT);
-    }while(irq_stat);
 	VPRINTK("EXIT\n");
 
 	return handled ? IRQ_WAKE_THREAD : IRQ_NONE;
