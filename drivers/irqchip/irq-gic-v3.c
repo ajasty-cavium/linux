@@ -34,20 +34,25 @@
 #include "irq-gic-common.h"
 #include "irqchip.h"
 
+struct redist_region {
+	void __iomem		*redist_base;
+	phys_addr_t		phys_base;
+};
+
 struct gic_chip_data {
 	void __iomem		*dist_base;
-	void __iomem		**redist_base;
-	void __iomem * __percpu	*rdist;
+	struct redist_region	*redist_regions;
+	struct rdists		rdists;
 	struct irq_domain	*domain;
 	u64			redist_stride;
-	u32			redist_regions;
+	u32			nr_redist_regions;
 	unsigned int		irq_nr;
 };
 
 static struct gic_chip_data gic_data __read_mostly;
 
-#define gic_data_rdist()		(this_cpu_ptr(gic_data.rdist))
-#define gic_data_rdist_rd_base()	(*gic_data_rdist())
+#define gic_data_rdist()		(this_cpu_ptr(gic_data.rdists.rdist))
+#define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
 #define gic_data_rdist_sgi_base()	(gic_data_rdist_rd_base() + SZ_64K)
 
 /* Our default, arbitrary priority value. Linux only uses one anyway. */
@@ -70,9 +75,6 @@ static inline void __iomem *gic_dist_base(struct irq_data *d)
 
 	if (d->hwirq <= 1023)		/* SPI -> dist_base */
 		return gic_data.dist_base;
-
-	if (d->hwirq >= 8192)
-		BUG();		/* LPI Detected!!! */
 
 	return NULL;
 }
@@ -109,7 +111,11 @@ static u64 __maybe_unused gic_read_iar(void)
 {
 	u64 irqstat;
 
-	asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+    /* Workaround for thunder replay issue */
+    asm volatile("nop;nop;nop;nop;");
+    asm volatile("nop;nop;nop;nop;");
+    asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+    mb();
 	return irqstat;
 }
 
@@ -271,11 +277,11 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 	do {
 		irqnr = gic_read_iar();
 
-		if (likely(irqnr > 15 && irqnr < 1020)) {
+		if (likely(irqnr > 15 && irqnr < 1020) || irqnr >= 8192) {
 			int err;
 			err = handle_domain_irq(gic_data.domain, irqnr, regs);
 			if (err) {
-				WARN_ONCE(true, "Unexpected SPI received!\n");
+				WARN_ONCE(true, "Unexpected interrupt received!\n");
 				gic_write_eoir(irqnr);
 			}
 			continue;
@@ -333,8 +339,8 @@ static int gic_populate_rdist(void)
 	       MPIDR_AFFINITY_LEVEL(mpidr, 1) << 8 |
 	       MPIDR_AFFINITY_LEVEL(mpidr, 0));
 
-	for (i = 0; i < gic_data.redist_regions; i++) {
-		void __iomem *ptr = gic_data.redist_base[i];
+	for (i = 0; i < gic_data.nr_redist_regions; i++) {
+		void __iomem *ptr = gic_data.redist_regions[i].redist_base;
 		u32 reg;
 
 		reg = readl_relaxed(ptr + GICR_PIDR2) & GIC_PIDR2_ARCH_MASK;
@@ -347,10 +353,13 @@ static int gic_populate_rdist(void)
 		do {
 			typer = readq_relaxed(ptr + GICR_TYPER);
 			if ((typer >> 32) == aff) {
+				u64 offset = ptr - gic_data.redist_regions[i].redist_base;
 				gic_data_rdist_rd_base() = ptr;
-				pr_info("CPU%d: found redistributor %llx @%p\n",
+				gic_data_rdist()->phys_base = gic_data.redist_regions[i].phys_base + offset;
+				pr_info("CPU%d: found redistributor %llx region %d:%pa\n",
 					smp_processor_id(),
-					(unsigned long long)mpidr, ptr);
+					(unsigned long long)mpidr,
+					i, &gic_data_rdist()->phys_base);
 				return 0;
 			}
 
@@ -385,6 +394,11 @@ static void gic_cpu_sys_reg_init(void)
 	gic_write_grpen1(1);
 }
 
+static int gic_dist_supports_lpis(void)
+{
+	return !!(readl_relaxed(gic_data.dist_base + GICD_TYPER) & GICD_TYPER_LPIS);
+}
+
 static void gic_cpu_init(void)
 {
 	void __iomem *rbase;
@@ -398,6 +412,10 @@ static void gic_cpu_init(void)
 	rbase = gic_data_rdist_sgi_base();
 
 	gic_cpu_config(rbase, gic_redist_wait_for_rwp);
+
+	/* Give LPIs a spin */
+	if (IS_ENABLED(CONFIG_ARM_GIC_V3_ITS) && gic_dist_supports_lpis())
+		its_cpu_init();
 
 	/* initialise system registers */
 	gic_cpu_sys_reg_init();
@@ -457,7 +475,7 @@ static u16 gic_compute_target_list(int *base_cpu, const struct cpumask *mask,
 
 		mpidr = cpu_logical_map(cpu);
 
-		if (cluster_id != (mpidr & ~0xffUL)) {
+		if (cluster_id != (mpidr & ~0xffULL)) {
 			cpu--;
 			goto out;
 		}
@@ -467,15 +485,19 @@ out:
 	return tlist;
 }
 
+#define MPIDR_TO_SGI_AFFINITY(cluster_id, level) \
+	(MPIDR_AFFINITY_LEVEL(cluster_id, level) \
+		<< ICC_SGI1R_AFFINITY_## level ##_SHIFT)
+
 static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 {
 	u64 val;
 
-	val = (MPIDR_AFFINITY_LEVEL(cluster_id, 3) << 48	|
-	       MPIDR_AFFINITY_LEVEL(cluster_id, 2) << 32	|
-	       irq << 24			    		|
-	       MPIDR_AFFINITY_LEVEL(cluster_id, 1) << 16	|
-	       tlist);
+	val = (MPIDR_TO_SGI_AFFINITY(cluster_id, 3)	|
+	       MPIDR_TO_SGI_AFFINITY(cluster_id, 2)	|
+	       irq << ICC_SGI1R_SGI_ID_SHIFT		|
+	       MPIDR_TO_SGI_AFFINITY(cluster_id, 1)	|
+	       tlist << ICC_SGI1R_TARGET_LIST_SHIFT);
 
 	pr_debug("CPU%d: ICC_SGI1R_EL1 %llx\n", smp_processor_id(), val);
 	gic_write_sgi1r(val);
@@ -495,7 +517,7 @@ static void gic_raise_softirq(const struct cpumask *mask, unsigned int irq)
 	smp_wmb();
 
 	for_each_cpu_mask(cpu, *mask) {
-		u64 cluster_id = cpu_logical_map(cpu) & ~0xffUL;
+		u64 cluster_id = cpu_logical_map(cpu) & ~0xffULL;
 		u16 tlist;
 
 		tlist = gic_compute_target_list(&cpu, mask, cluster_id);
@@ -585,6 +607,10 @@ static struct irq_chip gic_chip = {
 	.irq_set_affinity	= gic_set_affinity,
 };
 
+static struct irq_chip *its_chip;
+
+#define GIC_ID_NR		(1U << gic_data.rdists.id_bits)
+
 static int gic_irq_domain_map(struct irq_domain *d, unsigned int irq,
 			      irq_hw_number_t hw)
 {
@@ -604,6 +630,19 @@ static int gic_irq_domain_map(struct irq_domain *d, unsigned int irq,
 					 handle_fasteoi_irq);
 		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 	}
+	/* Nothing */
+	if (hw >= gic_data.irq_nr && hw < 8192)
+		return -EPERM;
+	/* LPIs */
+	if (hw >= 8192 && hw < GIC_ID_NR) {
+		if (!its_chip)
+			return -EPERM;
+		irq_set_chip_and_handler(irq, its_chip, handle_fasteoi_irq);
+		set_irq_flags(irq, IRQF_VALID);
+	}
+	/* Off limits */
+	if (hw >= GIC_ID_NR)
+		return -EPERM;
 	irq_set_chip_data(irq, d->host_data);
 	return 0;
 }
@@ -641,9 +680,10 @@ static const struct irq_domain_ops gic_irq_domain_ops = {
 static int __init gic_of_init(struct device_node *node, struct device_node *parent)
 {
 	void __iomem *dist_base;
-	void __iomem **redist_base;
+	struct redist_region *rdist_regs;
 	u64 redist_stride;
-	u32 redist_regions;
+	u32 nr_redist_regions;
+	u32 typer;
 	u32 reg;
 	int gic_irqs;
 	int err;
@@ -664,53 +704,62 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 		goto out_unmap_dist;
 	}
 
-	if (of_property_read_u32(node, "#redistributor-regions", &redist_regions))
-		redist_regions = 1;
+	if (of_property_read_u32(node, "#redistributor-regions", &nr_redist_regions))
+		nr_redist_regions = 1;
 
-	redist_base = kzalloc(sizeof(*redist_base) * redist_regions, GFP_KERNEL);
-	if (!redist_base) {
+	rdist_regs = kzalloc(sizeof(*rdist_regs) * nr_redist_regions, GFP_KERNEL);
+	if (!rdist_regs) {
 		err = -ENOMEM;
 		goto out_unmap_dist;
 	}
 
-	for (i = 0; i < redist_regions; i++) {
-		redist_base[i] = of_iomap(node, 1 + i);
-		if (!redist_base[i]) {
+	for (i = 0; i < nr_redist_regions; i++) {
+		struct resource res;
+		int ret;
+
+		ret = of_address_to_resource(node, 1 + i, &res);
+		rdist_regs[i].redist_base = of_iomap(node, 1 + i);
+		if (ret || !rdist_regs[i].redist_base) {
 			pr_err("%s: couldn't map region %d\n",
 			       node->full_name, i);
 			err = -ENODEV;
 			goto out_unmap_rdist;
 		}
+		rdist_regs[i].phys_base = res.start;
 	}
 
 	if (of_property_read_u64(node, "redistributor-stride", &redist_stride))
 		redist_stride = 0;
 
 	gic_data.dist_base = dist_base;
-	gic_data.redist_base = redist_base;
-	gic_data.redist_regions = redist_regions;
+	gic_data.redist_regions = rdist_regs;
+	gic_data.nr_redist_regions = nr_redist_regions;
 	gic_data.redist_stride = redist_stride;
 
 	/*
 	 * Find out how many interrupts are supported.
 	 * The GIC only supports up to 1020 interrupt sources (SGI+PPI+SPI)
 	 */
-	gic_irqs = readl_relaxed(gic_data.dist_base + GICD_TYPER) & 0x1f;
-	gic_irqs = (gic_irqs + 1) * 32;
+	typer = readl_relaxed(gic_data.dist_base + GICD_TYPER);
+	gic_data.rdists.id_bits = GICD_TYPER_ID_BITS(typer);
+	gic_irqs = GICD_TYPER_IRQS(typer);
 	if (gic_irqs > 1020)
 		gic_irqs = 1020;
 	gic_data.irq_nr = gic_irqs;
 
 	gic_data.domain = irq_domain_add_tree(node, &gic_irq_domain_ops,
 					      &gic_data);
-	gic_data.rdist = alloc_percpu(typeof(*gic_data.rdist));
+	gic_data.rdists.rdist = alloc_percpu(typeof(*gic_data.rdists.rdist));
 
-	if (WARN_ON(!gic_data.domain) || WARN_ON(!gic_data.rdist)) {
+	if (WARN_ON(!gic_data.domain) || WARN_ON(!gic_data.rdists.rdist)) {
 		err = -ENOMEM;
 		goto out_free;
 	}
 
 	set_handle_irq(gic_handle_irq);
+
+	if (IS_ENABLED(CONFIG_ARM_GIC_V3_ITS) && gic_dist_supports_lpis())
+		its_chip = its_init(node, &gic_data.rdists, gic_data.domain);
 
 	gic_smp_init();
 	gic_dist_init();
@@ -722,12 +771,12 @@ static int __init gic_of_init(struct device_node *node, struct device_node *pare
 out_free:
 	if (gic_data.domain)
 		irq_domain_remove(gic_data.domain);
-	free_percpu(gic_data.rdist);
+	free_percpu(gic_data.rdists.rdist);
 out_unmap_rdist:
-	for (i = 0; i < redist_regions; i++)
-		if (redist_base[i])
-			iounmap(redist_base[i]);
-	kfree(redist_base);
+	for (i = 0; i < nr_redist_regions; i++)
+		if (rdist_regs[i].redist_base)
+			iounmap(rdist_regs[i].redist_base);
+	kfree(rdist_regs);
 out_unmap_dist:
 	iounmap(dist_base);
 	return err;

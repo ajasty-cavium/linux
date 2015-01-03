@@ -124,6 +124,7 @@ int irq_can_set_affinity(unsigned int irq)
 
 	return 1;
 }
+EXPORT_SYMBOL_GPL(irq_can_set_affinity);
 
 /**
  *	irq_set_thread_affinity - Notify irq threads to adjust affinity
@@ -232,6 +233,7 @@ int __irq_set_affinity(unsigned int irq, const struct cpumask *mask, bool force)
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(__irq_set_affinity);
 
 int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m)
 {

@@ -360,33 +360,47 @@
 		             <1 10 0xff01>;
 	};
 
+	pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupts = <1 7 4>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
 
-		refclk50mhz: refclk50mhz {
+		refclkuaa: refclkuaa {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
-			clock-frequency = <50000000>;
-			clock-output-names = "refclk50mhz";
+			clock-frequency = <116640000>;
+			clock-output-names = "refclkuaa";
 		};
 
 		gic0: interrupt-controller@8010,00000000 {
 			compatible = "arm,gic-v3";
 			#interrupt-cells = <3>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
 			interrupt-controller;
 			reg = <0x8010 0x00000000 0x0 0x010000>, /* GICD */
 			      <0x8010 0x80000000 0x0 0x600000>; /* GICR */
 			interrupts = <1 9 0xf04>;
+
+			its: gic-its@8010,00020000 {
+				compatible = "arm,gic-v3-its";
+				msi-controller;
+				reg = <0x8010 0x20000 0x0 0x200000>;
+			};
 		};
 
 		uaa0: serial@87e0,24000000 {
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x24000000 0x0 0x1000>;
 			interrupts = <1 21 4>;
-			clocks = <&refclk50mhz>;
+			clocks = <&refclkuaa>;
 			clock-names = "apb_pclk";
 		};
 
@@ -394,8 +408,480 @@
 			compatible = "arm,pl011", "arm,primecell";
 			reg = <0x87e0 0x25000000 0x0 0x1000>;
 			interrupts = <1 22 4>;
-			clocks = <&refclk50mhz>;
+			clocks = <&refclkuaa>;
 			clock-names = "apb_pclk";
 		};
+	};
+
+	mmc: mmc@87e0,09002000 {
+		compatible = "cavium,thunder-8800-mmc";
+		reg = <0x87e0 0x09002000 0x0 0x100>,
+		      <0x87e0 0x09000180 0x0 0x020>;
+		
+		#address-cells = <1>;
+		#size-cells = <0>;
+		/*interrupts = <1 23 4>,
+		             <1 24 4>,
+		             <1 25 4>,
+		             <1 26 4>,
+		             <1 27 4>,
+		             <1 28 4>,
+		             <1 29 4>,
+		             <1 30 4>,
+		             <1 31 4>;*/
+		/* Hack to make MMC as PCIe device */
+		interrupts = <1 8192 4>,
+		             <1 8193 4>,
+		             <1 8194 4>,
+		             <1 8195 4>,
+		             <1 8196 4>,
+		             <1 8197 4>,
+		             <1 8198 4>,
+		             <1 8199 4>,
+		             <1 8200 4>;
+	
+		/*power-gpios = <&gpio 8 0>;*/  /* Power on GPIO 8, active high */
+
+		/* Don't Touch Slot0 on EVB */
+		/*mmc-slot@0 {
+                                compatible = "cavium,thunder-8800-mmc-slot";
+                                reg = <0>;
+                                voltage-ranges = <3300 3300>;
+                        };*/
+	
+                mmc-slot@1 {
+                                compatible = "cavium,thunder-8800-mmc-slot";
+                                reg = <1>;
+                                voltage-ranges = <3300 3300>;
+                                spi-max-frequency = <25000000>;
+                                cavium,bus-max-width = <8>;
+                        };
+        };
+
+	pcie0: pcie0@0x8480,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		reg = <0x8480 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8010 0x00000000 0x8010 0x00000000 0x70 0x00000000>, /* mem ranges */
+			 <0x03000000 0x8300 0x00000000 0x8300 0x00000000 0x500 0x00000000>;
+        };
+
+	pcie1: pcie1@0x8490,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		reg = <0x8490 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8310 0x00000000 0x8310 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8100 0x00000000 0x8100 0x00000000 0x80 0x00000000>;
+        };
+
+	pcie2: pcie2@0x84a0,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		reg = <0x84a0 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8320 0x00000000 0x8320 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8430 0x00000000 0x8430 0x00000000 0x01 0x00000000>;
+        };
+
+	pcie3: pcie3@0x84b0,00000000 {
+	        compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		bus-range = <0 255>;
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		reg = <0x84b0 0x00000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x8330 0x00000000 0x8330 0x00000000 0x00 0x10000000>, /* mem ranges */
+			<0x03000000 0x8180 0x00000000 0x8180 0x00000000 0x80 0x00000000>;
+        };
+
+	pem0: pem0@0x87e0,c0000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+	    interrupt-parent = <&gic0>;
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc0000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x08000000 0x8810 0x08000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x10000000 0x8820 0x10000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x8830 0x00000000 0x00 0x08000000>; /* I/O */
+	};
+
+	pem1: pem1@0x87e0,c1000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+	    interrupt-parent = <&gic0>;
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc1000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x20000000 0x8850 0x20000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x28000000 0x8860 0x28000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x8870 0x00000000 0x00 0x08000000>; /* I/O */
+        };
+
+
+	pem2: pem2@0x87e0,c2000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc2000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x30000000 0x8890 0x30000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x38000000 0x88a0 0x38000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x88b0 0x00000000 0x00 0x08000000>; /* I/O */
+        };
+
+	pem3: pem3@0x87e0,c3000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+	    interrupt-parent = <&gic0>;
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc3000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x40000000 0x8910 0x40000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x48000000 0x8920 0x48000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x8930 0x00000000 0x00 0x08000000>; /* I/O */
+        };
+
+	pem4: pem4@0x87e0,c4000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+	    interrupt-parent = <&gic0>;
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc4000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x50000000 0x8950 0x50000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x58000000 0x8960 0x58000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x8970 0x00000000 0x00 0x08000000>; /* I/O */
+	};
+
+	pem5: pem5@0x87e0,c5000000 {
+	    compatible = "cavium,thunder-pcie";
+		device_type = "pci";
+	    interrupt-parent = <&gic0>;
+		msi-parent = <&its>;
+		/*bus-range = <0 255>; */
+		#size-cells = <2>;
+		#address-cells = <3>;
+		#stream-id-cells = <1>;
+		#interrupt-cells = <1>;
+		reg = <0x87e0 0xc5000000 0 0x10000000>;  /* Configuration space */
+		ranges = <0x03000000 0x0000 0x60000000 0x8990 0x60000000 0x00 0x08000000>, /* PEM memory */
+			 <0x43000000 0x0000 0x68000000 0x89a0 0x68000000 0x00 0x08000000>, /* mem, pref */
+			 <0x01000000 0x0000 0x00000000 0x89b0 0x00000000 0x00 0x08000000>; /* I/O */
+        };
+
+	smmu0@0x8300,00000000 {
+                compatible = "thunder,smmu-v2";
+                reg = <0x8300 0x0 0x0 0x2000000>;
+                #global-interrupts = <1>;
+		interrupts = <1 100 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>, <1 101 4>,
+			     <1 101 4>, <1 101 4>, <1 101 4>;
+
+                mmu-masters = <&pcie0 0x100>;
+				smmu-use-exid-for-stream-matching;
+        };
+
+	smmu1@0x8310,00000000 {
+                compatible = "thunder,smmu-v2";
+                reg = <0x8310 0x0 0x0 0x2000000>;
+                #global-interrupts = <1>;
+                interrupts = <1 102 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>, <1 103 4>,
+			     <1 103 4>, <1 103 4>, <1 103 4>;
+
+                mmu-masters = <&pcie1 0x100>;
+				smmu-use-exid-for-stream-matching;
+        };
+
+	smmu2@0x8320,00000000 {
+                compatible = "thunder,smmu-v2";
+                reg = <0x8320 0x0 0x0 0x2000000>;
+                #global-interrupts = <1>;
+                interrupts = <1 104 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>, <1 105 4>,
+			     <1 105 4>, <1 105 4>, <1 105 4>;
+
+                mmu-masters = <&pcie2 0x100>;
+				smmu-use-exid-for-stream-matching;
+        };
+
+	smmu3@0x8330,00000000 {
+                compatible = "thunder,smmu-v2";
+                reg = <0x8330 0x0 0x0 0x2000000>;
+                #global-interrupts = <1>;
+                interrupts = <1 106 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>, <1 107 4>,
+			     <1 107 4>, <1 107 4>, <1 107 4>;
+
+                mmu-masters = <&pcie3 0x100>;
+				smmu-use-exid-for-stream-matching;
+        };
+
+	mdio@0x87e00,5003800 {
+		compatible = "cavium,octeon-3860-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0x05003800 0x0 0x30>;
+
+		phy0: sgmii0 {
+			reg = <0> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	      		/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
+	    		marvell,reg-init = <3 0x10 0 0x8665>,
+ 					<3 0x11 0 0x00aa>,
+					<3 0x12 0 0x4105>,
+					<3 0x13 0 0x8a08>;
+
+      		};
+		phy1: sgmii1 {
+			reg = <1> ;
+	   		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	      		marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy2: sgmii2 {
+			reg = <2> ;
+		      	compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+
+      		};
+		phy3: sgmii3 {
+			reg = <3> ;
+	      		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+	 	     	marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+
+		/* For XAUI */
+		/* phy100: xaui0 {
+			reg = <0> ;
+			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
+			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
+		}; */
+	};
+
+	mdio@0x87e00,5003880 {
+		compatible = "cavium,octeon-3860-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0x05003880 0x0 0x30>;
+
+		phy4: sgmii4 {
+			reg = <4> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy5: sgmii5 {
+			reg = <5> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+
+      		};
+		phy6: sgmii6 {
+			reg = <6> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		phy7: sgmii7 {
+			reg = <7> ;
+			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			marvell,reg-init = <3 0x10 0 0x8665>,
+			      <3 0x11 0 0x00aa>,
+			      <3 0x12 0 0x4105>,
+			      <3 0x13 0 0x8a08>;
+      		};
+		/* For XAUI */
+		/* phy104: xaui1 {
+			reg = <4> ;
+			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
+			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
+		}; */
+	};
+
+	/**BGX0**/
+	bgx0 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0xe0000000 0x0 0x1000000>; 
+
+		lmac0 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy0>;
+		};
+		lmac1 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy1>;
+		};
+		lmac2 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy2>;
+		};
+		lmac3 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy3>;
+		};
+		/* For XAUI */
+		/*  lmac0 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy100>;
+		}; */
+	};
+
+	/**BGX1**/
+	bgx1 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x87e0 0xe1000000 0x0 0x1000000>; 
+
+		lmac0 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy4>;
+		};
+		lmac1 {
+			phy-handle = <&phy5>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+		lmac2 {
+			phy-handle = <&phy6>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+		lmac3 {
+			phy-handle = <&phy7>;
+			local-mac-address = [ 00 00 00 00 00 00 ];
+		};
+		/* For XAUI */
+		/*  lmac0 {
+			local-mac-address = [ 00 00 00 00 00 00 ];
+			phy-handle = <&phy104>;
+		}; */
 	};
 };

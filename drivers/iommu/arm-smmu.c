@@ -110,6 +110,7 @@
 #define sCR0_CLIENTPD			(1 << 0)
 #define sCR0_GFRE			(1 << 1)
 #define sCR0_GFIE			(1 << 2)
+#define sCR0_EXIDENABLE		(1 << 3)
 #define sCR0_GCFGFRE			(1 << 4)
 #define sCR0_GCFGFIE			(1 << 5)
 #define sCR0_USFCFG			(1 << 10)
@@ -198,6 +199,7 @@
 #define S2CR_TYPE_TRANS			(0 << S2CR_TYPE_SHIFT)
 #define S2CR_TYPE_BYPASS		(1 << S2CR_TYPE_SHIFT)
 #define S2CR_TYPE_FAULT			(2 << S2CR_TYPE_SHIFT)
+#define S2CR_EXIDVALID			(1 << 10)
 
 /* Context bank attribute registers */
 #define ARM_SMMU_GR1_CBAR(n)		(0x0 + ((n) << 2))
@@ -368,7 +370,8 @@ struct arm_smmu_device {
 #define ARM_SMMU_FEAT_TRANS_NESTED	(1 << 4)
 	u32				features;
 
-#define ARM_SMMU_OPT_SECURE_CFG_ACCESS (1 << 0)
+#define ARM_SMMU_OPT_SECURE_CFG_ACCESS	(1 << 0)
+#define ARM_SMMU_OPT_USE_EXID			(1 << 1)
 	u32				options;
 	enum arm_smmu_arch_version	version;
 
@@ -420,6 +423,7 @@ struct arm_smmu_option_prop {
 
 static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_SECURE_CFG_ACCESS, "calxeda,smmu-secure-config-access" },
+	{ ARM_SMMU_OPT_USE_EXID, "smmu-use,exid-for-stream-matching"},
 	{ 0, NULL},
 };
 
@@ -820,12 +824,7 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 	arm_smmu_flush_pgtable(smmu, cfg->pgd,
 			       PTRS_PER_PGD * sizeof(pgd_t));
 	reg = __pa(cfg->pgd);
-	writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_LO);
-	reg = (phys_addr_t)__pa(cfg->pgd) >> 32;
-	if (stage1)
-		reg |= ARM_SMMU_CB_ASID(cfg) << TTBRn_HI_ASID_SHIFT;
-	writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_HI);
-
+	writeq_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_LO);
 	/*
 	 * TTBCR
 	 * We use long descriptor, with inner-shareable WBWA tables in TTBR0.
@@ -1119,10 +1118,18 @@ static int arm_smmu_master_configure_smrs(struct arm_smmu_device *smmu,
 	}
 
 	/* It worked! Now, poke the actual hardware */
-	for (i = 0; i < cfg->num_streamids; ++i) {
-		u32 reg = SMR_VALID | smrs[i].id << SMR_ID_SHIFT |
-			  smrs[i].mask << SMR_MASK_SHIFT;
-		writel_relaxed(reg, gr0_base + ARM_SMMU_GR0_SMR(smrs[i].idx));
+	if (smmu->options & ARM_SMMU_OPT_USE_EXID) {
+		for (i = 0; i < cfg->num_streamids; ++i) {
+			u32 reg = smrs[i].id << SMR_ID_SHIFT |
+				smrs[i].mask << SMR_MASK_SHIFT;
+			writel_relaxed(reg, gr0_base + ARM_SMMU_GR0_SMR(smrs[i].idx));
+		}
+	} else {
+		for (i = 0; i < cfg->num_streamids; ++i) {
+			u32 reg = SMR_VALID | smrs[i].id << SMR_ID_SHIFT |
+				  smrs[i].mask << SMR_MASK_SHIFT;
+			writel_relaxed(reg, gr0_base + ARM_SMMU_GR0_SMR(smrs[i].idx));
+		}
 	}
 
 	cfg->smrs = smrs;
@@ -1175,6 +1182,8 @@ static int arm_smmu_domain_add_master(struct arm_smmu_domain *smmu_domain,
 		idx = cfg->smrs ? cfg->smrs[i].idx : cfg->streamids[i];
 		s2cr = S2CR_TYPE_TRANS |
 		       (smmu_domain->cfg.cbndx << S2CR_CBNDX_SHIFT);
+		if (smmu->options & ARM_SMMU_OPT_USE_EXID)
+			s2cr |= S2CR_EXIDVALID;
 		writel_relaxed(s2cr, gr0_base + ARM_SMMU_GR0_S2CR(idx));
 	}
 
@@ -1707,6 +1716,10 @@ static void arm_smmu_device_reset(struct arm_smmu_device *smmu)
 	/* Don't upgrade barriers */
 	reg &= ~(sCR0_BSU_MASK << sCR0_BSU_SHIFT);
 
+	/* Try and use EXID */
+	if (smmu->options & ARM_SMMU_OPT_USE_EXID)
+		reg |= sCR0_EXIDENABLE;
+
 	/* Push the button */
 	arm_smmu_tlb_sync(smmu);
 	writel(reg, ARM_SMMU_GR0_NS(smmu) + ARM_SMMU_GR0_sCR0);
@@ -1891,6 +1904,7 @@ static const struct of_device_id arm_smmu_of_match[] = {
 	{ .compatible = "arm,mmu-400", .data = (void *)ARM_SMMU_V1 },
 	{ .compatible = "arm,mmu-401", .data = (void *)ARM_SMMU_V1 },
 	{ .compatible = "arm,mmu-500", .data = (void *)ARM_SMMU_V2 },
+	{ .compatible = "thunder,smmu-v2", .data = (void *)ARM_SMMU_V2 },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);

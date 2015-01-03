@@ -7,6 +7,8 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/of_address.h>
+#include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -14,8 +16,9 @@
 #include <linux/phy.h>
 #include <linux/io.h>
 
-#include <asm/octeon/octeon.h>
-#include <asm/octeon/cvmx-smix-defs.h>
+//#include <asm/octeon/octeon.h>
+//#include <asm/octeon/cvmx-smix-defs.h>
+#include "cvmx-smix-defs.h"
 
 #define DRV_VERSION "1.0"
 #define DRV_DESCRIPTION "Cavium Networks Octeon SMI/MDIO driver"
@@ -40,6 +43,16 @@ struct octeon_mdiobus {
 	enum octeon_mdiobus_mode mode;
 	int phy_irq[PHY_MAX_ADDR];
 };
+
+static void cvmx_write_csr (uint64_t addr, uint64_t val)
+{
+	writeq_relaxed(val, (void *)addr);
+}
+
+static uint64_t cvmx_read_csr (uint64_t addr)
+{
+	return readq_relaxed((void *)addr);
+}
 
 static void octeon_mdiobus_set_mode(struct octeon_mdiobus *p,
 				    enum octeon_mdiobus_mode m)
@@ -178,14 +191,25 @@ static int octeon_mdiobus_write(struct mii_bus *bus, int phy_id,
 static int octeon_mdiobus_probe(struct platform_device *pdev)
 {
 	struct octeon_mdiobus *bus;
+#if 0
 	struct resource *res_mem;
+#endif
 	union cvmx_smix_en smi_en;
 	int err = -ENOENT;
+	const __be32 *reg;
+	uint64_t  addr, size;
 
 	bus = devm_kzalloc(&pdev->dev, sizeof(*bus), GFP_KERNEL);
 	if (!bus)
 		return -ENOMEM;
 
+	reg = of_get_property(pdev->dev.of_node, "reg", NULL);
+	addr = of_translate_address(pdev->dev.of_node, reg);
+	pr_err("%s: mdio addr 0x%llx\n",__func__, addr);
+	size = of_read_number(reg + 2, 2);
+	pr_err("%s: size 0x%llx\n",__func__, size);
+
+#if 0
 	res_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	if (res_mem == NULL) {
@@ -202,6 +226,9 @@ static int octeon_mdiobus_probe(struct platform_device *pdev)
 	}
 	bus->register_base =
 		(u64)devm_ioremap(&pdev->dev, bus->mdio_phys, bus->regsize);
+#endif
+	
+	bus->register_base = (u64) devm_ioremap(&pdev->dev, addr, size);
 
 	bus->mii_bus = mdiobus_alloc();
 

@@ -59,6 +59,9 @@ struct kvm_arch {
 	/* VTTBR value associated with above pgd and vmid */
 	u64    vttbr;
 
+	/* The maximum number of vCPUs depends on the used GIC model */
+	int max_vcpus;
+
 	/* Interrupt controller */
 	struct vgic_dist	vgic;
 
@@ -206,6 +209,8 @@ int handle_exit(struct kvm_vcpu *vcpu, struct kvm_run *run,
 
 int kvm_perf_init(void);
 int kvm_perf_teardown(void);
+
+struct kvm_vcpu *kvm_mpidr_to_vcpu(struct kvm *kvm, unsigned long mpidr);
 
 static inline void __cpu_init_hyp_mode(phys_addr_t boot_pgd_ptr,
 				       phys_addr_t pgd_ptr,

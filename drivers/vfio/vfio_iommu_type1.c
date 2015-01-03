@@ -522,6 +522,28 @@ unwind:
 	return ret;
 }
 
+
+static int vfio_iommu_map_dev(struct vfio_iommu *iommu, dma_addr_t iova,
+						phys_addr_t phyaddr, size_t size, int prot)
+{
+	struct vfio_domain *d;
+	int ret = 0;
+
+	list_for_each_entry(d, &iommu->domain_list, next) {
+		ret = iommu_map(d->domain, iova, phyaddr, size, prot);
+		if (ret)
+			goto unwind;
+	}
+	return 0;
+
+unwind:
+	list_for_each_entry_continue_reverse(d, &iommu->domain_list, next)
+		iommu_unmap(d->domain, iova, size);
+	return ret;
+}
+
+
+
 static int vfio_dma_do_map(struct vfio_iommu *iommu,
 			   struct vfio_iommu_type1_dma_map *map)
 {
@@ -933,7 +955,8 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 	} else if (cmd == VFIO_IOMMU_MAP_DMA) {
 		struct vfio_iommu_type1_dma_map map;
 		uint32_t mask = VFIO_DMA_MAP_FLAG_READ |
-				VFIO_DMA_MAP_FLAG_WRITE;
+				VFIO_DMA_MAP_FLAG_WRITE	|
+				VFIO_DMA_MAP_FLAG_DEV;
 
 		minsz = offsetofend(struct vfio_iommu_type1_dma_map, size);
 

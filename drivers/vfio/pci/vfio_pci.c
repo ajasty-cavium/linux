@@ -350,6 +350,7 @@ static int vfio_pci_for_each_slot_or_bus(struct pci_dev *pdev,
 	return walk.ret;
 }
 
+int pci_requester_id(struct pci_dev *dev);
 static long vfio_pci_ioctl(void *device_data,
 			   unsigned int cmd, unsigned long arg)
 {
@@ -359,7 +360,7 @@ static long vfio_pci_ioctl(void *device_data,
 	if (cmd == VFIO_DEVICE_GET_INFO) {
 		struct vfio_device_info info;
 
-		minsz = offsetofend(struct vfio_device_info, num_irqs);
+		minsz = offsetofend(struct vfio_device_info, pdev_id);
 
 		if (copy_from_user(&info, (void __user *)arg, minsz))
 			return -EFAULT;
@@ -374,6 +375,7 @@ static long vfio_pci_ioctl(void *device_data,
 
 		info.num_regions = VFIO_PCI_NUM_REGIONS;
 		info.num_irqs = VFIO_PCI_NUM_IRQS;
+		intfo.pdev_id = pci_requester_id(vdev->pdev);
 
 		return copy_to_user((void __user *)arg, &info, minsz);
 
@@ -768,6 +770,7 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int index;
 	u64 phys_len, req_len, pgoff, req_start;
+	struct msix_entry entry[6] = {{0, 0}, {0, 1} };
 	int ret;
 
 	index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
@@ -791,6 +794,7 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	if (index == vdev->msix_bar) {
+#if 0
 		/*
 		 * Disallow mmaps overlapping the MSI-X table; users don't
 		 * get to touch this directly.  We could find somewhere
@@ -804,6 +808,9 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 		if (!(req_start >= vdev->msix_offset + vdev->msix_size ||
 		      req_start + req_len <= vdev->msix_offset))
 			return -EINVAL;
+#endif
+		/* this is a hack to enable misx field in ECAM */
+		pci_enable_msix_range(pdev, entry, 0, 1);
 	}
 
 	/*

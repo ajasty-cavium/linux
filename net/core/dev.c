@@ -3032,6 +3032,7 @@ struct rps_sock_flow_table __rcu *rps_sock_flow_table __read_mostly;
 EXPORT_SYMBOL(rps_sock_flow_table);
 
 struct static_key rps_needed __read_mostly;
+EXPORT_SYMBOL(rps_needed);
 
 static struct rps_dev_flow *
 set_rps_cpu(struct net_device *dev, struct sk_buff *skb,

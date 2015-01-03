@@ -15,6 +15,7 @@ config ARM64
 	select ARM_GIC
 	select AUDIT_ARCH_COMPAT_GENERIC
 	select ARM_GIC_V3
+	select ARM_GIC_V3_ITS
 	select BUILDTIME_EXTABLE_SORT
 	select CLONE_BACKWARDS
 	select COMMON_CLK
@@ -46,7 +47,7 @@ config ARM64
 	select HAVE_DEBUG_KMEMLEAK
 	select HAVE_DMA_API_DEBUG
 	select HAVE_DMA_ATTRS
-	select HAVE_DMA_CONTIGUOUS
+	select HAVE_DMA_CONTIGUOUS if !ARCH_THUNDER
 	select HAVE_DYNAMIC_FTRACE
 	select HAVE_EFFICIENT_UNALIGNED_ACCESS
 	select HAVE_FTRACE_MCOUNT_RECORD
@@ -147,6 +148,26 @@ config ARCH_THUNDER
 	bool "Cavium Inc. Thunder SoC Family"
 	help
 	  This enables support for Cavium's Thunder Family of SoCs.
+	select SATA_AHCI
+	select NET_VENDOR_CAVIUM
+	select MARVELL_PHY
+	select BROADCOM_PHY
+	select BCM87XX_PHY
+	select HAVE_MEMBLOCK_NODE_MAP if NUMA
+	select ARM64_VA_BITS_48 if NUMA
+
+config THUNDERX_PASS1_ERRATA_22558
+	bool "Cavium ThunderX erratum 22558"
+	default n
+	help
+	Enable workaround for erratum 22558.
+	def_bool ARCH_THUNDER
+
+config THUNDERX_PASS1_ERRATA_23144
+	bool "Cavium ThunderX erratum 23144"
+	default n
+	help
+		Enable workaround for erratum 23144.
 
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
@@ -172,10 +193,22 @@ config ARM_AMBA
 
 config PCI
 	bool "PCI support"
+	default y
 	help
 	  This feature enables support for PCI bus system. If you say Y
 	  here, the kernel will include drivers and infrastructure code
 	  to support PCI bus devices.
+
+config PCI_MSI
+	def_bool PCI
+
+config NO_PCI_IOV
+	def_bool PCI
+	depends on !PCI_THUNDER
+
+config PCI_IOV
+	def_bool PCI
+	depends on !NO_PCI_IOV
 
 config PCI_DOMAINS
 	def_bool PCI
@@ -189,6 +222,9 @@ config PCI_SYSCALL
 source "drivers/pci/Kconfig"
 source "drivers/pci/pcie/Kconfig"
 source "drivers/pci/hotplug/Kconfig"
+
+config PCI_THUNDER
+	def_bool PCI
 
 endmenu
 
@@ -226,15 +262,15 @@ choice
 
 config ARM64_VA_BITS_39
 	bool "39-bit"
-	depends on ARM64_4K_PAGES
+	depends on ARM64_4K_PAGES  && !NUMA
 
 config ARM64_VA_BITS_42
 	bool "42-bit"
-	depends on ARM64_64K_PAGES
+	depends on ARM64_64K_PAGES  && !NUMA
 
 config ARM64_VA_BITS_48
 	bool "48-bit"
-	depends on !ARM_SMMU
+	depends on ARM64_4K_PAGES || ARM64_64K_PAGES
 
 endchoice
 
@@ -286,8 +322,8 @@ config SCHED_SMT
 	  places. If unsure say N here.
 
 config NR_CPUS
-	int "Maximum number of CPUs (2-64)"
-	range 2 64
+	int "Maximum number of CPUs (2-128)"
+	range 2 128
 	depends on SMP
 	# These have to remain sorted largest to smallest
 	default "64"
@@ -298,6 +334,38 @@ config HOTPLUG_CPU
 	help
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
+
+# Common NUMA Features
+config NUMA
+	bool "Numa Memory Allocation and Scheduler Support"
+	depends on SMP
+	---help---
+	  Enable NUMA (Non Uniform Memory Access) support.
+
+	  The kernel will try to allocate memory used by a CPU on the
+	  local memory controller of the CPU and add some more
+	  NUMA awareness to the kernel.
+
+config ARM64_DT_NUMA
+	def_bool n
+	prompt "DT NUMA detection"
+	depends on BROKEN
+	---help---
+	  Enable DT based numa.
+
+config NODES_SHIFT
+	int "Maximum NUMA Nodes (as a power of 2)"
+	range 1 10
+	default "2"
+	depends on NEED_MULTIPLE_NODES
+	---help---
+	  Specify the maximum number of NUMA Nodes available on the target
+	  system.  Increases memory reserved to accommodate various tables.
+
+config USE_PERCPU_NUMA_NODE_ID
+	def_bool y
+	depends on NUMA
+
 
 source kernel/Kconfig.preempt
 
@@ -360,6 +428,7 @@ config XEN
 config FORCE_MAX_ZONEORDER
 	int
 	default "14" if (ARM64_64K_PAGES && TRANSPARENT_HUGEPAGE)
+	default "13" if (ARCH_THUNDER && !ARM64_64K_PAGES)
 	default "11"
 
 endmenu
@@ -409,9 +478,13 @@ menu "Userspace binary formats"
 source "fs/Kconfig.binfmt"
 
 config COMPAT
+	def_bool y
+	depends on AARCH32_EL0 || ARM64_ILP32
+	select COMPAT_BINFMT_ELF
+
+config AARCH32_EL0
 	bool "Kernel support for 32-bit EL0"
 	depends on !ARM64_64K_PAGES
-	select COMPAT_BINFMT_ELF
 	select HAVE_UID16
 	select OLD_SIGSUSPEND3
 	select COMPAT_OLD_SIGACTION
@@ -423,9 +496,16 @@ config COMPAT
 
 	  If you want to execute 32-bit userspace applications, say Y.
 
+config ARM64_ILP32
+	bool "Kernel support for ILP32"
+	help
+	  This option enables support for AArch64 ILP32 user space.  ILP32
+	  is an ABI where long and pointers are 32bits but it uses the AARCH64
+	  instruction set.
+
 config SYSVIPC_COMPAT
 	def_bool y
-	depends on COMPAT && SYSVIPC
+	depends on AARCH32_EL0 && SYSVIPC
 
 endmenu
 

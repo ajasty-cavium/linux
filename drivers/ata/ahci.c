@@ -42,6 +42,7 @@
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/gfp.h>
+#include <linux/msi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>
@@ -52,6 +53,7 @@
 
 enum {
 	AHCI_PCI_BAR_STA2X11	= 0,
+	AHCI_PCI_BAR_CAVIUM	= 0,
 	AHCI_PCI_BAR_ENMOTUS	= 2,
 	AHCI_PCI_BAR_STANDARD	= 5,
 };
@@ -499,6 +501,9 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 
 	/* Enmotus */
 	{ PCI_DEVICE(0x1c44, 0x8000), board_ahci },
+
+	/* Cavium */
+	{ PCI_DEVICE(0x177d, 0xa01c), .driver_data = board_ahci },
 
 	/* Generic, PCI class code for AHCI */
 	{ PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
@@ -1202,10 +1207,40 @@ static inline void ahci_gtf_filter_workaround(struct ata_host *host)
 {}
 #endif
 
-static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
-				struct ahci_host_priv *hpriv)
+static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
+			  struct ahci_host_priv *hpriv)
 {
 	int rc, nvec;
+	struct msix_entry entry = {};
+
+	/* check if msix is supported */
+	nvec = pci_msix_vec_count(pdev);
+	if (nvec <= 0)
+		return 0;
+
+	/* per-port msix interrupts are not supported */
+	if (n_ports > 1 && nvec >= n_ports)
+		return -ENOSYS;
+
+	/* only enable the first entry (entry.entry = 0) */
+	rc = pci_enable_msix_exact(pdev, &entry, 1);
+	if (rc < 0)
+		return rc;
+
+	return 1;
+}
+
+static int __ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
+				  struct ahci_host_priv *hpriv)
+{
+	int rc, nvec;
+
+	nvec = ahci_init_msix(pdev, n_ports, hpriv);
+	if (nvec > 0)
+		return nvec;
+
+	if (nvec && nvec != -ENOSYS)
+		dev_err(&pdev->dev, "failed to enable MSI-X: %d", nvec);
 
 	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
 		goto intx;
@@ -1250,6 +1285,35 @@ intx:
 	return 0;
 }
 
+static struct msi_desc *msix_get_desc(struct pci_dev *dev, u16 entry)
+{
+	struct msi_desc *desc;
+
+	list_for_each_entry(desc, &dev->msi_list, list) {
+		if (desc->msi_attrib.entry_nr == entry)
+			return desc;
+	}
+
+	return NULL;
+}
+
+static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
+				struct ahci_host_priv *hpriv)
+{
+	struct msi_desc *desc;
+
+	__ahci_init_interrupts(pdev, n_ports, hpriv);
+
+	if (!pdev->msix_enabled)
+		return pdev->irq;
+
+	desc = msix_get_desc(pdev, 0);	/* first entry */
+	if (!desc)
+		return -ENODEV;
+
+	return desc->irq;
+}
+
 static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	unsigned int board_id = ent->driver_data;
@@ -1260,6 +1324,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct ata_host *host;
 	int n_ports, i, rc;
 	int ahci_pci_bar = AHCI_PCI_BAR_STANDARD;
+	int irq;
 
 	VPRINTK("ENTER\n");
 
@@ -1285,11 +1350,13 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_info(&pdev->dev,
 			 "PDC42819 can only drive SATA devices with this driver\n");
 
-	/* Both Connext and Enmotus devices use non-standard BARs */
+	/* Some devices use non-standard BARs */
 	if (pdev->vendor == PCI_VENDOR_ID_STMICRO && pdev->device == 0xCC06)
 		ahci_pci_bar = AHCI_PCI_BAR_STA2X11;
 	else if (pdev->vendor == 0x1c44 && pdev->device == 0x8000)
 		ahci_pci_bar = AHCI_PCI_BAR_ENMOTUS;
+	else if (pdev->vendor == 0x177d && pdev->device == 0xa01c)
+		ahci_pci_bar = AHCI_PCI_BAR_CAVIUM;
 
 	/*
 	 * The JMicron chip 361/363 contains one SATA controller and one
@@ -1411,7 +1478,9 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	n_ports = max(ahci_nr_ports(hpriv->cap), fls(hpriv->port_map));
 
-	ahci_init_interrupts(pdev, n_ports, hpriv);
+	irq = ahci_init_interrupts(pdev, n_ports, hpriv);
+	if (irq < 0)
+		return irq;
 
 	host = ata_host_alloc_pinfo(&pdev->dev, ppi, n_ports);
 	if (!host)
@@ -1463,7 +1532,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_master(pdev);
 
-	return ahci_host_activate(host, pdev->irq, &ahci_sht);
+	return ahci_host_activate(host, irq, &ahci_sht);
 }
 
 module_pci_driver(ahci_pci_driver);

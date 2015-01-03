@@ -132,6 +132,9 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	/* Mark the initial VMID generation invalid */
 	kvm->arch.vmid_gen = 0;
 
+	/* The maximum number of VCPUs is limited by the host's GIC model */
+	kvm->arch.max_vcpus = kvm_vgic_get_max_vcpus();
+
 	return ret;
 out_free_stage2_pgd:
 	kvm_free_stage2_pgd(kvm);
@@ -212,6 +215,11 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 {
 	int err;
 	struct kvm_vcpu *vcpu;
+
+	if (id >= kvm->arch.max_vcpus) {
+		err = -EINVAL;
+		goto out;
+	}
 
 	vcpu = kmem_cache_zalloc(kvm_vcpu_cache, GFP_KERNEL);
 	if (!vcpu) {
@@ -753,7 +761,7 @@ long kvm_arch_vm_ioctl(struct file *filp,
 	switch (ioctl) {
 	case KVM_CREATE_IRQCHIP: {
 		if (vgic_present)
-			return kvm_vgic_create(kvm);
+			return kvm_vgic_create(kvm, KVM_DEV_TYPE_ARM_VGIC_V2);
 		else
 			return -ENXIO;
 	}
@@ -975,6 +983,19 @@ out_err:
 static void check_kvm_target_cpu(void *ret)
 {
 	*(int *)ret = kvm_target_cpu();
+}
+
+struct kvm_vcpu *kvm_mpidr_to_vcpu(struct kvm *kvm, unsigned long mpidr)
+{
+	struct kvm_vcpu *vcpu;
+	int i;
+
+	mpidr &= MPIDR_HWID_BITMASK;
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (mpidr == kvm_vcpu_get_mpidr_aff(vcpu))
+			return vcpu;
+	}
+	return NULL;
 }
 
 /**

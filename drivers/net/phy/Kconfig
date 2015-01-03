@@ -147,7 +147,8 @@ config MDIO_GPIO
 
 config MDIO_OCTEON
 	tristate "Support for MDIO buses on Octeon SOCs"
-	depends on CAVIUM_OCTEON_SOC
+	#depends on CAVIUM_OCTEON_SOC
+	depends on ARCH_THUNDER
 	default y
 	help
 
