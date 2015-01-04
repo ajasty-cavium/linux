@@ -4452,15 +4452,15 @@ int pci_get_new_domain_nr(void)
 
 #ifdef CONFIG_PCI_DOMAINS_GENERIC
 
-void pci_bus_assign_domain_nr(struct pci_bus *bus, struct device *parent)
+static int get_pci_domain_nr(struct pci_bus *bus, struct device *parent)
 {
 	static int use_dt_domains = -1;
 	int domain;
 
-	if (!acpi_disabled) {
-		domain = PCI_CONTROLLER(bus)->segment;
-		goto out;
-	}
+#ifdef CONFIG_ACPI
+	if (!acpi_disabled)
+		return PCI_CONTROLLER(bus)->segment;
+#endif
 
 	domain = of_get_pci_domain_nr(parent->of_node);
 
@@ -4492,16 +4492,22 @@ void pci_bus_assign_domain_nr(struct pci_bus *bus, struct device *parent)
 	 */
 	if (domain >= 0 && use_dt_domains) {
 		use_dt_domains = 1;
-	} else if (domain < 0 && use_dt_domains != 1) {
-		use_dt_domains = 0;
-		domain = pci_get_new_domain_nr();
-	} else {
-		dev_err(parent, "Node %s has inconsistent \"linux,pci-domain\" property in DT\n",
-			parent->of_node->full_name);
-		domain = -1;
+		return domain;
 	}
-out:
-	bus->domain_nr = domain;
+
+	if (domain < 0 && use_dt_domains != 1) {
+		use_dt_domains = 0;
+		return pci_get_new_domain_nr();
+	}
+
+	dev_err(parent, "Node %s has inconsistent \"linux,pci-domain\" property in DT\n",
+		parent->of_node->full_name);
+	return -1;
+}
+
+void pci_bus_assign_domain_nr(struct pci_bus *bus, struct device *parent)
+{
+	bus->domain_nr = get_pci_domain_nr(bus, parent);
 }
 #endif
 #endif
