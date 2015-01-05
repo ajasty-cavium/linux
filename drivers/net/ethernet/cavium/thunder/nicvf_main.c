@@ -738,15 +738,18 @@ static void nicvf_disable_msix(struct nicvf *nic)
 static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 {
 	cpumask_t  affinity_mask;
-	int cpu;
+	int cpu, first_cpu, num_online_cpus;
 
-	if (num_online_cpus() > nic->netdev->real_num_rx_queues)
-		cpu = qidx;
+	num_online_cpus = cpumask_weight(cpumask_of_node(nic->node));
+	first_cpu = cpumask_first(cpumask_of_node(nic->node));
+
+	if (num_online_cpus > nic->netdev->real_num_rx_queues)
+		cpu = first_cpu + qidx;
 	else
-		cpu = qidx % num_online_cpus();
+		cpu = first_cpu + (qidx % num_online_cpus);
 
 	if (!(cpu_online(cpu) && irq_can_set_affinity(cpu)))
-		cpu = 0;
+		cpu = first_cpu;
 
 	cpumask_clear(&affinity_mask);
 	cpumask_set_cpu(cpu, &affinity_mask);
