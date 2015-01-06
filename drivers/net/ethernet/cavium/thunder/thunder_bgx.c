@@ -14,6 +14,7 @@
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
+#include <linux/acpi.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -30,7 +31,6 @@ struct lmac {
 	int			lmacid_bd; /* ID on board */
 	struct net_device       netdev;
 	struct phy_device       *phydev;
-	struct device_node      *phy_np;     
 	unsigned int            last_duplex;
 	unsigned int            last_link;
 	unsigned int            last_speed;
@@ -41,6 +41,7 @@ struct lmac {
 
 struct bgx {
 	uint8_t			bgx_id;
+	uint8_t			qlm_mode;
 	struct	lmac		lmac[MAX_LMAC_PER_BGX];
 	int			lmac_count;
 	int                     lmac_type;
@@ -58,6 +59,7 @@ struct bgx {
 } bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
+static int lmac_count = 0; /* Total no of LMACs in system */
 
 static int bgx_xaui_check_link(struct lmac *lmac);
 
@@ -323,6 +325,8 @@ uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
 	struct bgx *bgx;
 
 	bgx = bgx_vnic[bgx_idx];
+	if (idx > 8)
+		lmac = 0;
 	return bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT0 + (idx * 8));
 }
 EXPORT_SYMBOL(bgx_get_rx_stats);
@@ -755,7 +759,10 @@ static void bgx_poll_for_link(struct work_struct *work)
 	link = bgx_reg_read(lmac->bgx, lmac->lmacid, BGX_SPUX_STATUS1);
 	if (link & SPU_STATUS1_RCV_LNK) {
 		lmac->link_up = 1;
-		lmac->last_speed = 10000;
+		if (lmac->bgx->lmac_type == BGX_MODE_XLAUI)
+			lmac->last_speed = 40000;
+		else
+			lmac->last_speed = 10000;
 		lmac->last_duplex = 1;
 	} else {
 		lmac->link_up = 0;
@@ -810,6 +817,9 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	bgx_reg_modify(bgx, lmacid, BGX_CMRX_CFG,
 		       CMR_EN | CMR_PKT_RX_EN | CMR_PKT_TX_EN);
 
+	/* Restore default cfg, incase low level firmware changed it */
+	bgx_reg_write(bgx, lmacid, BGX_CMRX_RX_DMAC_CTL, 0x03);
+
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
 
@@ -820,11 +830,14 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	    (bgx->lmac_type != BGX_MODE_XLAUI) &&
 	    (bgx->lmac_type != BGX_MODE_40G_KR) &&
 	    (bgx->lmac_type != BGX_MODE_10G_KR)) {
-		lmac->phydev = of_phy_connect(&lmac->netdev, lmac->phy_np,
-					      bgx_lmac_handler, 0,
-					      PHY_INTERFACE_MODE_SGMII);
-
 		if (!lmac->phydev)
+			return -ENODEV;
+
+		lmac->phydev->dev_flags = 0;
+
+		if (phy_connect_direct(&lmac->netdev, lmac->phydev,
+				       bgx_lmac_handler,
+				       PHY_INTERFACE_MODE_SGMII))
 			return -ENODEV;
 
 		phy_start_aneg(lmac->phydev);
@@ -859,9 +872,9 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 	lmac->phydev = NULL;
 }
 
-static void bgx_set_num_ports(struct bgx *bgx, int qlm_mode)
+static void bgx_set_num_ports(struct bgx *bgx)
 {
-	switch (qlm_mode) {
+	switch (bgx->qlm_mode) {
 	case QLM_MODE_SGMII:
 		bgx->lmac_count = 4;
 		bgx->lmac_type = BGX_MODE_SGMII;
@@ -878,7 +891,7 @@ static void bgx_set_num_ports(struct bgx *bgx, int qlm_mode)
 		bgx->lane_to_sds = 0xE4;
 			break;
 	case QLM_MODE_XFI_4X1:
-		bgx->lmac_count = 4;
+		bgx->lmac_count = 2;
 		bgx->lmac_type = BGX_MODE_XFI;
 		bgx->lane_to_sds = 0;
 		break;
@@ -910,10 +923,7 @@ static void bgx_init_hw(struct bgx *bgx)
 {
 	int i;
 
-	if (bgx->bgx_id == 0)
-		bgx_set_num_ports(bgx, QLM0_MODE);
-	else
-		bgx_set_num_ports(bgx, QLM1_MODE);
+	bgx_set_num_ports(bgx);
 
 	bgx_reg_modify(bgx, 0, BGX_CMR_GLOBAL_CFG, CMR_GLOBAL_CFG_FCS_STRIP);
 	if (bgx_reg_read(bgx, 0, BGX_CMR_BIST_STATUS))
@@ -932,6 +942,8 @@ static void bgx_init_hw(struct bgx *bgx)
 		}
 		bgx_reg_write(bgx, i, BGX_CMRX_CFG,
 			      (bgx->lmac_type << 8) | (bgx->lane_to_sds + i));
+		bgx->lmac[i].lmacid_bd = lmac_count;
+		lmac_count++;
 	}
 
 	bgx_reg_write(bgx, 0, BGX_CMR_TX_LMACS, bgx->lmac_count);
@@ -952,40 +964,169 @@ static void bgx_init_hw(struct bgx *bgx)
 		bgx_reg_write(bgx, 0, BGX_CMR_RX_STREERING + (i * 8), 0x00);
 }
 
-static int bgx_check_config(struct device_node *np_bgx, int bgx_id)
+static void bgx_get_qlm_mode(struct bgx *bgx)
 {
-	const char *mode;
-	int qlm_mode;
+	int lmac_type;
 
-	mode = of_get_property(np_bgx, "mode", NULL);
-
-	if (bgx_id == 0)
-		qlm_mode = QLM0_MODE;
-	else
-		qlm_mode = QLM1_MODE;
-
-	switch (qlm_mode) {
-	case QLM_MODE_SGMII:
-		return strcmp(mode, "sgmii");
-	case QLM_MODE_XAUI_1X4:
-		return strcmp(mode, "xaui");
-	case QLM_MODE_XFI_4X1:
-		return strcmp(mode, "xfi");
-	default:
-		return 1;
+	/* Read LMAC0 type to figure out QLM mode
+	 * This is configured by low level firmware
+	 */
+	lmac_type = bgx_reg_read(bgx, 0, BGX_CMRX_CFG);
+	lmac_type = (lmac_type >> 8) & 0xFF;
+	
+	switch(lmac_type) {
+	case BGX_MODE_SGMII:
+		bgx->qlm_mode = QLM_MODE_SGMII;
+		dev_info(&bgx->pdev->dev, "QLM mode: SGMII\n");
+		break;
+	case BGX_MODE_XAUI:
+		bgx->qlm_mode = QLM_MODE_XAUI_1X4;
+		dev_info(&bgx->pdev->dev, "QLM mode: XAUI\n");
+		break;
+	case BGX_MODE_XFI:
+		bgx->qlm_mode = QLM_MODE_XFI_4X1;
+		dev_info(&bgx->pdev->dev, "QLM mode: XFI\n");
+		break;
+	case BGX_MODE_XLAUI:
+		bgx->qlm_mode = QLM_MODE_XLAUI_1X4;
+		dev_info(&bgx->pdev->dev, "QLM mode: XLAUI\n");
+		break;
 	}
-	return 1;
+}
+
+#ifdef CONFIG_ACPI
+static int
+bgx_match_phy_id(struct device *dev, void *data)
+{
+	struct phy_device *phydev = to_phy_device(dev);
+	u32 *phy_id = data;
+
+	if (phydev->addr == *phy_id)
+		return 1;
+
+	return 0;
+}
+
+static acpi_status
+bgx_acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
+{
+	struct acpi_reference_args args;
+	struct bgx *bgx = context;
+	struct acpi_device *adev;
+	struct device *phy_dev;
+	u32 phy_id;
+
+	if (acpi_bus_get_device(handle, &adev))
+		return AE_OK;
+
+	if (acpi_dev_get_property_reference(adev, "phy-handle", NULL, 0, &args))
+		return AE_OK;
+
+	if (acpi_dev_prop_read(args.adev, "phy-channel", DEV_PROP_U32, &phy_id))
+		return AE_OK;
+
+	phy_dev = bus_find_device(&mdio_bus_type, NULL, (void *)&phy_id,
+				  bgx_match_phy_id);
+	if (!phy_dev)
+		return AE_OK;
+
+	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
+	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
+
+	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
+	bgx->lmac_count++;
+
+	return AE_OK;
+}
+
+static acpi_status
+bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
+{
+	struct acpi_buffer string = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct bgx *bgx = context;
+	char bgx_sel[5];
+
+	snprintf(bgx_sel, 5, "BGX%d", bgx->bgx_id);
+	if (ACPI_FAILURE(acpi_get_name(handle, ACPI_SINGLE_NAME, &string))) {
+		pr_warn("Invalid link device\n");
+		return AE_OK;
+	}
+
+	if(strncmp(string.pointer, bgx_sel, 4))
+		return AE_OK;
+
+	acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, 1,
+			    bgx_acpi_register_phy, NULL, bgx, NULL);
+
+	kfree(string.pointer);
+	return AE_CTRL_TERMINATE;
+}
+static int
+bgx_init_acpi_phy(struct bgx *bgx)
+{
+	acpi_get_devices(NULL, bgx_acpi_match_id, bgx, (void **)NULL);
+	return 0;
+}
+
+#else
+static int
+bgx_init_acpi_phy(struct bgx *bgx)
+{
+	return -ENODEV;
+}
+#endif
+
+#ifdef CONFIG_OF_MDIO
+static int
+bgx_init_of_phy(struct bgx *bgx)
+{
+	struct device_node *np;
+	struct device_node *np_child;
+	uint8_t lmac = 0;
+	char bgx_sel[5];
+
+	/* Get BGX node from DT */
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np = of_find_node_by_name(NULL, bgx_sel);
+	if (!np)
+		return -ENODEV;
+
+	for_each_child_of_node(np, np_child) {
+		struct device_node *phy_np = of_parse_phandle(np_child,
+							      "phy-handle", 0);
+		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+
+		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &bgx->pdev->dev);
+		bgx->lmac[lmac].lmacid = lmac;
+		bgx->lmac_count++;
+		lmac++;
+	}
+	return 0;
+}
+#else
+static int
+bgx_init_of_phy(struct bgx *bgx)
+{
+	return -ENODEV;
+}
+#endif
+
+static int bgx_init_phy(struct bgx *bgx)
+{
+	int err = bgx_init_of_phy(bgx);
+
+	if (err != -ENODEV)
+		return err;
+
+	return bgx_init_acpi_phy(bgx);
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int    err;
+	int err;
 	struct device *dev = &pdev->dev;
 	struct bgx *bgx = NULL;
-	uint8_t lmac = 0;
-	char bgx_sel[5];
-	const __be32 *reg;
-	struct device_node *np_bgx, *np_child;
+	uint8_t lmac;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
 	if (!bgx)
@@ -1017,25 +1158,11 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx->bgx_id += NODE_ID(pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM))
 							* MAX_BGX_PER_CN88XX;
 	bgx_vnic[bgx->bgx_id] = bgx;
+	bgx_get_qlm_mode(bgx);
 
-	/* Get BGX node from DT */
-	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
-	np_bgx = of_find_node_by_name(NULL, bgx_sel);
-	if (bgx_check_config(np_bgx, bgx->bgx_id)) {
-		dev_err(dev, "DTS and driver QLM modes doesn't match\n");
+	err = bgx_init_phy(bgx);
+	if (err)
 		goto err_enable;
-	}
-
-	for_each_child_of_node(np_bgx, np_child) {
-		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &pdev->dev);
-		bgx->lmac[lmac].phy_np = of_parse_phandle(np_child,
-							  "phy-handle", 0);
-		reg = of_get_property(np_child, "reg", NULL);
-		bgx->lmac[lmac].lmacid_bd = be32_to_cpup(reg);
-		bgx->lmac[lmac].lmacid = lmac;
-		bgx->lmac_count++;
-		lmac++;
-	}
 
 	bgx_init_hw(bgx);
 

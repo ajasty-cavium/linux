@@ -419,4 +419,10 @@ config DA_CONSOLE
 	help
 	  This enables a console on a Dash channel.
 
+config SBSAUART_TTY
+	tristate "SBSA UART TTY Driver"
+	help
+	  Console and system TTY driver for the SBSA UART which is defined
+	  in the Server Base System Architecure document for ARM64 servers.
+
 endif # TTY

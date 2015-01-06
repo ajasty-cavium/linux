@@ -468,10 +468,7 @@
 		#stream-id-cells = <1>;
 		reg = <0x8480 0x00000000 0 0x10000000>;  /* Configuration space */
 		ranges = <0x03000000 0x8010 0x00000000 0x8010 0x00000000 0x70 0x00000000>, /* mem ranges */
-			 <0x03000000 0x8300 0x00000000 0x8300 0x00000000 0x80 0x00000000>,
-			 <0x03000000 0x87e0 0x00000000 0x87e0 0x00000000 0x01 0x00000000>,
-			 <0x03000000 0x8680 0x00000000 0x8680 0x00000000 0x00 0x03000000>,
-			 <0x03000000 0x8690 0x00000000 0x8690 0x00000000 0x00 0x03000000>;
+			 <0x03000000 0x8300 0x00000000 0x8300 0x00000000 0x500 0x00000000>;
         };
 
 	pcie1: pcie1@0x8490,00000000 {
@@ -739,7 +736,7 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003800 0x0 0x30>;
 
-		phy0: lmac0 {
+		phy0: sgmii0 {
 			reg = <0> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	      		/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
@@ -749,7 +746,7 @@
 					<3 0x13 0 0x8a08>;
 
       		};
-		phy1: lmac1 {
+		phy1: sgmii1 {
 			reg = <1> ;
 	   		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	      		marvell,reg-init = <3 0x10 0 0x8665>,
@@ -757,7 +754,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy2: lmac2 {
+		phy2: sgmii2 {
 			reg = <2> ;
 		      	compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -766,7 +763,7 @@
 			      <3 0x13 0 0x8a08>;
 
       		};
-		phy3: lmac3 {
+		phy3: sgmii3 {
 			reg = <3> ;
 	      		compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 	 	     	marvell,reg-init = <3 0x10 0 0x8665>,
@@ -776,7 +773,7 @@
       		};
 
 		/* For XAUI */
-		/* phy100: lmac0 {
+		/* phy100: xaui0 {
 			reg = <0> ;
 			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
@@ -789,7 +786,7 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003880 0x0 0x30>;
 
-		phy4: lmac4 {
+		phy4: sgmii4 {
 			reg = <4> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -797,7 +794,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy5: lmac5 {
+		phy5: sgmii5 {
 			reg = <5> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -806,7 +803,7 @@
 			      <3 0x13 0 0x8a08>;
 
       		};
-		phy6: lmac6 {
+		phy6: sgmii6 {
 			reg = <6> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -814,7 +811,7 @@
 			      <3 0x12 0 0x4105>,
 			      <3 0x13 0 0x8a08>;
       		};
-		phy7: lmac7 {
+		phy7: sgmii7 {
 			reg = <7> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
@@ -823,7 +820,7 @@
 			      <3 0x13 0 0x8a08>;
       		};
 		/* For XAUI */
-		/* phy104: lmac1 {
+		/* phy104: xaui1 {
 			reg = <4> ;
 			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
@@ -835,31 +832,25 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x87e0 0xe0000000 0x0 0x1000000>; 
-		mode = "sgmii";
 
 		lmac0 {
-			reg = <0> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy0>;
 		};
 		lmac1 {
-			reg = <1> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy1>;
 		};
 		lmac2 {
-			reg = <2> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy2>;
 		};
 		lmac3 {
-			reg = <3> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy3>;
 		};
 		/* For XAUI */
 		/*  lmac0 {
-			reg = <0> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy100>;
 		}; */
@@ -870,31 +861,25 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x87e0 0xe1000000 0x0 0x1000000>; 
-		mode = "sgmii";
 
 		lmac0 {
-			reg = <4> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy4>;
 		};
 		lmac1 {
-			reg = <5> ;
 			phy-handle = <&phy5>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 		};
 		lmac2 {
-			reg = <6> ;
 			phy-handle = <&phy6>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 		};
 		lmac3 {
-			reg = <7> ;
 			phy-handle = <&phy7>;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 		};
 		/* For XAUI */
 		/*  lmac0 {
-			reg = <1> ;
 			local-mac-address = [ 00 00 00 00 00 00 ];
 			phy-handle = <&phy104>;
 		}; */

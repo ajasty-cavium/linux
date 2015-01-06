@@ -183,6 +183,49 @@ void acpi_table_print_madt_entry(struct acpi_subtable_header *header)
 		}
 		break;
 
+	case ACPI_MADT_TYPE_GENERIC_INTERRUPT:
+		{
+			struct acpi_madt_generic_interrupt *p =
+				(struct acpi_madt_generic_interrupt *)header;
+			pr_info("GICC (acpi_id[0x%04x] address[%p] MPDIR[0x%llx] %s)\n",
+				p->uid, (void *)(unsigned long)p->base_address,
+				p->arm_mpidr,
+				(p->flags & ACPI_MADT_ENABLED) ? "enabled" : "disabled");
+
+		}
+		break;
+
+	case ACPI_MADT_TYPE_GENERIC_DISTRIBUTOR:
+		{
+			struct acpi_madt_generic_distributor *p =
+				(struct acpi_madt_generic_distributor *)header;
+			pr_info("GIC Distributor (gic_id[0x%04x] address[%p] gsi_base[%d])\n",
+				p->gic_id,
+				(void *)(unsigned long)p->base_address,
+				p->global_irq_base);
+		}
+		break;
+
+	case ACPI_MADT_TYPE_GENERIC_MSI_FRAME:
+		{
+			struct acpi_madt_generic_msi_frame *p =
+				(struct acpi_madt_generic_msi_frame *)header;
+			pr_info("GIC MSI Frame (msi_fame_id[%d] address[%p])\n",
+				p->msi_frame_id,
+				(void *)(unsigned long)p->base_address);
+		}
+		break;
+
+	case ACPI_MADT_TYPE_GENERIC_REDISTRIBUTOR:
+		{
+			struct acpi_madt_generic_redistributor *p =
+				(struct acpi_madt_generic_redistributor *)header;
+			pr_info("GIC Redistributor (address[%p] region_size[0x%x])\n",
+				(void *)(unsigned long)p->base_address,
+				p->length);
+		}
+		break;
+
 	default:
 		pr_warn("Found unsupported MADT entry (type = 0x%x)\n",
 			header->type);
@@ -192,17 +235,78 @@ void acpi_table_print_madt_entry(struct acpi_subtable_header *header)
 
 
 int __init
+acpi_parse_entries(unsigned long table_size,
+		acpi_tbl_entry_handler handler,
+		struct acpi_table_header *table_header,
+		int entry_id, unsigned int max_entries)
+{
+	struct acpi_subtable_header *entry;
+	int count = 0;
+	unsigned long table_end;
+
+	if (acpi_disabled)
+		return -ENODEV;
+
+	if (!handler)
+		return -EINVAL;
+
+	if (!table_size)
+		return -EINVAL;
+
+	if (!table_header) {
+		pr_warn("Table header not present\n");
+		return -ENODEV;
+	}
+
+	table_end = (unsigned long)table_header + table_header->length;
+
+	/* Parse all entries looking for a match. */
+
+	entry = (struct acpi_subtable_header *)
+	    ((unsigned long)table_header + table_size);
+
+	while (((unsigned long)entry) + sizeof(struct acpi_subtable_header) <
+	       table_end) {
+		if (entry->type == entry_id
+		    && (!max_entries || count < max_entries)) {
+			if (handler(entry, table_end))
+				return -EINVAL;
+
+			count++;
+		}
+
+		/*
+		 * If entry->length is 0, break from this loop to avoid
+		 * infinite loop.
+		 */
+		if (entry->length == 0) {
+			pr_err("[0x%02x] Invalid zero length\n", entry_id);
+			return -EINVAL;
+		}
+
+		entry = (struct acpi_subtable_header *)
+		    ((unsigned long)entry + entry->length);
+	}
+
+	if (max_entries && count > max_entries) {
+		pr_warn("[%4.4s:0x%02x] ignored %i entries of %i found\n",
+			table_header->signature, entry_id, count - max_entries,
+			count);
+	}
+
+	return count;
+}
+
+int __init
 acpi_table_parse_entries(char *id,
-			     unsigned long table_size,
-			     int entry_id,
-			     acpi_tbl_entry_handler handler,
-			     unsigned int max_entries)
+			 unsigned long table_size,
+			 int entry_id,
+			 acpi_tbl_entry_handler handler,
+			 unsigned int max_entries)
 {
 	struct acpi_table_header *table_header = NULL;
-	struct acpi_subtable_header *entry;
-	unsigned int count = 0;
-	unsigned long table_end;
 	acpi_size tbl_size;
+	int count;
 
 	if (acpi_disabled)
 		return -ENODEV;
@@ -220,42 +324,11 @@ acpi_table_parse_entries(char *id,
 		return -ENODEV;
 	}
 
-	table_end = (unsigned long)table_header + table_header->length;
-
-	/* Parse all entries looking for a match. */
-
-	entry = (struct acpi_subtable_header *)
-	    ((unsigned long)table_header + table_size);
-
-	while (((unsigned long)entry) + sizeof(struct acpi_subtable_header) <
-	       table_end) {
-		if (entry->type == entry_id
-		    && (!max_entries || count++ < max_entries))
-			if (handler(entry, table_end))
-				goto err;
-
-		/*
-		 * If entry->length is 0, break from this loop to avoid
-		 * infinite loop.
-		 */
-		if (entry->length == 0) {
-			pr_err("[%4.4s:0x%02x] Invalid zero length\n", id, entry_id);
-			goto err;
-		}
-
-		entry = (struct acpi_subtable_header *)
-		    ((unsigned long)entry + entry->length);
-	}
-	if (max_entries && count > max_entries) {
-		pr_warn("[%4.4s:0x%02x] ignored %i entries of %i found\n",
-			id, entry_id, count - max_entries, count);
-	}
+	count = acpi_parse_entries(table_size, handler, table_header,
+			entry_id, max_entries);
 
 	early_acpi_os_unmap_memory((char *)table_header, tbl_size);
 	return count;
-err:
-	early_acpi_os_unmap_memory((char *)table_header, tbl_size);
-	return -EINVAL;
 }
 
 int __init

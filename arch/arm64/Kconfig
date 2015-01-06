@@ -1,5 +1,7 @@
 config ARM64
 	def_bool y
+	select ACPI_REDUCED_HARDWARE_ONLY if ACPI
+	select ARCH_BINFMT_ELF_RANDOMIZE_PIE
 	select ARCH_HAS_ATOMIC64_DEC_IF_POSITIVE
 	select ARCH_HAS_SG_CHAIN
 	select ARCH_HAS_TICK_BROADCAST if GENERIC_CLOCKEVENTS_BROADCAST
@@ -154,6 +156,19 @@ config ARCH_THUNDER
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
 	select ARM64_VA_BITS_48 if NUMA
 
+config THUNDERX_PASS1_ERRATA_22558
+	bool "Cavium ThunderX erratum 22558"
+	default n
+	help
+	Enable workaround for erratum 22558.
+	def_bool ARCH_THUNDER
+
+config THUNDERX_PASS1_ERRATA_23144
+	bool "Cavium ThunderX erratum 23144"
+	default n
+	help
+		Enable workaround for erratum 23144.
+
 config ARCH_VEXPRESS
 	bool "ARMv8 software model (Versatile Express)"
 	select ARCH_REQUIRE_GPIOLIB
@@ -203,6 +218,9 @@ config PCI_DOMAINS_GENERIC
 
 config PCI_SYSCALL
 	def_bool PCI
+
+config PCI_MMCONFIG
+	def_bool PCI && ACPI
 
 source "drivers/pci/Kconfig"
 source "drivers/pci/pcie/Kconfig"
@@ -519,6 +537,8 @@ source "net/Kconfig"
 source "drivers/Kconfig"
 
 source "drivers/firmware/Kconfig"
+
+source "drivers/acpi/Kconfig"
 
 source "fs/Kconfig"
 

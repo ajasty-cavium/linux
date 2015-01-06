@@ -27,10 +27,13 @@
 #include <linux/of_irq.h>
 #include <linux/of_pci.h>
 #include <linux/of_platform.h>
+#include <linux/acpi.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
+#include <linux/iort.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
+#include <linux/irqchip/arm-gic-acpi.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
@@ -93,7 +96,6 @@ struct its_device {
 static LIST_HEAD(its_nodes);
 static DEFINE_SPINLOCK(its_lock);
 static struct irq_domain *lpi_domain;
-static struct device_node *gic_root_node;
 static struct rdists *gic_rdists;
 
 #define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
@@ -427,11 +429,6 @@ static void its_send_single_command(struct its_node *its,
 	}
 	sync_col = builder(cmd, desc);
 	its_flush_cmd(its, cmd);
-#ifdef CONFIG_NUMA
-	/*  SYNC has issues on multi-node thunder.
-	 */
-	sync_col = 0;
-#endif
 
 	if (sync_col) {
 		sync_cmd = its_allocate_entry(its);
@@ -600,6 +597,16 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	struct its_device *its_dev = irq_data_get_irq_handler_data(d);
 	struct its_collection *target_col;
 	u32 id;
+
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+	u32 node = (its_dev->its->phys_base >> 44) & 0x3;
+	if (!cpumask_intersects(mask_val, cpumask_of_node(node))) {
+		pr_warn("Affinity not Set to CPU %d, not belongs to same NODE %d\n",
+				cpu, node);
+		return IRQ_SET_MASK_OK;
+	}
+	cpu = cpumask_any_and(mask_val, cpumask_of_node(node));
+#endif
 
 	if (cpu >= nr_cpu_ids)
 		return -EINVAL;
@@ -993,6 +1000,11 @@ static void its_cpu_init_collection(void)
 	list_for_each_entry(its, &its_nodes, entry) {
 		u64 target;
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+		/* avoid cross node core and its mapping*/
+		if (((its->phys_base >> 44) & 0x3) != MPIDR_AFFINITY_LEVEL(read_cpuid_mpidr(), 2))
+			continue;
+#endif
 		/*
 		 * We now have to bind each collection to its target
 		 * redistributor.
@@ -1077,8 +1089,13 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	list_add(&dev->entry, &its->its_device_list);
 	raw_spin_unlock(&its->lock);
 
+#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+	/* Bind the device to the first possible CPU of same NODE*/
+	cpu = cpumask_first(cpumask_of_node((its->phys_base >> 44) & 0x3));
+#else
 	/* Bind the device to the first possible CPU */
 	cpu = cpumask_first(cpu_online_mask);
+#endif
 	dev->collection = &its->collections[cpu];
 
 	/* Map device to its ITT */
@@ -1201,35 +1218,26 @@ static void its_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 	}
 }
 
-static int its_probe(struct device_node *node)
+static struct its_node *its_probe(unsigned long phys_base, unsigned long size)
 {
-	struct resource res;
 	struct its_node *its;
 	void __iomem *its_base;
 	u32 val;
 	u64 baser, tmp;
 	int err;
 
-	err = of_address_to_resource(node, 0, &res);
-	if (err) {
-		pr_warn("%s: no regs?\n", node->full_name);
-		return -ENXIO;
-	}
-
-	its_base = ioremap(res.start, resource_size(&res));
+	its_base = ioremap(phys_base, size);
 	if (!its_base) {
-		pr_warn("%s: unable to map registers\n", node->full_name);
-		return -ENOMEM;
+		pr_warn("Unable to map registers\n");
+		return NULL;
 	}
 
 	val = readl_relaxed(its_base + GITS_PIDR2) & GIC_PIDR2_ARCH_MASK;
 	if (val != 0x30 && val != 0x40) {
-		pr_warn("%s: no ITS detected, giving up\n", node->full_name);
+		pr_warn("No ITS detected, giving up\n");
 		err = -ENODEV;
 		goto out_unmap;
 	}
-
-	pr_info("ITS: %s\n", node->full_name);
 
 	its = kzalloc(sizeof(*its), GFP_KERNEL);
 	if (!its) {
@@ -1241,8 +1249,7 @@ static int its_probe(struct device_node *node)
 	INIT_LIST_HEAD(&its->entry);
 	INIT_LIST_HEAD(&its->its_device_list);
 	its->base = its_base;
-	its->phys_base = res.start;
-	its->msi_chip.of_node = node;
+	its->phys_base = phys_base;
 	its->ite_size = ((readl_relaxed(its_base + GITS_TYPER) >> 4) & 0xf) + 1;
 
 	its->cmd_base = kzalloc(ITS_CMD_QUEUE_SZ, GFP_KERNEL);
@@ -1280,15 +1287,7 @@ static int its_probe(struct device_node *node)
 	list_add(&its->entry, &its_nodes);
 	spin_unlock(&its_lock);
 
-	if (IS_ENABLED(CONFIG_PCI_MSI) && /* Remove this once we have PCI... */
-	    of_property_read_bool(its->msi_chip.of_node, "msi-controller")) {
-		its->msi_chip.setup_irq		= its_msi_setup_irq;
-		its->msi_chip.teardown_irq	= its_msi_teardown_irq;
-
-		err = of_pci_msi_chip_add(&its->msi_chip);
-	}
-
-	return err;
+	return its;
 
 out_free_tables:
 	its_free_tables(its);
@@ -1298,8 +1297,8 @@ out_free_its:
 	kfree(its);
 out_unmap:
 	iounmap(its_base);
-	pr_err("ITS: failed probing %s (%d)\n", node->full_name, err);
-	return err;
+	pr_err("ITS: failed probing (%d)\n", err);
+	return NULL;
 }
 
 static bool gic_rdists_supports_plpis(void)
@@ -1322,28 +1321,14 @@ int its_cpu_init(void)
 	return 0;
 }
 
-static struct of_device_id its_device_id[] = {
-	{	.compatible	= "arm,gic-v3-its",	},
-	{},
-};
-
-struct irq_chip *its_init(struct device_node *node, struct rdists *rdists,
-			  struct irq_domain *domain)
+struct irq_chip *its_init(struct rdists *rdists, struct irq_domain *domain)
 {
-	struct device_node *np;
-
-	for (np = of_find_matching_node(node, its_device_id); np;
-	     np = of_find_matching_node(np, its_device_id)) {
-		its_probe(np);
-	}
-
 	if (list_empty(&its_nodes)) {
 		pr_info("ITS: No ITS available, not enabling LPIs\n");
 		return NULL;
 	}
 
 	gic_rdists = rdists;
-	gic_root_node = node;
 	lpi_domain = domain;
 
 	its_alloc_lpi_tables();
@@ -1351,3 +1336,75 @@ struct irq_chip *its_init(struct device_node *node, struct rdists *rdists,
 
 	return &its_irq_chip;
 }
+
+static struct of_device_id its_device_id[] = {
+	{	.compatible	= "arm,gic-v3-its",	},
+	{},
+};
+
+void its_of_probe(struct device_node *node)
+{
+	struct device_node *np;
+	struct its_node *its;
+	struct resource res;
+
+	for (np = of_find_matching_node(node, its_device_id); np;
+	     np = of_find_matching_node(np, its_device_id)) {
+		if (of_address_to_resource(np, 0, &res)) {
+			pr_warn("%s: no regs?\n", node->full_name);
+			continue;
+		}
+
+		pr_info("ITS: %s\n", np->full_name);
+		its = its_probe(res.start, resource_size(&res));
+		if (!its)
+			continue;
+
+		if (IS_ENABLED(CONFIG_PCI_MSI) && /* Remove this once we have PCI... */
+		    of_property_read_bool(np, "msi-controller")) {
+			its->msi_chip.of_node		= np;
+			its->msi_chip.setup_irq		= its_msi_setup_irq;
+			its->msi_chip.teardown_irq	= its_msi_teardown_irq;
+
+			of_pci_msi_chip_add(&its->msi_chip);
+		}
+	}
+}
+
+#ifdef CONFIG_ACPI
+static int __init
+gic_acpi_parse_madt_its(struct acpi_subtable_header *header,
+			const unsigned long end)
+{
+	struct acpi_madt_generic_its *its_table;
+	struct its_node *its;
+
+	if (BAD_MADT_ENTRY(header, end))
+		return -EINVAL;
+
+	its_table = (struct acpi_madt_generic_its *)header;
+
+	pr_info("ITS: ID: 0x%x\n", its_table->its_id);
+	its = its_probe(its_table->base_address, 2 * SZ_2M);
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
+		its->msi_chip.setup_irq		= its_msi_setup_irq;
+		its->msi_chip.teardown_irq	= its_msi_teardown_irq;
+
+		iort_pci_msi_chip_add(&its->msi_chip, its_table->its_id);
+	}
+	return 0;
+}
+
+void __init its_acpi_probe(struct acpi_table_header *table)
+{
+	int count;
+
+	count = acpi_parse_entries(sizeof(struct acpi_table_madt),
+			gic_acpi_parse_madt_its, table,
+			ACPI_MADT_TYPE_GENERIC_ITS, 0);
+	if (!count)
+		pr_info("No valid GIC ITS entries exist\n");
+	else if (count < 0)
+		pr_err("Error during GIC ITS entries parsing\n");
+}
+#endif

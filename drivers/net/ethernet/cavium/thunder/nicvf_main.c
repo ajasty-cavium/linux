@@ -240,6 +240,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		pf_ready_to_rcv_msg = true;
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
+		nic->node = mbx.data.nic_cfg.node_id;
 		break;
 	case NIC_PF_VF_MSG_ACK:
 		pf_acked = true;
@@ -734,9 +735,26 @@ static void nicvf_disable_msix(struct nicvf *nic)
 	}
 }
 
-static int nicvf_register_interrupts(struct nicvf *nic)
+static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 {
 	cpumask_t  affinity_mask;
+	int cpu;
+
+	if (num_online_cpus() > nic->netdev->real_num_rx_queues)
+		cpu = qidx;
+	else
+		cpu = qidx % num_online_cpus();
+
+	if (!(cpu_online(cpu) && irq_can_set_affinity(cpu)))
+		cpu = 0;
+
+	cpumask_clear(&affinity_mask);
+	cpumask_set_cpu(cpu, &affinity_mask);
+	__irq_set_affinity(irq, &affinity_mask, false);
+}
+
+static int nicvf_register_interrupts(struct nicvf *nic)
+{
 	int irq, free, ret = 0;
 	int vector;
 
@@ -761,12 +779,8 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 			break;
 		nic->irq_allocated[irq] = 1;
 
-		/* Set CQ irq affinity, 1 CQ per CPU */
-		if (cpu_online(irq) && irq_can_set_affinity(irq)) {
-			cpumask_clear(&affinity_mask);
-			cpumask_set_cpu(irq, &affinity_mask);
-			__irq_set_affinity(vector, &affinity_mask, false);
-		}
+		/* Set CQ irq affinity */
+		nicvf_set_cq_irq_affinity(nic, irq, vector);
 	}
 
 	for (irq = NICVF_INTR_ID_SQ; irq < NICVF_INTR_ID_MISC; irq++) {
@@ -868,7 +882,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 int nicvf_stop(struct net_device *netdev)
 {
-	int qidx;
+	int irq, qidx;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
@@ -882,6 +896,10 @@ int nicvf_stop(struct net_device *netdev)
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
 	nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
+
+	/* Wait for pending IRQ handlers to finish */
+	for (irq = 0; irq < nic->num_vec; irq++)
+		synchronize_irq(nic->msix_entries[irq].vector);
 
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
@@ -1072,6 +1090,9 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	struct nic_mbx mbx = {};
 	int timeout;
 
+	if (!netif_running(nic->netdev))
+		return;
+
 	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
 	mbx.data.bgx_stats.vf_id = nic->vf_id;
 	/* Rx stats */
@@ -1173,6 +1194,7 @@ struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
 	return stats;
 }
 
+#ifdef NICVF_TX_TIMEOUT
 static void nicvf_tx_timeout(struct net_device *dev)
 {
 	struct nicvf *nic = netdev_priv(dev);
@@ -1193,7 +1215,9 @@ static void nicvf_reset_task(struct work_struct *work)
 
 	nicvf_stop(nic->netdev);
 	nicvf_open(nic->netdev);
+	nic->netdev->trans_start = jiffies;
 }
+#endif
 
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
@@ -1202,7 +1226,9 @@ static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
 	.ndo_get_stats64	= nicvf_get_stats64,
+#ifdef NICVF_TX_TIMEOUT
 	.ndo_tx_timeout         = nicvf_tx_timeout,
+#endif
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1277,7 +1303,9 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	netdev->netdev_ops = &nicvf_netdev_ops;
 
+#ifdef NICVF_TX_TIMEOUT
 	INIT_WORK(&nic->reset_task, nicvf_reset_task);
+#endif
 
 	err = register_netdev(netdev);
 	if (err) {

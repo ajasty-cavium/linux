@@ -26,11 +26,17 @@
 acpi_status acpi_os_initialize1(void);
 int init_acpi_device_notify(void);
 int acpi_scan_init(void);
+#ifdef CONFIG_PCI
 void acpi_pci_root_init(void);
 void acpi_pci_link_init(void);
+#else
+static inline void acpi_pci_root_init(void) {}
+static inline void acpi_pci_link_init(void) {}
+#endif
 void acpi_processor_init(void);
 void acpi_platform_init(void);
 void acpi_pnp_init(void);
+void acpi_int340x_thermal_init(void);
 int acpi_sysfs_init(void);
 void acpi_container_init(void);
 void acpi_memory_hotplug_init(void);
@@ -103,8 +109,6 @@ int acpi_power_get_inferred_state(struct acpi_device *device, int *state);
 int acpi_power_on_resources(struct acpi_device *device, int state);
 int acpi_power_transition(struct acpi_device *device, int state);
 
-int acpi_device_update_power(struct acpi_device *device, int *state_p);
-
 int acpi_wakeup_device_init(void);
 
 #ifdef CONFIG_ARCH_MIGHT_HAVE_ACPI_PDC
@@ -168,17 +172,16 @@ static inline void suspend_nvs_restore(void) {}
 #endif
 
 /*--------------------------------------------------------------------------
-				Platform bus support
-  -------------------------------------------------------------------------- */
-struct platform_device;
-
-struct platform_device *acpi_create_platform_device(struct acpi_device *adev);
-
-/*--------------------------------------------------------------------------
 					Video
   -------------------------------------------------------------------------- */
 #if defined(CONFIG_ACPI_VIDEO) || defined(CONFIG_ACPI_VIDEO_MODULE)
 bool acpi_osi_is_win8(void);
 #endif
+
+/*--------------------------------------------------------------------------
+				Device properties
+  -------------------------------------------------------------------------- */
+void acpi_init_properties(struct acpi_device *adev);
+void acpi_free_properties(struct acpi_device *adev);
 
 #endif /* _ACPI_INTERNAL_H_ */

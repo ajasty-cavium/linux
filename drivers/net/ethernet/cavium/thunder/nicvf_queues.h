@@ -9,6 +9,7 @@
 #ifndef NICVF_QUEUES_H
 #define NICVF_QUEUES_H
 
+#include <linux/netdevice.h>
 #include "q_struct.h"
 
 #define MAX_QUEUE_SET			128
@@ -76,8 +77,11 @@
 #define RBDR_SIZE		RBDR_SIZE0
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
-#define RCV_BUFFER_LEN		2048 /* In multiples of 128bytes */
-#define STORE_SKB_ADDR_ALIGN	(2 * L1_CACHE_BYTES)
+#define DMA_BUFFER_LEN		2048 /* In multiples of 128bytes */
+#define RCV_FRAG_LEN		(SKB_DATA_ALIGN(DMA_BUFFER_LEN + NET_SKB_PAD) +\
+				SKB_DATA_ALIGN(sizeof(struct skb_shared_info))+\
+				NICVF_RCV_BUF_ALIGN_BYTES)
+#define RCV_DATA_OFFSET		NICVF_RCV_BUF_ALIGN_BYTES
 
 #define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
 				 MAX_CQE_PER_PKT_XMIT)
@@ -247,7 +251,8 @@ struct q_desc_mem {
 
 struct rbdr {
 	bool		enable;
-	uint32_t	buf_size;
+	uint32_t	dma_size;
+	uint32_t	frag_len;
 	uint32_t	thresh;      /* Threshold level for interrupt */
 	void		*desc;
 	uint32_t	head;

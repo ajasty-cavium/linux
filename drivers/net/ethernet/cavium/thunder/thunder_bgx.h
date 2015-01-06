@@ -219,7 +219,4 @@ enum qlm_mode {
 	QLM_MODE_40G_KR4_1X4,   /* 1 40GBASE-KR4, 4 lanes each */
 };
 
-#define  QLM0_MODE   QLM_MODE_SGMII
-#define  QLM1_MODE   QLM_MODE_SGMII
-
 #endif /* THUNDER_BGX_H */

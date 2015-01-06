@@ -287,7 +287,7 @@ extern struct clocksource* clocksource_get_next(void);
 extern void clocksource_change_rating(struct clocksource *cs, int rating);
 extern void clocksource_suspend(void);
 extern void clocksource_resume(void);
-extern struct clocksource * __init __weak clocksource_default_clock(void);
+extern struct clocksource * __init clocksource_default_clock(void);
 extern void clocksource_mark_unstable(struct clocksource *cs);
 
 extern u64
@@ -344,6 +344,12 @@ extern int clocksource_i8253_init(void);
 extern void clocksource_of_init(void);
 #else
 static inline void clocksource_of_init(void) {}
+#endif
+
+#ifdef CONFIG_ACPI
+void acpi_generic_timer_init(void);
+#else
+static inline void acpi_generic_timer_init(void) {}
 #endif
 
 #endif /* _LINUX_CLOCKSOURCE_H */
