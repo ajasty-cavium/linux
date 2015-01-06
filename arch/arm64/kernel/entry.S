@@ -119,11 +119,9 @@
 	ct_user_enter
 	ldr	x23, [sp, #S_SP]		// load return stack pointer
 	.endif
-#ifdef CONFIG_THUNDERX_PASS1_ERRATA_22558
 	str	q0, [sp, #-16]!
 	tbl     v0.16b, {v1.16b}, v0.16b
 	ldr	q0, [sp], #16
-#endif
 	.if	\ret
 	ldr	x1, [sp, #S_X1]			// preserve x0 (syscall return)
 	add	sp, sp, S_X2
