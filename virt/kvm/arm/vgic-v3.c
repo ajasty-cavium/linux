@@ -183,7 +183,7 @@ static void vgic_v3_enable(struct kvm_vcpu *vcpu)
 		vgic_v3->vgic_sre = 0;
 
 	/* Get the show on the road... */
-	vgic_v3->vgic_hcr = ICH_HCR_EN;
+	vgic_v3->vgic_hcr = ICH_HCR_EN | ICH_HCR_TALL0 | ICH_HCR_TALL1;
 }
 
 static const struct vgic_ops vgic_v3_ops = {

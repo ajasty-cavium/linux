@@ -611,6 +611,7 @@ void vgic_unqueue_irqs(struct kvm_vcpu *vcpu)
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	int i;
 
+
 	for_each_set_bit(i, vgic_cpu->lr_used, vgic_cpu->nr_lr) {
 		struct vgic_lr lr = vgic_get_lr(vcpu, i);
 
@@ -1007,7 +1008,46 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 
 	vgic_set_lr(vcpu, lr, vlr);
 
+
 	return true;
+}
+
+int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
+{
+	struct vgic_lr vlr;
+	int lr;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+
+        for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+
+
+        if(vlr.state == LR_STATE_PENDING || vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
+            vlr.state &= ~LR_STATE_PENDING;
+            vlr.state |= LR_STATE_ACTIVE;
+		    vgic_set_lr(vcpu, lr, vlr);
+            vcpu->arch.hcr_el2 |= HCR_VI;
+            return vlr.irq;
+        }
+    }
+    vcpu->arch.hcr_el2 &= ~HCR_VI;
+    return 1023;
+}
+
+void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
+{
+    struct vgic_lr vlr;
+	int lr;
+
+    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+
+        if(vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE)) {
+            vlr.state &= ~LR_STATE_ACTIVE;
+		    vgic_set_lr(vcpu, lr, vlr);
+            break;
+        }
+    }
 }
 
 static bool vgic_queue_hwirq(struct kvm_vcpu *vcpu, int irq)
@@ -1092,17 +1132,23 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 
 	kvm_debug("STATUS = %08x\n", status);
 
-	if (status & INT_STATUS_EOI) {
+	if (1 || status & INT_STATUS_EOI) {
 		/*
 		 * Some level interrupts have been EOIed. Clear their
 		 * active bit.
 		 */
-		u64 eisr = vgic_get_eisr(vcpu);
-		unsigned long *eisr_ptr = u64_to_bitmask(&eisr);
+		//u64 eisr = vgic_get_eisr(vcpu);
+		//unsigned long *eisr_ptr = u64_to_bitmask(&eisr);
 		int lr;
 
-		for_each_set_bit(lr, eisr_ptr, vgic->nr_lr) {
+		//for_each_set_bit(lr, eisr_ptr, vgic->nr_lr) {
+          for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+
 			struct vgic_lr vlr = vgic_get_lr(vcpu, lr);
+
+            if(vlr.state != LR_EOI_INT)
+                continue;
+
 			WARN_ON(vgic_irq_is_edge(vcpu, vlr.irq));
 
 			vgic_irq_clear_queued(vcpu, vlr.irq);
@@ -1154,32 +1200,41 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	u64 elrsr;
+	//u64 elrsr;
 	unsigned long *elrsr_ptr;
 	int lr, pending;
 	bool level_pending;
 
 	level_pending = vgic_process_maintenance(vcpu);
-	elrsr = vgic_get_elrsr(vcpu);
-	elrsr_ptr = u64_to_bitmask(&elrsr);
+	//elrsr = vgic_get_elrsr(vcpu);
+	//elrsr_ptr = u64_to_bitmask(&elrsr);
 
 	/* Clear mappings for empty LRs */
-	for_each_set_bit(lr, elrsr_ptr, vgic->nr_lr) {
+	//for_each_set_bit(lr, elrsr_ptr, vgic->nr_lr) {
+    for(lr=0;lr<VGIC_V3_MAX_LRS; lr++) {
 		struct vgic_lr vlr;
+
+		vlr = vgic_get_lr(vcpu, lr);
+        if(vlr.state) {
+            pending =1;
+            continue;
+        }
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
-
-		vlr = vgic_get_lr(vcpu, lr);
-
 		BUG_ON(vlr.irq >= dist->nr_irqs);
 		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
 	}
 
 	/* Check if we still have something up our sleeve... */
-	pending = find_first_zero_bit(elrsr_ptr, vgic->nr_lr);
-	if (level_pending || pending < vgic->nr_lr)
+	//pending = find_first_zero_bit(elrsr_ptr, vgic->nr_lr);
+	if (level_pending || pending < vgic->nr_lr) {
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
+        vcpu->arch.hcr_el2 |= HCR_VI;
+    }
+    else { 
+        vcpu->arch.hcr_el2 &= ~HCR_VI;
+    }
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)

@@ -65,7 +65,7 @@
 	mrs_s	x21, ICH_VTR_EL2
 	mvn	w22, w21
 	ubfiz	w23, w22, 2, 4	// w23 = (15 - ListRegs) * 4
-
+/*
 	adr	x24, 1f
 	add	x24, x24, x23
 	br	x24
@@ -109,7 +109,7 @@
 	str	x7, [x3, #LR_OFFSET(2)]
 	str	x6, [x3, #LR_OFFSET(1)]
 	str	x5, [x3, #LR_OFFSET(0)]
-
+*/
 	tbnz	w21, #29, 6f	// 6 bits
 	tbz	w21, #30, 5f	// 5 bits
 				// 7 bits
@@ -193,7 +193,7 @@
 	and	w22, w21, #0xf
 	mvn	w22, w21
 	ubfiz	w23, w22, 2, 4	// w23 = (15 - ListRegs) * 4
-
+/*
 	adr	x24, 1f
 	add	x24, x24, x23
 	br	x24
@@ -237,7 +237,7 @@
 	msr_s	ICH_LR2_EL2,   x7
 	msr_s	ICH_LR1_EL2,   x6
 	msr_s	ICH_LR0_EL2,   x5
-
+*/
 	// Ensure that the above will have reached the
 	// (re)distributors. This ensure the guest will read
 	// the correct values from the memory-mapped interface.

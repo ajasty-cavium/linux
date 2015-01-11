@@ -934,6 +934,30 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 		vgic_kick_vcpus(vcpu->kvm);
 }
 
+int vgic_v3_icc_read_iar(struct kvm_vcpu *vcpu)
+{
+    int pending;
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *dist = &kvm->arch.vgic;
+
+	spin_lock(&dist->lock);
+
+    pending = vgic_get_pending_irq(vcpu);
+
+	spin_unlock(&dist->lock);
+    /* we have some thing to retrun */
+    return pending;
+}
+
+void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg)
+{
+	struct kvm *kvm = vcpu->kvm;
+	struct vgic_dist *dist = &kvm->arch.vgic;
+	spin_lock(&dist->lock);
+    vgic_clear_pending_irq(vcpu,reg);
+	spin_unlock(&dist->lock);
+}
+
 static int vgic_v3_create(struct kvm_device *dev, u32 type)
 {
 	return kvm_vgic_create(dev->kvm, type);
