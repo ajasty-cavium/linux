@@ -117,6 +117,9 @@ static u64 __maybe_unused gic_read_iar(void)
     asm volatile("nop;nop;nop;nop;");
     asm volatile("nop;nop;nop;nop;");
     asm volatile("mrs_s %0, " __stringify(ICC_IAR1_EL1) : "=r" (irqstat));
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23154
+    asm volatile("nop;nop;nop;nop;");
+#endif
     mb();
 	return irqstat;
 }

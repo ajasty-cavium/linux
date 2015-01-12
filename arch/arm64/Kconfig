@@ -165,6 +165,13 @@ config THUNDERX_PASS1_ERRATA_22558
 	help
 		Enable workaround for erratum 22558.
 
+config THUNDERX_PASS1_ERRATA_23154
+	bool "Cavium ThunderX erratum 23154"
+	depends on ARCH_THUNDER
+	def_bool ARCH_THUNDER
+	help
+		Enable workaround for erratum 23154.
+
 config THUNDERX_PASS1_ERRATA_23144
 	bool "Cavium ThunderX erratum 23144"
 	depends on ARCH_THUNDER && NUMA
