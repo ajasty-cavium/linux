@@ -493,15 +493,15 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	/* ICC_SGI1R_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1011), Op2(0b101),
 	  access_gic_sgi },
-	/* ICC_SRE_EL1 */
-	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b101),
-	  trap_raz_wi },
     /* ICC_IAR1_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b000),
 	  access_gic_icc_iar },
     /* ICC_EOIR1_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b001),
 	  access_gic_icc_eoir },
+	/* ICC_SRE_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b101),
+	  trap_raz_wi },
     /* ICC_GRPEN1_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b111),
 	  access_gic_icc_grp_en },
