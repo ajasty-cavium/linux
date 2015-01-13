@@ -15,6 +15,7 @@
 #define    MAX_LMAC_PER_BGX			4
 #define    MAX_BGX_CHANS_PER_LMAC		16
 #define    MAX_DMAC_PER_LMAC			8
+#define    MAX_FRAME_SIZE			9216
 
 #define    MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE	2
 
@@ -185,7 +186,6 @@ enum MCAST_MODE {
 void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac);
 void bgx_get_count(int node, int *bgx_count);
 int bgx_get_lmac_count(int node, int bgx);
-void bgx_print_stats(int bgx_idx, int lmac);
 uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx);
 uint64_t bgx_get_tx_stats(int bgx_idx, int lmac, int idx);
 #define BGX_RX_STATS_COUNT 11
@@ -197,6 +197,7 @@ struct bgx_stats {
 };
 
 #undef LINK_INTR_ENABLE
+#define BGX_IN_PROMISCUOUS_MODE 1
 
 enum LMAC_TYPE {
 	BGX_MODE_SGMII = 0, /* 1 lane, 1.250 Gbaud */
