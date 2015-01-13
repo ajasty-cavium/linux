@@ -277,6 +277,9 @@ struct vgic_cpu {
 	/* Number of list registers on this CPU */
 	int		nr_lr;
 
+    /* last serviced LR */
+    int     last_lr;
+
 	/* CPU vif control registers for world switch */
 	union {
 		struct vgic_v2_cpu_if	vgic_v2;

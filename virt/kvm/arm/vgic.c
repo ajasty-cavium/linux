@@ -898,12 +898,12 @@ static inline u32 vgic_get_interrupt_status(struct kvm_vcpu *vcpu)
 
 static inline void vgic_enable_underflow(struct kvm_vcpu *vcpu)
 {
-	vgic_ops->enable_underflow(vcpu);
+	//vgic_ops->enable_underflow(vcpu);
 }
 
 static inline void vgic_disable_underflow(struct kvm_vcpu *vcpu)
 {
-	vgic_ops->disable_underflow(vcpu);
+	//vgic_ops->disable_underflow(vcpu);
 }
 
 void vgic_get_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr)
@@ -980,6 +980,8 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 
 	/* Do we have an active interrupt for the same CPUID? */
 	if (lr != LR_EMPTY) {
+            return false;
+#if 0
 		vlr = vgic_get_lr(vcpu, lr);
 		if (vlr.source == sgi_source_id) {
 			kvm_debug("LR%d piggyback for IRQ%d\n", lr, vlr.irq);
@@ -988,6 +990,7 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 			vgic_set_lr(vcpu, lr, vlr);
 			return true;
 		}
+#endif
 	}
 
 	/* Try to use another LR for this interrupt */
@@ -1018,18 +1021,19 @@ int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
 	int lr;
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
-        for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+   for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
-
 
         if(vlr.state == LR_STATE_PENDING || vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
             vlr.state &= ~LR_STATE_PENDING;
             vlr.state |= LR_STATE_ACTIVE;
 		    vgic_set_lr(vcpu, lr, vlr);
             vcpu->arch.hcr_el2 |= HCR_VI;
+            vgic_cpu->last_lr = lr;
             return vlr.irq;
         }
     }
+    vgic_cpu->last_lr = -1;
     vcpu->arch.hcr_el2 &= ~HCR_VI;
     return 1023;
 }
@@ -1038,11 +1042,12 @@ void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
 {
     struct vgic_lr vlr;
 	int lr;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
     for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
 
-        if(vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE)) {
+        if(vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE) && vgic_cpu->last_lr == lr) {
             vlr.state &= ~LR_STATE_ACTIVE;
 		    vgic_set_lr(vcpu, lr, vlr);
             break;
@@ -1215,8 +1220,8 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 		struct vgic_lr vlr;
 
 		vlr = vgic_get_lr(vcpu, lr);
-        if(vlr.state) {
-            pending =1;
+        if(vlr.state & LR_STATE_MASK) {
+            pending = 1;
             continue;
         }
 
