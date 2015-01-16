@@ -126,9 +126,9 @@
  * Calculated for SCLK of 700Mhz
  * value written should be a 1/16thof what is expected
  *
- * 1 tick per ms
+ * 1 tick per 0.01ms
  */
-#define NICPF_CLK_PER_INT_TICK		43750
+#define NICPF_CLK_PER_INT_TICK		438
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
