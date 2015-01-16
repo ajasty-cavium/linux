@@ -1024,7 +1024,7 @@ int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
 
-        if(vlr.state == LR_STATE_PENDING || vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
+        if (vlr.state & LR_STATE_MASK == LR_STATE_PENDING) {
             vlr.state &= ~LR_STATE_PENDING;
             vlr.state |= LR_STATE_ACTIVE;
 		    vgic_set_lr(vcpu, lr, vlr);
@@ -1319,6 +1319,10 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	bool ret = true, can_inject = true;
 
 	spin_lock(&dist->lock);
+
+        /* avoid race conditions */
+        if(irq_num == 38)
+            mdelay(2);
 
 	vcpu = kvm_get_vcpu(kvm, cpuid);
 	edge_triggered = vgic_irq_is_edge(vcpu, irq_num);
