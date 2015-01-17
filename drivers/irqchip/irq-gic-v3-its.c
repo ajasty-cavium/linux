@@ -449,7 +449,7 @@ post:
 	its_wait_for_range_completion(its, cmd, next_cmd);
 }
 
-static void its_send_inv(struct its_device *dev, u32 event_id)
+void its_send_inv(struct its_device *dev, u32 event_id)
 {
 	struct its_cmd_desc desc;
 
@@ -458,8 +458,9 @@ static void its_send_inv(struct its_device *dev, u32 event_id)
 
 	its_send_single_command(dev->its, its_build_inv_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_inv);
 
-static void its_send_mapd(struct its_device *dev, int valid)
+void its_send_mapd(struct its_device *dev, int valid)
 {
 	struct its_cmd_desc desc;
 
@@ -468,8 +469,9 @@ static void its_send_mapd(struct its_device *dev, int valid)
 
 	its_send_single_command(dev->its, its_build_mapd_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_mapd);
 
-static void its_send_mapc(struct its_node *its, struct its_collection *col,
+void its_send_mapc(struct its_node *its, struct its_collection *col,
 			  int valid)
 {
 	struct its_cmd_desc desc;
@@ -479,8 +481,9 @@ static void its_send_mapc(struct its_node *its, struct its_collection *col,
 
 	its_send_single_command(its, its_build_mapc_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_mapc);
 
-static void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
+void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
 {
 	struct its_cmd_desc desc;
 
@@ -490,8 +493,9 @@ static void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
 
 	its_send_single_command(dev->its, its_build_mapvi_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_mapvi);
 
-static void its_send_movi(struct its_device *dev,
+void its_send_movi(struct its_device *dev,
 			  struct its_collection *col, u32 id)
 {
 	struct its_cmd_desc desc;
@@ -502,8 +506,9 @@ static void its_send_movi(struct its_device *dev,
 
 	its_send_single_command(dev->its, its_build_movi_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_movi);
 
-static void its_send_discard(struct its_device *dev, u32 id)
+void its_send_discard(struct its_device *dev, u32 id)
 {
 	struct its_cmd_desc desc;
 
@@ -512,8 +517,9 @@ static void its_send_discard(struct its_device *dev, u32 id)
 
 	its_send_single_command(dev->its, its_build_discard_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_discard);
 
-static void its_send_invall(struct its_node *its, struct its_collection *col)
+void its_send_invall(struct its_node *its, struct its_collection *col)
 {
 	struct its_cmd_desc desc;
 
@@ -521,6 +527,20 @@ static void its_send_invall(struct its_node *its, struct its_collection *col)
 
 	its_send_single_command(its, its_build_invall_cmd, &desc);
 }
+EXPORT_SYMBOL(its_send_invall);
+
+int its_get_collection(struct its_node *its, int cpu)
+{
+	return its->collections[cpu].col_id;
+}
+EXPORT_SYMBOL(its_get_collection);
+
+u64 its_get_target_address(struct its_node *its, int cpu)
+{
+	return its->collections[cpu].target_address;
+}
+EXPORT_SYMBOL(its_get_target_address);
+
 
 /*
  * irqchip functions - assumes MSI, mostly.
@@ -1052,7 +1072,7 @@ static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
 	return its_dev;
 }
 
-static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
+struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 					    int nvecs)
 {
 	struct its_device *dev;
@@ -1103,8 +1123,9 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 
 	return dev;
 }
+EXPORT_SYMBOL(its_create_device);
 
-static void its_free_device(struct its_device *its_dev)
+void its_free_device(struct its_device *its_dev)
 {
 	raw_spin_lock(&its_dev->its->lock);
 	list_del(&its_dev->entry);
@@ -1112,8 +1133,9 @@ static void its_free_device(struct its_device *its_dev)
 	kfree(its_dev->itt);
 	kfree(its_dev);
 }
+EXPORT_SYMBOL(its_free_device);
 
-static int its_alloc_device_irq(struct its_device *dev, u32 id,
+int its_alloc_device_irq(struct its_device *dev, u32 id,
 				int *hwirq, unsigned int *irq)
 {
 	int idx;
@@ -1134,8 +1156,7 @@ static int its_alloc_device_irq(struct its_device *dev, u32 id,
 
 	return 0;
 }
-
-
+EXPORT_SYMBOL(its_alloc_device_irq);
 
 static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 {
