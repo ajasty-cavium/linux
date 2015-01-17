@@ -1025,7 +1025,7 @@ int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
 
-        if (vlr.state & LR_STATE_MASK == LR_STATE_PENDING) {
+        if ((vlr.state & LR_STATE_MASK) == LR_STATE_PENDING) {
             vlr.state &= ~LR_STATE_PENDING;
             vlr.state |= LR_STATE_ACTIVE;
 		    vgic_set_lr(vcpu, lr, vlr);
