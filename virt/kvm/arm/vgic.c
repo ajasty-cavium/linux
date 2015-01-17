@@ -253,6 +253,10 @@ static bool vgic_irq_is_edge(struct kvm_vcpu *vcpu, int irq)
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	int irq_val;
 
+	/* all LPIs are edge triggered */
+	if (irq >= VGIC_LPI_BASE)
+		return true;
+
 	irq_val = vgic_bitmap_get_irq_val(&dist->irq_cfg, vcpu->vcpu_id, irq);
 	return irq_val == VGIC_CFG_EDGE;
 }
@@ -260,6 +264,10 @@ static bool vgic_irq_is_edge(struct kvm_vcpu *vcpu, int irq)
 static int vgic_irq_is_enabled(struct kvm_vcpu *vcpu, int irq)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+
+	/* Physical LPI comes only when VLPI enabled */
+	if (irq >= VGIC_LPI_BASE)
+		return true;
 
 	return vgic_bitmap_get_irq_val(&dist->irq_enabled, vcpu->vcpu_id, irq);
 }
@@ -345,6 +353,9 @@ static void vgic_cpu_irq_set(struct kvm_vcpu *vcpu, int irq)
 {
 	if (irq < VGIC_NR_PRIVATE_IRQS)
 		set_bit(irq, vcpu->arch.vgic_cpu.pending_percpu);
+	else if (irq >= VGIC_LPI_BASE)
+		set_bit((irq - VGIC_LPI_BASE),
+			vcpu->arch.vgic_cpu.pending_lpis);
 	else
 		set_bit(irq - VGIC_NR_PRIVATE_IRQS,
 			vcpu->arch.vgic_cpu.pending_shared);
@@ -354,6 +365,9 @@ void vgic_cpu_irq_clear(struct kvm_vcpu *vcpu, int irq)
 {
 	if (irq < VGIC_NR_PRIVATE_IRQS)
 		clear_bit(irq, vcpu->arch.vgic_cpu.pending_percpu);
+	else if (irq >= VGIC_LPI_BASE)
+		clear_bit((irq - VGIC_LPI_BASE),
+			  vcpu->arch.vgic_cpu.pending_lpis);
 	else
 		clear_bit(irq - VGIC_NR_PRIVATE_IRQS,
 			  vcpu->arch.vgic_cpu.pending_shared);
@@ -816,14 +830,17 @@ static int vgic_nr_shared_irqs(struct vgic_dist *dist)
 static int compute_pending_for_cpu(struct kvm_vcpu *vcpu)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	unsigned long *pending, *enabled, *pend_percpu, *pend_shared;
-	unsigned long pending_private, pending_shared;
+	unsigned long *pending, *enabled, *pend_percpu;
+	unsigned long *pend_shared, *pend_lpis;
+	unsigned long pending_private, pending_shared, pending_lpis;
 	int nr_shared = vgic_nr_shared_irqs(dist);
 	int vcpu_id;
+	int nr_lpis = dist->nr_lpis;
 
 	vcpu_id = vcpu->vcpu_id;
 	pend_percpu = vcpu->arch.vgic_cpu.pending_percpu;
 	pend_shared = vcpu->arch.vgic_cpu.pending_shared;
+	pend_lpis = vcpu->arch.vgic_cpu.pending_lpis;
 
 	pending = vgic_bitmap_get_cpu_map(&dist->irq_pending, vcpu_id);
 	enabled = vgic_bitmap_get_cpu_map(&dist->irq_enabled, vcpu_id);
@@ -838,8 +855,9 @@ static int compute_pending_for_cpu(struct kvm_vcpu *vcpu)
 
 	pending_private = find_first_bit(pend_percpu, VGIC_NR_PRIVATE_IRQS);
 	pending_shared = find_first_bit(pend_shared, nr_shared);
+	pending_lpis = find_first_bit(pend_lpis, nr_lpis);
 	return (pending_private < VGIC_NR_PRIVATE_IRQS ||
-		pending_shared < vgic_nr_shared_irqs(dist));
+		pending_shared < vgic_nr_shared_irqs(dist) || pending_lpis);
 }
 
 /*
@@ -927,6 +945,9 @@ static void vgic_retire_lr(int lr_nr, int irq, struct kvm_vcpu *vcpu)
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_lr vlr = vgic_get_lr(vcpu, lr_nr);
 
+	if (irq >= VGIC_LPI_BASE)
+		irq = irq - VGIC_LPI_BASE + 1 + vcpu->kvm->arch.vgic.nr_irqs;
+
 	vlr.state = 0;
 	vgic_set_lr(vcpu, lr_nr, vlr);
 	clear_bit(lr_nr, vgic_cpu->lr_used);
@@ -969,15 +990,22 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	struct vgic_lr vlr;
 	int lr;
+	int lr_irq;
 
 	/* Sanitize the input... */
 	BUG_ON(sgi_source_id & ~7);
 	BUG_ON(sgi_source_id && irq >= VGIC_NR_SGIS);
-	BUG_ON(irq >= dist->nr_irqs);
+	BUG_ON(irq >= dist->nr_irqs && irq < VGIC_LPI_BASE);
+	BUG_ON(irq >= VGIC_LPI_BASE && irq >= (dist->nr_lpis + VGIC_LPI_BASE));
 
 	kvm_debug("Queue IRQ%d\n", irq);
 
-	lr = vgic_cpu->vgic_irq_lr_map[irq];
+	if (irq >= VGIC_LPI_BASE)
+		lr_irq = irq - VGIC_LPI_BASE + 1 + dist->nr_irqs;
+	else
+		lr_irq = irq;
+
+	lr = vgic_cpu->vgic_irq_lr_map[lr_irq];
 
 	/* Do we have an active interrupt for the same CPUID? */
 	if (lr != LR_EMPTY) {
@@ -1001,7 +1029,7 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 		return false;
 
 	kvm_debug("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
-	vgic_cpu->vgic_irq_lr_map[irq] = lr;
+	vgic_cpu->vgic_irq_lr_map[lr_irq] = lr;
 	set_bit(lr, vgic_cpu->lr_used);
 
 	vlr.irq = irq;
@@ -1116,6 +1144,12 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 			overflow = 1;
 	}
 
+	/* LPIs */
+	for_each_set_bit(i, vgic_cpu->pending_lpis, dist->nr_lpis) {
+		if (!vgic_queue_hwirq(vcpu, i + VGIC_LPI_BASE))
+			overflow = 1;
+	}
+
 epilog:
 	if (overflow) {
 		vgic_enable_underflow(vcpu);
@@ -1210,6 +1244,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	unsigned long *elrsr_ptr;
 	int lr, pending;
 	bool level_pending;
+	int lr_irq;
 
 	level_pending = vgic_process_maintenance(vcpu);
 	//elrsr = vgic_get_elrsr(vcpu);
@@ -1228,8 +1263,16 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
-		BUG_ON(vlr.irq >= dist->nr_irqs);
-		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
+		BUG_ON(vlr.irq >= dist->nr_irqs &&
+		       vlr.irq < VGIC_LPI_BASE &&
+		       vlr.irq >= dist->nr_lpis);
+
+		if (vlr.irq >= VGIC_LPI_BASE)
+			lr_irq = vlr.irq - VGIC_LPI_BASE + 1 + dist->nr_irqs;
+		else
+			lr_irq = vlr.irq;
+
+		vgic_cpu->vgic_irq_lr_map[lr_irq] = LR_EMPTY;
 	}
 
 	/* Check if we still have something up our sleeve... */
@@ -1428,19 +1471,24 @@ void kvm_vgic_vcpu_destroy(struct kvm_vcpu *vcpu)
 
 	kfree(vgic_cpu->pending_shared);
 	kfree(vgic_cpu->vgic_irq_lr_map);
+	kfree(vgic_cpu->pending_lpis);
 	vgic_cpu->pending_shared = NULL;
 	vgic_cpu->vgic_irq_lr_map = NULL;
+	vgic_cpu->pending_lpis = NULL;
 }
 
-static int vgic_vcpu_init_maps(struct kvm_vcpu *vcpu, int nr_irqs)
+static int vgic_vcpu_init_maps(struct kvm_vcpu *vcpu, int nr_irqs, int nr_lpis)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
 	int sz = (nr_irqs - VGIC_NR_PRIVATE_IRQS) / 8;
+	int lpi_sz = nr_lpis / 8;
 	vgic_cpu->pending_shared = kzalloc(sz, GFP_KERNEL);
-	vgic_cpu->vgic_irq_lr_map = kzalloc(nr_irqs, GFP_KERNEL);
+	vgic_cpu->pending_lpis = kzalloc(lpi_sz, GFP_KERNEL);
+	vgic_cpu->vgic_irq_lr_map = kzalloc(nr_irqs + nr_lpis, GFP_KERNEL);
 
-	if (!vgic_cpu->pending_shared || !vgic_cpu->vgic_irq_lr_map) {
+	if (!vgic_cpu->pending_shared || !vgic_cpu->pending_lpis ||
+	    !vgic_cpu->vgic_irq_lr_map) {
 		kvm_vgic_vcpu_destroy(vcpu);
 		return -ENOMEM;
 	}
@@ -1472,7 +1520,7 @@ static void kvm_vgic_vcpu_init(struct kvm_vcpu *vcpu)
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	int i;
 
-	for (i = 0; i < dist->nr_irqs; i++) {
+	for (i = 0; i < dist->nr_irqs + dist->nr_lpis; i++) {
 		if (i < VGIC_NR_PPIS)
 			vgic_bitmap_set_irq_val(&dist->irq_enabled,
 						vcpu->vcpu_id, i, 1);
@@ -1532,11 +1580,14 @@ int vgic_init_common_maps(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	struct kvm_vcpu *vcpu;
-	int nr_cpus, nr_irqs;
+	int nr_cpus, nr_irqs, nr_lpis;
 	int ret, i;
 
 	if (dist->nr_cpus)	/* Already allocated */
 		return 0;
+
+	if (!dist->nr_lpis)
+		dist->nr_lpis = 255;
 
 	nr_cpus = dist->nr_cpus = atomic_read(&kvm->online_vcpus);
 	if (!nr_cpus)		/* No vcpus? Can't be good... */
@@ -1550,6 +1601,7 @@ int vgic_init_common_maps(struct kvm *kvm)
 		dist->nr_irqs = VGIC_NR_IRQS_LEGACY;
 
 	nr_irqs = dist->nr_irqs;
+	nr_lpis = dist->nr_lpis;
 
 	ret  = vgic_init_bitmap(&dist->irq_enabled, nr_cpus, nr_irqs);
 	ret |= vgic_init_bitmap(&dist->irq_level, nr_cpus, nr_irqs);
@@ -1584,7 +1636,7 @@ int vgic_init_common_maps(struct kvm *kvm)
 		goto out;
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		ret = vgic_vcpu_init_maps(vcpu, nr_irqs);
+		ret = vgic_vcpu_init_maps(vcpu, nr_irqs, nr_lpis);
 		if (ret) {
 			kvm_err("VGIC: Failed to allocate vcpu memory\n");
 			break;

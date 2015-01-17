@@ -90,8 +90,9 @@ static bool handle_mmio_ctlr(struct kvm_vcpu *vcpu,
  * with GICv2 (ARE==1), we report zero CPUs in bits [5..7].
  * Also LPIs and MBIs are not supported, so we set the respective bits to 0.
  * Also we report at most 2**10=1024 interrupt IDs (to match 1024 SPIs).
+ * and some LPIs.
  */
-#define INTERRUPT_ID_BITS 10
+#define INTERRUPT_ID_BITS 15
 static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 			      struct kvm_exit_mmio *mmio, phys_addr_t offset)
 {
@@ -643,9 +644,12 @@ static bool handle_mmio_ctlr_redist(struct kvm_vcpu *vcpu,
 				    struct kvm_exit_mmio *mmio,
 				    phys_addr_t offset)
 {
-	/* since we don't support LPIs, this register is zero for now */
+	u32 reg;
+
+	/* set LPIs supported */
+	reg = 0x1;
 	vgic_reg_access(mmio, NULL, offset,
-			ACCESS_READ_RAZ | ACCESS_WRITE_IGNORED);
+			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;
 }
 
@@ -671,6 +675,9 @@ static bool handle_mmio_typer_redist(struct kvm_vcpu *vcpu,
 	reg = redist_vcpu->vcpu_id << 8;
 	if (target_vcpu_id == atomic_read(&vcpu->kvm->online_vcpus) - 1)
 		reg |= GICR_TYPER_LAST;
+
+	/* set physical LPIs supported */
+	reg |= 0x1;
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;
@@ -706,6 +713,16 @@ static const struct kvm_mmio_range vgic_redist_ranges[] = {
 		.len            = 0x30,
 		.bits_per_irq   = 0,
 		.handle_mmio    = handle_mmio_idregs,
+	},
+	{
+		.base		= GICR_PROPBASER,
+		.len		= 0x8,
+		.handle_mmio	= handle_mmio_raz_wi,
+	},
+	{
+		.base		= GICR_PENDBASER,
+		.len		= 0x8,
+		.handle_mmio	= handle_mmio_raz_wi,
 	},
 	{},
 };

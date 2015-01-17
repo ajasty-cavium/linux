@@ -29,6 +29,7 @@
 #define VGIC_NR_SGIS		16
 #define VGIC_NR_PPIS		16
 #define VGIC_NR_PRIVATE_IRQS	(VGIC_NR_SGIS + VGIC_NR_PPIS)
+#define VGIC_LPI_BASE		8192
 
 #define VGIC_V2_MAX_LRS		(1 << 6)
 #define VGIC_V3_MAX_LRS		16
@@ -156,6 +157,7 @@ struct vgic_dist {
 
 	int			nr_cpus;
 	int			nr_irqs;
+	int			nr_lpis;
 
 	/* Virtual control interface mapping */
 	void __iomem		*vctrl_base;
@@ -270,6 +272,9 @@ struct vgic_cpu {
 	/* Pending interrupts on this VCPU */
 	DECLARE_BITMAP(	pending_percpu, VGIC_NR_PRIVATE_IRQS);
 	unsigned long	*pending_shared;
+
+	/*pending LPIs on thid VCPU */
+	unsigned long *pending_lpis;
 
 	/* Bitmap of used/free list registers */
 	DECLARE_BITMAP(	lr_used, VGIC_V2_MAX_LRS);
