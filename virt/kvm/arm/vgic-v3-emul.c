@@ -648,7 +648,7 @@ static bool handle_mmio_ctlr_redist(struct kvm_vcpu *vcpu,
 
 	/* set LPIs supported */
 	reg = 0x1;
-	vgic_reg_access(mmio, NULL, offset,
+	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;
 }
@@ -740,6 +740,7 @@ static bool vgic_v3_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	unsigned long dbase = dist->vgic_dist_base;
+	unsigned long itsbase = dist->vgic_its_base;
 	unsigned long rdbase = dist->vgic_redist_base;
 	int nrcpus = atomic_read(&vcpu->kvm->online_vcpus);
 	int vcpu_id;
@@ -748,6 +749,11 @@ static bool vgic_v3_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	if (is_in_range(mmio->phys_addr, mmio->len, dbase, GIC_V3_DIST_SIZE)) {
 		return vgic_handle_mmio_range(vcpu, run, mmio,
 					      vgic_v3_dist_ranges, dbase);
+	}
+
+	if (is_in_range(mmio->phys_addr, mmio->len, itsbase, GIC_V3_ITS_SIZE)) {
+		return vgic_handle_mmio_range(vcpu, run, mmio,
+					      vgic_its_ranges, itsbase);
 	}
 
 	if (!is_in_range(mmio->phys_addr, mmio->len, rdbase,
@@ -828,12 +834,17 @@ static void vgic_v3_add_sgi_source(struct kvm_vcpu *vcpu, int irq, int source)
 int vgic_v3_init_emulation(struct kvm *kvm)
 {
 	struct vgic_dist *dist = &kvm->arch.vgic;
+	int ret;
 
 	dist->vm_ops.handle_mmio = vgic_v3_handle_mmio;
 	dist->vm_ops.queue_sgi = vgic_v3_queue_sgi;
 	dist->vm_ops.add_sgi_source = vgic_v3_add_sgi_source;
 	dist->vm_ops.vgic_init = vgic_v3_init;
 	dist->vm_ops.vgic_init_maps = vgic_v3_init_maps;
+
+	ret = vgic_its_init(kvm);
+	if (ret)
+		kvm_err("ITS not available on this host..");
 
 	kvm->arch.max_vcpus = KVM_MAX_VCPUS;
 
@@ -898,6 +909,7 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	int vcpu_id = vcpu->vcpu_id;
 	bool broadcast;
 	int updated = 0;
+	unsigned long flag;
 
 	sgi = (reg & ICC_SGI1R_SGI_ID_MASK) >> ICC_SGI1R_SGI_ID_SHIFT;
 	broadcast = reg & BIT(ICC_SGI1R_IRQ_ROUTING_MODE_BIT);
@@ -910,7 +922,7 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	 * We take the dist lock here, because we come from the sysregs
 	 * code path and not from the MMIO one (which already takes the lock).
 	 */
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flag);
 
 	/*
 	 * We iterate over all VCPUs to find the MPIDRs matching the request.
@@ -946,7 +958,7 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 	}
 	if (updated)
 		vgic_update_state(vcpu->kvm);
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
 	if (updated)
 		vgic_kick_vcpus(vcpu->kvm);
 }
@@ -956,12 +968,13 @@ int vgic_v3_icc_read_iar(struct kvm_vcpu *vcpu)
     int pending;
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
+	unsigned long flag;
 
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flag);
 
     pending = vgic_get_pending_irq(vcpu);
 
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
     /* we have some thing to retrun */
     return pending;
 }
@@ -970,9 +983,11 @@ void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg)
 {
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
-	spin_lock(&dist->lock);
+	unsigned long flag;
+
+	spin_lock_irqsave(&dist->lock, flag);
     vgic_clear_pending_irq(vcpu,reg);
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
 }
 
 static int vgic_v3_create(struct kvm_device *dev, u32 type)
@@ -998,6 +1013,8 @@ static int vgic_v3_set_attr(struct kvm_device *dev,
 	case KVM_DEV_ARM_VGIC_GRP_DIST_REGS:
 	case KVM_DEV_ARM_VGIC_GRP_CPU_REGS:
 		return -ENXIO;
+	case KVM_DEV_ARM_VGIC_GRP_ITS_DEVICE:
+		return vgic_its_set_attr(dev, attr);
 	}
 
 	return -ENXIO;
@@ -1016,6 +1033,8 @@ static int vgic_v3_get_attr(struct kvm_device *dev,
 	case KVM_DEV_ARM_VGIC_GRP_DIST_REGS:
 	case KVM_DEV_ARM_VGIC_GRP_CPU_REGS:
 		return -ENXIO;
+	case KVM_DEV_ARM_VGIC_GRP_ITS_DEVICE:
+		return vgic_its_get_attr(dev, attr);
 	}
 
 	return -ENXIO;
@@ -1041,7 +1060,7 @@ static int vgic_v3_has_attr(struct kvm_device *dev,
 	case KVM_DEV_ARM_VGIC_GRP_NR_IRQS:
 		return 0;
 	}
-	return -ENXIO;
+	return vgic_its_has_attr(dev, attr);
 }
 
 struct kvm_device_ops kvm_arm_vgic_v3_ops = {

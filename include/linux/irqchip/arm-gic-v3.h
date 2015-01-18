@@ -83,6 +83,7 @@
 #define GIC_PIDR2_ARCH_GICv4		0x40
 
 #define GIC_V3_DIST_SIZE		0x10000
+#define GIC_V3_ITS_SIZE			0x20000
 
 /*
  * Re-Distributor registers, offsets from RD_base
@@ -219,6 +220,7 @@
 #define GITS_CMD_MAPD			0x08
 #define GITS_CMD_MAPC			0x09
 #define GITS_CMD_MAPVI			0x0a
+#define GITS_CMD_MAPI			0x0b
 #define GITS_CMD_MOVI			0x01
 #define GITS_CMD_DISCARD		0x0f
 #define GITS_CMD_INV			0x0c
@@ -337,6 +339,8 @@
 #ifndef __ASSEMBLY__
 
 #include <linux/stringify.h>
+#include <linux/msi.h>
+#include <linux/irqdomain.h>
 
 struct rdists {
 	struct {
@@ -347,6 +351,33 @@ struct rdists {
 	struct page		*prop_page;
 	int			id_bits;
 	u64			flags;
+};
+
+/*
+ * The ITS command block, which is what the ITS actually parses.
+ */
+struct its_cmd_block {
+	u64	raw_cmd[4];
+};
+
+/*
+ * The ITS structure - contains most of the infrastructure, with the
+ * msi_chip, the command queue, the collections, and the list of
+ * devices writing to it.
+ */
+struct its_node {
+	raw_spinlock_t		lock;
+	struct list_head	entry;
+	struct msi_chip		msi_chip;
+	void __iomem		*base;
+	unsigned long		phys_base;
+	struct its_cmd_block	*cmd_base;
+	struct its_cmd_block	*cmd_write;
+	void			*tables[GITS_BASER_NR_REGS];
+	struct its_collection	*collections;
+	struct list_head	its_device_list;
+	u64			flags;
+	u32			ite_size;
 };
 
 static inline void gic_write_eoir(u64 irq)
@@ -360,6 +391,12 @@ int its_cpu_init(void);
 struct irq_chip *its_init(struct rdists *rdists, struct irq_domain *domain);
 void its_of_probe(struct device_node *node);
 
+struct its_device *its_create_device(struct its_node *its, u32 dev_id,
+					    int nvecs);
+int its_alloc_device_irq(struct its_device *dev, u32 id,
+				int *hwirq, unsigned int *irq);
+int its_get_collection(struct its_node *its, int cpu);
+u64 its_get_target_address(struct its_node *its, int cpu);
 #endif
 
 #endif

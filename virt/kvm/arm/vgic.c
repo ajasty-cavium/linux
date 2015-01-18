@@ -26,6 +26,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/uaccess.h>
+#include <linux/spinlock.h>
 
 #include <linux/irqchip/arm-gic.h>
 
@@ -770,6 +771,7 @@ bool vgic_handle_mmio_range(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 	bool updated_state;
 	unsigned long offset;
+	unsigned long flag;
 
 	offset = mmio->phys_addr - mmio_base;
 	range = vgic_find_range(ranges, mmio, offset);
@@ -779,7 +781,7 @@ bool vgic_handle_mmio_range(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		return false;
 	}
 
-	spin_lock(&vcpu->kvm->arch.vgic.lock);
+	spin_lock_irqsave(&vcpu->kvm->arch.vgic.lock, flag);
 	offset -= range->base;
 	if (vgic_validate_access(dist, range, offset)) {
 		updated_state = call_range_handler(vcpu, mmio, offset, range);
@@ -788,7 +790,7 @@ bool vgic_handle_mmio_range(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			memset(mmio->data, 0, mmio->len);
 		updated_state = false;
 	}
-	spin_unlock(&vcpu->kvm->arch.vgic.lock);
+	spin_unlock_irqrestore(&vcpu->kvm->arch.vgic.lock, flag);
 	kvm_prepare_mmio(run, mmio);
 	kvm_handle_mmio_return(vcpu, run);
 
@@ -1289,25 +1291,27 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	unsigned long flag;
 
 	if (!irqchip_in_kernel(vcpu->kvm))
 		return;
 
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flag);
 	__kvm_vgic_flush_hwstate(vcpu);
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
 }
 
 void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+	unsigned long flag;
 
 	if (!irqchip_in_kernel(vcpu->kvm))
 		return;
 
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flag);
 	__kvm_vgic_sync_hwstate(vcpu);
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
 }
 
 int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu)
@@ -1361,8 +1365,9 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	int edge_triggered, level_triggered;
 	int enabled;
 	bool ret = true, can_inject = true;
+	unsigned long flag;
 
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flag);
 
         /* avoid race conditions */
         if(irq_num == 38)
@@ -1425,7 +1430,7 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	}
 
 out:
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flag);
 
 	return ret;
 }
@@ -1494,6 +1499,14 @@ static int vgic_vcpu_init_maps(struct kvm_vcpu *vcpu, int nr_irqs, int nr_lpis)
 	}
 
 	return 0;
+}
+
+int kvm_vgic_cpu_init(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->kvm->arch.vgic.vgic_its_base == VGIC_ADDR_UNDEF)
+		return 0;
+	else
+		return vgic_its_cpu_init(vcpu);
 }
 
 /**
@@ -1764,6 +1777,7 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	kvm->arch.vgic.vgic_dist_base = VGIC_ADDR_UNDEF;
 	kvm->arch.vgic.vgic_cpu_base = VGIC_ADDR_UNDEF;
 	kvm->arch.vgic.vgic_redist_base = VGIC_ADDR_UNDEF;
+	kvm->arch.vgic.vgic_its_base = VGIC_ADDR_UNDEF;
 
 out_unlock:
 	for (; vcpu_lock_idx >= 0; vcpu_lock_idx--) {
@@ -1856,6 +1870,9 @@ int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, bool write)
 		addr_ptr = &vgic->vgic_redist_base;
 		block_size = KVM_VGIC_V3_REDIST_SIZE;
 		break;
+	case KVM_VGIC_V3_ADDR_TYPE_ITS:
+		type_needed = KVM_DEV_TYPE_ARM_VGIC_V3;
+		addr_ptr = &vgic->vgic_its_base;
 #endif
 	default:
 		r = -ENODEV;

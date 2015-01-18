@@ -146,6 +146,49 @@ struct vgic_vm_ops {
 	int	(*vgic_init_maps)(struct kvm *);
 };
 
+struct vgic_its_irq {
+	struct list_head	entry;
+	int			pirq;
+	int			virq;
+	int			hwirq;
+	int			vcol_id;
+	int			pcol_id;
+};
+
+struct vgic_its_device {
+	struct list_head	entry;
+	u32			vdev_id;
+	u32			pdev_id;
+	struct pci_dev		*pdev;
+	struct its_device	*pits_dev;
+	struct list_head	pirq_list;
+	struct kvm		*kvm;
+};
+
+struct vgic_its {
+	bool			iommu_setup;
+	bool			enabled;
+	u32			idbits;
+	u32			devbits;
+
+	u32			cq_valid;
+	u32			cq_shared;
+	u32			cq_cachable;
+	u32			cq_size;
+	u64			cq_base;
+	u32			cq_read_offset;
+	u32			cq_write_offset;
+	struct	list_head	its_devices;
+};
+
+struct vgic_its_cpu {
+	int			vcid;
+	int			pcid;
+	int			vcollection;
+	int			pcollection;
+	u64			ptarget_address;
+};
+
 struct vgic_dist {
 #ifdef CONFIG_KVM_ARM_VGIC
 	spinlock_t		lock;
@@ -169,6 +212,10 @@ struct vgic_dist {
 		phys_addr_t		vgic_cpu_base;
 		phys_addr_t		vgic_redist_base;
 	};
+
+	/* ITS base address */
+	phys_addr_t		vgic_its_base;
+	struct vgic_its		its;
 
 	/* Distributor enabled */
 	u32			enabled;
@@ -290,6 +337,9 @@ struct vgic_cpu {
 		struct vgic_v2_cpu_if	vgic_v2;
 		struct vgic_v3_cpu_if	vgic_v3;
 	};
+
+	/* per CPU ITS book keeping */
+	struct vgic_its_cpu	its_cpu;
 #endif
 };
 
@@ -308,6 +358,7 @@ int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, bool write);
 int kvm_vgic_hyp_init(void);
 int kvm_vgic_get_max_vcpus(void);
 int kvm_vgic_init(struct kvm *kvm);
+int kvm_vgic_cpu_init(struct kvm_vcpu *vcpu);
 int kvm_vgic_create(struct kvm *kvm, u32 type);
 void kvm_vgic_destroy(struct kvm *kvm);
 void kvm_vgic_vcpu_destroy(struct kvm_vcpu *vcpu);
@@ -358,6 +409,11 @@ static inline int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, 
 }
 
 static inline int kvm_vgic_init(struct kvm *kvm)
+{
+	return 0;
+}
+
+static inline int kvm_vgic_cpu_init(struct kvm_vcpu *vcpu)
 {
 	return 0;
 }

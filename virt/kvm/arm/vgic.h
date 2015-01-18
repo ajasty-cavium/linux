@@ -37,6 +37,15 @@
 
 #define VCPU_NOT_ALLOCATED	((u8)-1)
 
+extern struct list_head its_nodes;
+
+int vgic_its_has_attr(struct kvm_device *dev,
+		      struct kvm_device_attr *attr);
+int vgic_its_set_attr(struct kvm_device *dev,
+		       struct kvm_device_attr *attr);
+int vgic_its_get_attr(struct kvm_device *dev,
+		      struct kvm_device_attr *attr);
+
 unsigned long *vgic_bitmap_get_shared_map(struct vgic_bitmap *x);
 
 void vgic_update_state(struct kvm *kvm);
@@ -83,6 +92,7 @@ struct kvm_mmio_range {
 	bool (*handle_mmio)(struct kvm_vcpu *vcpu, struct kvm_exit_mmio *mmio,
 			    phys_addr_t offset);
 };
+extern const struct kvm_mmio_range vgic_its_ranges[];
 
 static inline bool is_in_range(phys_addr_t addr, unsigned long len,
 			       phys_addr_t baseaddr, unsigned long size)
@@ -120,5 +130,11 @@ int vgic_get_common_attr(struct kvm_device *dev, struct kvm_device_attr *attr);
 
 int vgic_v2_init_emulation(struct kvm *kvm);
 int vgic_v3_init_emulation(struct kvm *kvm);
+
+int vgic_its_handle_guest_commands(struct kvm_vcpu *, u64, int, int, int);
+int vgic_its_init(struct kvm *kvm);
+int vgic_its_cpu_init(struct kvm_vcpu *vcpu);
+int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id);
+u64 vgic_its_get_phys_base(struct kvm_device *dev, u32 vdev_id);
 
 #endif

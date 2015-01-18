@@ -444,6 +444,11 @@ static int kvm_vcpu_first_run_init(struct kvm_vcpu *vcpu)
 			return ret;
 	}
 
+	/* call per VCPU VGIC init once */
+	ret = kvm_vgic_cpu_init(vcpu);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 

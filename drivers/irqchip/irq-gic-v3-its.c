@@ -55,26 +55,6 @@ struct its_collection {
 	u16			col_id;
 };
 
-/*
- * The ITS structure - contains most of the infrastructure, with the
- * msi_chip, the command queue, the collections, and the list of
- * devices writing to it.
- */
-struct its_node {
-	raw_spinlock_t		lock;
-	struct list_head	entry;
-	struct msi_chip		msi_chip;
-	void __iomem		*base;
-	unsigned long		phys_base;
-	struct its_cmd_block	*cmd_base;
-	struct its_cmd_block	*cmd_write;
-	void			*tables[GITS_BASER_NR_REGS];
-	struct its_collection	*collections;
-	struct list_head	its_device_list;
-	u64			flags;
-	u32			ite_size;
-};
-
 #define ITS_ITT_ALIGN		SZ_256
 
 /*
@@ -93,7 +73,7 @@ struct its_device {
 	u32			device_id;
 };
 
-static LIST_HEAD(its_nodes);
+LIST_HEAD(its_nodes);
 static DEFINE_SPINLOCK(its_lock);
 static struct irq_domain *lpi_domain;
 static struct rdists *gic_rdists;
@@ -148,13 +128,6 @@ struct its_cmd_desc {
 			struct its_collection *col;
 		} its_invall_cmd;
 	};
-};
-
-/*
- * The ITS command block, which is what the ITS actually parses.
- */
-struct its_cmd_block {
-	u64	raw_cmd[4];
 };
 
 #define ITS_CMD_QUEUE_SZ		SZ_64K
