@@ -1873,6 +1873,7 @@ int kvm_vgic_addr(struct kvm *kvm, unsigned long type, u64 *addr, bool write)
 	case KVM_VGIC_V3_ADDR_TYPE_ITS:
 		type_needed = KVM_DEV_TYPE_ARM_VGIC_V3;
 		addr_ptr = &vgic->vgic_its_base;
+		break;
 #endif
 	default:
 		r = -ENODEV;

@@ -375,7 +375,7 @@ static long vfio_pci_ioctl(void *device_data,
 
 		info.num_regions = VFIO_PCI_NUM_REGIONS;
 		info.num_irqs = VFIO_PCI_NUM_IRQS;
-		intfo.pdev_id = pci_requester_id(vdev->pdev);
+		info.pdev_id = pci_requester_id(vdev->pdev);
 
 		return copy_to_user((void __user *)arg, &info, minsz);
 
