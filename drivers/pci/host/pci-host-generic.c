@@ -48,8 +48,12 @@ static void __iomem *gen_pci_map_cfg_bus_cam(struct pci_bus *bus,
 					     unsigned int devfn,
 					     int where)
 {
+#ifndef CONFIG_ARM64
 	struct pci_sys_data *sys = bus->sysdata;
 	struct gen_pci *pci = sys->private_data;
+#else
+	struct gen_pci *pci = (struct gen_pci *)bus->sysdata;
+#endif
 	resource_size_t idx = bus->number - pci->cfg.bus_range.start;
 
 	return pci->cfg.win[idx] + ((devfn << 8) | where);
@@ -64,8 +68,12 @@ static void __iomem *gen_pci_map_cfg_bus_ecam(struct pci_bus *bus,
 					      unsigned int devfn,
 					      int where)
 {
+#ifndef CONFIG_ARM64
 	struct pci_sys_data *sys = bus->sysdata;
 	struct gen_pci *pci = sys->private_data;
+#else
+	struct gen_pci *pci = (struct gen_pci *)bus->sysdata;
+#endif
 	resource_size_t idx = bus->number - pci->cfg.bus_range.start;
 
 	return pci->cfg.win[idx] + ((devfn << 12) | where);
@@ -80,8 +88,12 @@ static int gen_pci_config_read(struct pci_bus *bus, unsigned int devfn,
 				int where, int size, u32 *val)
 {
 	void __iomem *addr;
+#ifndef CONFIG_ARM64
 	struct pci_sys_data *sys = bus->sysdata;
 	struct gen_pci *pci = sys->private_data;
+#else
+	struct gen_pci *pci = (struct gen_pci *)bus->sysdata;
+#endif
 
 	addr = pci->cfg.ops->map_bus(bus, devfn, where);
 
@@ -103,8 +115,12 @@ static int gen_pci_config_write(struct pci_bus *bus, unsigned int devfn,
 				 int where, int size, u32 val)
 {
 	void __iomem *addr;
+#ifndef CONFIG_ARM64
 	struct pci_sys_data *sys = bus->sysdata;
 	struct gen_pci *pci = sys->private_data;
+#else
+	struct gen_pci *pci = (struct gen_pci *)bus->sysdata;
+#endif
 
 	addr = pci->cfg.ops->map_bus(bus, devfn, where);
 
@@ -156,7 +172,11 @@ static int gen_pci_calc_io_offset(struct device *dev,
 		return -ENOSPC;
 
 	window = (idx - 1) * SZ_64K;
+#ifndef CONFIG_ARM64
 	err = pci_ioremap_io(window, range->cpu_addr);
+#else
+	err = pci_register_io_range(range->cpu_addr, range->size);
+#endif
 	if (err)
 		return err;
 
@@ -310,12 +330,14 @@ static int gen_pci_parse_map_cfg_windows(struct gen_pci *pci)
 	return 0;
 }
 
+#ifndef CONFIG_ARM64
 static int gen_pci_setup(int nr, struct pci_sys_data *sys)
 {
 	struct gen_pci *pci = sys->private_data;
 	list_splice_init(&pci->resources, &sys->resources);
 	return 1;
 }
+#endif
 
 static int gen_pci_probe(struct platform_device *pdev)
 {
@@ -326,6 +348,7 @@ static int gen_pci_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct gen_pci *pci = devm_kzalloc(dev, sizeof(*pci), GFP_KERNEL);
+#ifndef CONFIG_ARM64
 	struct hw_pci hw = {
 		.nr_controllers	= 1,
 		.private_data	= (void **)&pci,
@@ -333,6 +356,10 @@ static int gen_pci_probe(struct platform_device *pdev)
 		.map_irq	= of_irq_parse_and_map_pci,
 		.ops		= &gen_pci_ops,
 	};
+#else
+	struct pci_bus *bus;
+	LIST_HEAD(res);
+#endif
 
 	if (!pci)
 		return -ENOMEM;
@@ -368,8 +395,18 @@ static int gen_pci_probe(struct platform_device *pdev)
 		gen_pci_release_of_pci_ranges(pci);
 		return err;
 	}
-
+#ifdef CONFIG_ARM64
+	bus = pci_create_root_bus(&pdev->dev, 0, &gen_pci_ops, pci, &res);
+	if (!bus) {
+		err = -ENODEV;
+		return err;
+	}
+	platform_set_drvdata(pdev, pci);
+	pci_scan_child_bus(bus);
+	pci_bus_add_devices(bus);
+#else
 	pci_common_init_dev(dev, &hw);
+#endif
 	return 0;
 }
 
