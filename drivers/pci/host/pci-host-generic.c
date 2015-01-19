@@ -337,6 +337,19 @@ static int gen_pci_setup(int nr, struct pci_sys_data *sys)
 	list_splice_init(&pci->resources, &sys->resources);
 	return 1;
 }
+#else
+
+static void gen_pci_msi_enable(struct device_node *np, struct pci_bus *bus)
+{
+	struct device_node *msi_node;
+
+	msi_node = of_parse_phandle(np, "msi-parent", 0);
+	if (!msi_node)
+		return;
+	bus->msi = of_pci_find_msi_chip_by_node(msi_node);
+}
+
+
 #endif
 
 static int gen_pci_probe(struct platform_device *pdev)
@@ -359,6 +372,7 @@ static int gen_pci_probe(struct platform_device *pdev)
 #else
 	struct pci_bus *bus;
 	LIST_HEAD(res);
+	resource_size_t iobase = 0;
 #endif
 
 	if (!pci)
@@ -396,14 +410,19 @@ static int gen_pci_probe(struct platform_device *pdev)
 		return err;
 	}
 #ifdef CONFIG_ARM64
-	bus = pci_create_root_bus(&pdev->dev, 0, &gen_pci_ops, pci, &res);
+	err = of_pci_get_host_bridge_resources(np, 0, 0xff, &res, &iobase);
+	if (err)
+		return err;
+	bus = pci_scan_root_bus(&pdev->dev, 0, &gen_pci_ops, pci, &res);
 	if (!bus) {
 		err = -ENODEV;
 		return err;
 	}
-	platform_set_drvdata(pdev, pci);
 	pci_scan_child_bus(bus);
+	pci_assign_unassigned_bus_resources(bus);
 	pci_bus_add_devices(bus);
+	gen_pci_msi_enable(np, bus);
+	platform_set_drvdata(pdev, pci);
 #else
 	pci_common_init_dev(dev, &hw);
 #endif
