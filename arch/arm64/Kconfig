@@ -153,8 +153,12 @@ config ARCH_THUNDER
 	select MARVELL_PHY
 	select BROADCOM_PHY
 	select BCM87XX_PHY
+	select IOMMU_SUPPORT
+	select ARM_SMMU
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
 	select ARM64_VA_BITS_48 if NUMA
+	select VFIO
+	select VFIO_PCI
 
 menu   "Cavium ThunderX errata"
 
