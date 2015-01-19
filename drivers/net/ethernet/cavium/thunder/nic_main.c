@@ -267,13 +267,12 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 
 static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 {
-	int timeout = 20;
+	uint16_t timeout = ~0x00;
 
 	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x01);
 	while (timeout) {
 		if (nic_reg_read(nic, NIC_PF_SW_SYNC_RX_DONE) & 0x1)
 			break;
-		usleep_range(1000, 2000);
 		timeout--;
 	}
 	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x00);
