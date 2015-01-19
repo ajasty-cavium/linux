@@ -819,7 +819,8 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 			reg = (TTBCR2_ADDR_44 << TTBCR2_SEP_SHIFT);
 			break;
 		case 48:
-			reg = (TTBCR2_ADDR_48 << TTBCR2_SEP_SHIFT);
+			/* reg = (TTBCR2_ADDR_48 << TTBCR2_SEP_SHIFT); */
+			reg = (0x7 << TTBCR2_SEP_SHIFT);
 			break;
 		}
 
@@ -849,11 +850,28 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 			writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBCR2);
 	}
 
+	/* CBAR */
+	reg = cfg->cbar;
+	if (smmu->version == ARM_SMMU_V1)
+		reg |= cfg->irptndx << CBAR_IRPTNDX_SHIFT;
+
+	/*
+	 * Use the weakest shareability/memory types, so they are
+	 * overridden by the ttbcr/pte.
+	 */
+	if (stage1) {
+		reg |= (CBAR_S1_BPSHCFG_NSH << CBAR_S1_BPSHCFG_SHIFT) |
+			(CBAR_S1_MEMATTR_WB << CBAR_S1_MEMATTR_SHIFT);
+	} else {
+		reg |= ARM_SMMU_CB_VMID(cfg) << CBAR_VMID_SHIFT;
+	}
+	writel_relaxed(reg, gr1_base + ARM_SMMU_GR1_CBAR(cfg->cbndx));
+
+
 	/* TTBR0 */
 	arm_smmu_flush_pgtable(smmu, cfg->pgd,
 			       PTRS_PER_PGD * sizeof(pgd_t));
-	reg = __pa(cfg->pgd);
-	writeq_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_LO);
+	writeq_relaxed(__pa(cfg->pgd), cb_base + ARM_SMMU_CB_TTBR0_LO);
 	/*
 	 * TTBCR
 	 * We use long descriptor, with inner-shareable WBWA tables in TTBR0.
