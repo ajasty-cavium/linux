@@ -570,6 +570,11 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	if (map->flags & VFIO_DMA_MAP_FLAG_READ)
 		prot |= IOMMU_READ;
 
+	if (map->flags & VFIO_DMA_MAP_FLAG_DEV) {
+		prot = IOMMU_READ | IOMMU_WRITE;
+		return vfio_iommu_map_dev(iommu, vaddr, iova, size, prot);
+	}
+
 	if (!prot || !size || (size | iova | vaddr) & mask)
 		return -EINVAL;
 

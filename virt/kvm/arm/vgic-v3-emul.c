@@ -102,6 +102,8 @@ static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 
 	reg |= (INTERRUPT_ID_BITS - 1) << 19;
 
+	/* set LPIs supported */
+	reg |= (1 << 17);
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 
@@ -644,12 +646,8 @@ static bool handle_mmio_ctlr_redist(struct kvm_vcpu *vcpu,
 				    struct kvm_exit_mmio *mmio,
 				    phys_addr_t offset)
 {
-	u32 reg;
-
-	/* set LPIs supported */
-	reg = 0x1;
-	vgic_reg_access(mmio, &reg, offset,
-			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
+	vgic_reg_access(mmio, NULL, offset,
+			ACCESS_READ_RAZ | ACCESS_WRITE_IGNORED);
 	return false;
 }
 
