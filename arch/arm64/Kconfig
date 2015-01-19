@@ -159,6 +159,7 @@ config ARCH_THUNDER
 	select ARM64_VA_BITS_48 if NUMA
 	select VFIO
 	select VFIO_PCI
+	select PCI_HOST_GENERIC
 
 menu   "Cavium ThunderX errata"
 
