@@ -639,45 +639,51 @@ static void __iomem *thunder_pcie_cfg_base(struct thunder_pcie *pcie,
 		| (PCI_FUNC(devfn) << THUNDER_PCIE_FUNC_SHIFT));
 }
 
+static void __iomem *
+thunder_pcie_get_cfg_addr(struct thunder_pcie *pcie, unsigned int busnr,
+			unsigned int devfn, int reg)
+{
+	switch (pcie->device_type) {
+	case THUNDER_ECAM:
+		if (!thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn))
+			return NULL;
+		return thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
+	case THUNDER_PEM:
+		if (!thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn))
+			return NULL;
+		return thunder_pcie_external_addr(pcie, busnr, devfn, reg);
+	default:
+		return NULL;
+	}
+}
+
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 				  int reg, int size, u32 *val)
 {
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
 	unsigned int busnr = bus->number;
-	int supported;
 
 	if (busnr > 255 || devfn > 255 || reg > 4095)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr = thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
-
-	if(pcie->device_type == THUNDER_ECAM) {
-		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn);
-	}
-	else if(pcie->device_type == THUNDER_PEM) {
-		supported = thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn);
-		addr = thunder_pcie_external_addr(pcie, busnr, devfn, reg);
-	}
-	else {
-		supported = 0;
-	}
+	addr = thunder_pcie_get_cfg_addr(pcie, busnr, devfn, reg);
 
 	switch (size) {
 	case 1:
-		if (!supported) 
+		if (!addr)
 			*val = 0xff;
 		else 
 			*val = readb(addr);
 		break;
 	case 2:
-		if (!supported)
+		if (!addr)
 			*val = 0xffff;
 		else 
 			*val = readw(addr);
 		break;
 	case 4:
-		if (!supported)
+		if (!addr)
 			*val = 0xffffffff;
 		else 
 			*val = readl(addr);
@@ -695,25 +701,14 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
 	unsigned int busnr = bus->number;
-	int supported;
 
 	if (busnr > 255 || devfn > 255 || reg > 4095)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-    if(pcie->device_type == THUNDER_ECAM) {
-	supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn);
-	    addr = thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
-    }
-    else if(pcie->device_type == THUNDER_PEM) {
-	supported = thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn);
-		addr = thunder_pcie_external_addr(pcie, busnr, devfn, reg);
-    }
-    else {
-        supported = 0;
-    }
+	addr = thunder_pcie_get_cfg_addr(pcie, busnr, devfn, reg);
 
-    if(!supported)
-	    return PCIBIOS_SUCCESSFUL;
+	if(!addr)
+		return PCIBIOS_SUCCESSFUL;
 
 	switch (size) {
 	case 1:
@@ -940,6 +935,103 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	return ret;
 }
 
+static void thunder_pcie_config(struct thunder_pcie *pcie, u64 addr)
+{
+	switch(addr) {
+	case THUNDER_ECAM0_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 0;
+		break;
+	case THUNDER_ECAM1_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 1;
+		break;
+	case THUNDER_ECAM2_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 2;
+		break;
+	case THUNDER_ECAM3_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 3;
+		break;
+	case THUNDER_ECAM4_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 4;
+		break;
+	case THUNDER_ECAM5_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 5;
+		break;
+	case THUNDER_ECAM6_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 6;
+		break;
+	case THUNDER_ECAM7_CFG_BASE:
+		pcie->device_type = THUNDER_ECAM;
+		pcie->ecam = 7;
+		break;
+	case THUNDER_PEM0_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 0;
+		break;
+	case THUNDER_PEM1_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 1;
+		break;
+	case THUNDER_PEM2_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 2;
+		break;
+	case THUNDER_PEM3_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 3;
+		break;
+	case THUNDER_PEM4_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 4;
+		break;
+	case THUNDER_PEM5_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 5;
+		break;
+	case THUNDER_PEM6_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 6;
+		break;
+	case THUNDER_PEM7_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 7;
+		break;
+	case THUNDER_PEM8_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 8;
+		break;
+	case THUNDER_PEM9_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 9;
+		break;
+	case THUNDER_PEM10_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 10;
+		break;
+	case THUNDER_PEM11_REG_BASE:
+		pcie->device_type = THUNDER_PEM;
+		pcie->pem = 11;
+		break;
+	}
+
+	if (gser_base0 == NULL)
+		gser_base0 = devm_ioremap(pcie->dev,
+					 THUNDER_GSER_N0_BASE,
+					 THUNDER_GSER_SIZE);
+#ifdef CONFIG_NUMA
+	if (gser_base1 == NULL)
+		gser_base1 = devm_ioremap(pcie->dev,
+					 THUNDER_GSER_N1_BASE,
+					 THUNDER_GSER_SIZE);
+#endif
+}
+
 static int thunder_pcie_probe(struct platform_device *pdev)
 {
 	struct thunder_pcie *pcie;
@@ -959,93 +1051,8 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 	/* Get controller's configuration space range */
 	cfg_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	switch(cfg_base->start) {
-		case THUNDER_ECAM0_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 0;
-			break;
-		case THUNDER_ECAM1_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 1;
-			break;
-		case THUNDER_ECAM2_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 2;
-			break;
-		case THUNDER_ECAM3_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 3;
-			break;
-		case THUNDER_ECAM4_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 4;
-			break;
-		case THUNDER_ECAM5_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 5;
-			break;
-		case THUNDER_ECAM6_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 6;
-			break;
-		case THUNDER_ECAM7_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 7;
-			break;
-		case THUNDER_PEM0_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 0;
-			break;
-		case THUNDER_PEM1_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 1;
-			break;
-		case THUNDER_PEM2_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 2;
-			break;
-		case THUNDER_PEM3_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 3;
-			break;
-		case THUNDER_PEM4_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 4;
-			break;
-		case THUNDER_PEM5_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 5;
-			break;
-		case THUNDER_PEM6_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 6;
-			break;
-		case THUNDER_PEM7_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 7;
-			break;
-		case THUNDER_PEM8_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 8;
-			break;
-		case THUNDER_PEM9_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 9;
-			break;
-		case THUNDER_PEM10_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 10;
-			break;
-		case THUNDER_PEM11_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 11;
-			break;
-	}
 
-	if (gser_base0 == NULL)
-		gser_base0 = devm_ioremap(&pdev->dev,
-					 THUNDER_GSER_N0_BASE,
-					 THUNDER_GSER_SIZE);
+	thunder_pcie_config(pcie, cfg_base->start);
 
 	if(sli0_s2m_regx_base == NULL)
 		sli0_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC,
@@ -1054,10 +1061,6 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		sli1_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC+(1ull<<36),
 					 SLIX_S2M_REGX_ACC_SIZE);
 #ifdef CONFIG_NUMA
-	if (gser_base1 == NULL)
-		gser_base1 = devm_ioremap(&pdev->dev,
-					 THUNDER_GSER_N1_BASE,
-					 THUNDER_GSER_SIZE);
 	if(sli2_s2m_regx_base == NULL)
 		sli2_s2m_regx_base = devm_ioremap(&pdev->dev, N1_SLIX_S2M_REGX_ACC,
 					 SLIX_S2M_REGX_ACC_SIZE);
@@ -1165,42 +1168,36 @@ module_platform_driver(thunder_pcie_driver);
 
 #ifdef CONFIG_ACPI
 
-static int thunder_mmcfg_read_config(struct pci_mmcfg_region *cfg, unsigned int bus,
-		    unsigned int devfn, int reg, int len, u32 *value)
+static int
+thunder_mmcfg_read_config(struct pci_mmcfg_region *cfg, unsigned int busnr,
+			unsigned int devfn, int reg, int len, u32 *value)
 {
 	struct thunder_pcie *pcie = cfg->data;
 	void __iomem *addr;
-	int supported;
 
-	addr = thunder_pcie_cfg_base(pcie, bus, devfn) + reg;
-
-	if(pcie->device_type == THUNDER_ECAM) {
-		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, bus, devfn);
-	}
-	else if(pcie->device_type == THUNDER_PEM) {
+	if (pcie->device_type == THUNDER_PEM) {
 		/* Not support for now */
 		pr_err("RC PEM not supported !!!\n");
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	}
-	else {
-		supported = 0;
-	}
+
+	addr = thunder_pcie_get_cfg_addr(pcie, busnr, devfn, reg);
 
 	switch (len) {
 	case 1:
-		if (!supported)
+		if (!addr)
 			*value = 0xff;
 		else
 			*value = readb(addr);
 		break;
 	case 2:
-		if (!supported)
+		if (!addr)
 			*value = 0xffff;
 		else
 			*value = readw(addr);
 		break;
 	case 4:
-		if (!supported)
+		if (!addr)
 			*value = 0xffffffff;
 		else
 			*value = readl(addr);
@@ -1213,25 +1210,20 @@ static int thunder_mmcfg_read_config(struct pci_mmcfg_region *cfg, unsigned int 
 }
 
 static int thunder_mmcfg_write_config(struct pci_mmcfg_region *cfg,
-		unsigned int bus, unsigned int devfn, int reg, int len,
+		unsigned int busnr, unsigned int devfn, int reg, int len,
 		u32 value) {
 	struct thunder_pcie *pcie = cfg->data;
 	void __iomem *addr;
-	int supported;
 
-	if (pcie->device_type == THUNDER_ECAM) {
-		supported = thunder_pcie_check_ecam_cfg_access(pcie->ecam, bus,
-								devfn);
-		addr = thunder_pcie_cfg_base(pcie, bus, devfn) + reg;
-	} else if (pcie->device_type == THUNDER_PEM) {
+	if (pcie->device_type == THUNDER_PEM) {
 		/* Not support for now */
 		pr_err("RC PEM not supported !!!\n");
 		return PCIBIOS_DEVICE_NOT_FOUND;
-	} else {
-		supported = 0;
 	}
 
-	if (!supported)
+	addr = thunder_pcie_get_cfg_addr(pcie, busnr, devfn, reg);
+
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
 
 	switch (len) {
@@ -1264,75 +1256,9 @@ int thunder_acpi_mcfg_fixup(struct acpi_pci_root *root,
 		return -ENOMEM;
 	}
 
-	if (gser_base0 == NULL)
-		gser_base0 = devm_ioremap(&root->device->dev,
-					 THUNDER_GSER_N0_BASE,
-					 THUNDER_GSER_SIZE);
-#ifdef CONFIG_NUMA
-	if (gser_base1 == NULL)
-		gser_base1 = devm_ioremap(&root->device->dev,
-					 THUNDER_GSER_N1_BASE,
-					 THUNDER_GSER_SIZE);
-#endif
+	pcie->dev = &root->device->dev;
 
-	switch(cfg->address) {
-		case THUNDER_ECAM0_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 0;
-			break;
-		case THUNDER_ECAM1_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 1;
-			break;
-		case THUNDER_ECAM2_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 2;
-			break;
-		case THUNDER_ECAM3_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 3;
-			break;
-		case THUNDER_ECAM4_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 4;
-			break;
-		case THUNDER_ECAM5_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 5;
-			break;
-		case THUNDER_ECAM6_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 6;
-			break;
-		case THUNDER_ECAM7_CFG_BASE:
-			pcie->device_type = THUNDER_ECAM;
-			pcie->ecam = 7;
-			break;
-		case THUNDER_PEM0_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 0;
-			break;
-		case THUNDER_PEM1_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 1;
-			break;
-		case THUNDER_PEM2_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 2;
-			break;
-		case THUNDER_PEM3_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 3;
-			break;
-		case THUNDER_PEM4_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 4;
-			break;
-		case THUNDER_PEM5_REG_BASE:
-			pcie->device_type = THUNDER_PEM;
-			pcie->pem = 5;
-			break;
-	}
+	thunder_pcie_config(pcie, cfg->address);
 
 	pcie->cfg_base = cfg->virt;
 	cfg->data = pcie;
