@@ -70,7 +70,7 @@
 	.endif
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_22558
 	str	q0, [sp, #-16]!
-	tbl     v0.16b, {v1.16b}, v0.16b
+	tbl     v0.8b, {v1.16b}, v0.8b
 	ldr	q0, [sp], #16
 #endif
 	push	x28, x29
