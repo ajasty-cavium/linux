@@ -1382,7 +1382,7 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 		goto out;
 	}
 
-	if (irq_num >= VGIC_NR_PRIVATE_IRQS) {
+	if (irq_num >= VGIC_NR_PRIVATE_IRQS && irq_num < VGIC_LPI_BASE) {
 		cpuid = dist->irq_spi_cpu[irq_num - VGIC_NR_PRIVATE_IRQS];
 		if (cpuid == VCPU_NOT_ALLOCATED) {
 			/* Pretend we use CPU0, and prevent injection */
