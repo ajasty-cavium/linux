@@ -20,22 +20,30 @@
 
 
 
+static DEFINE_SPINLOCK(vits_lock);
+
 
 static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
 {
 	struct vgic_its_device *vits_dev = dev;
 	struct vgic_its_irq *vits_irq;
+	unsigned long flag;
+
+	spin_lock_irqsave(&vits_lock, flag);
 
 	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
 		if (vits_irq->pirq == irq)
 			break;
 	}
-	if (!vits_irq)
+	if (!vits_irq) {
+		spin_unlock_irqrestore(&vits_lock, flag);
 		return IRQ_NONE;
+	}
 
 	/* TODO :find vcpu number from col_id */
 	kvm_vgic_inject_irq(vits_dev->kvm, vits_irq->vcol_id,
 			vits_irq->virq, 1);
+	spin_unlock_irqrestore(&vits_lock, flag);
 	return IRQ_HANDLED;
 }
 
@@ -48,6 +56,7 @@ static struct its_node *get_its_node(struct pci_dev *pdev)
 static int get_physical_dev_id(struct vgic_its *its, int vdev_id)
 {
 	struct vgic_its_device *its_dev =  NULL;
+	unsigned long flag;
 
 	list_for_each_entry(its_dev, &(its->its_devices), entry) {
 		if (its_dev->vdev_id == vdev_id)
@@ -124,7 +133,7 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
 	u32 pdev_id = vits_dev->pdev_id;
-	u32 pirq, hwirq;
+	u32 pirq = 0, hwirq;
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
 	int ret;
@@ -147,6 +156,8 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	vits_irq->pcol_id = its_cpu->pcollection;
 	ret = request_irq(pirq, vgic_its_handle_interrupt, IRQF_PERCPU,
 			  "vits-mapvi-int", vits_dev);
+
+
 	if (IS_ERR_VALUE(ret))
 		return;
 	list_add(&(vits_irq->entry), &(vits_dev->pirq_list));
@@ -207,6 +218,7 @@ int vgic_its_handle_guest_commands(struct kvm_vcpu *vcpu, u64 cq_base,
 	struct its_cmd_block *user_cq;
 	int size, user_cq_size, num_cmds, i;
 	u8 cmd;
+	unsigned long flag;
 
 	if (!is_offset_legal(cq_base, cq_size, read_offset))
 		return -ENXIO;
@@ -236,6 +248,7 @@ int vgic_its_handle_guest_commands(struct kvm_vcpu *vcpu, u64 cq_base,
 
 	num_cmds = user_cq_size / sizeof(struct its_cmd_block);
 
+	spin_lock_irqsave(&vits_lock, flag);
 	for (i = 0; i < num_cmds; i++) {
 		cmd = *(u8 *)(user_cq + i);
 
@@ -281,6 +294,9 @@ int vgic_its_handle_guest_commands(struct kvm_vcpu *vcpu, u64 cq_base,
 
 		}
 	}
+	/* flush this writes before releasing lock */
+	mb();
+	spin_unlock_irqrestore(&vits_lock, flag);
 	kfree(user_cq);
 	return 0;
 }
@@ -304,6 +320,7 @@ int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id)
 	struct pci_dev *pdev;
 	struct vgic_its_device *its_dev;
 	struct vgic_its *its = &kvm->arch.vgic.its;
+	unsigned long flag;
 
 	pdev = pci_get_domain_bus_and_slot(domain, bus, func);
 	if (!pdev)
@@ -313,15 +330,14 @@ int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id)
 	if (!its_dev)
 		return -ENOMEM;
 
-	/* TODO: add vits lock here.. */
 
 	INIT_LIST_HEAD(&(its_dev->pirq_list));
 	INIT_LIST_HEAD(&(its_dev->entry));
-	list_add(&(its_dev->entry), &(its->its_devices));
 	its_dev->vdev_id = vdev_id;
 	its_dev->pdev_id = pdev_id;
 	its_dev->pdev = pdev;
 	its_dev->kvm = kvm;
+	list_add(&(its_dev->entry), &(its->its_devices));
 	return 0;
 }
 
