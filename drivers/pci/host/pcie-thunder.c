@@ -194,7 +194,7 @@ static uint64_t thunder_get_gser_cfg_addr(int node, int qlm)
 
 static uint64_t thunder_get_gser_cfg(int node, int qlm)
 {
-	return *(uint64_t *)thunder_get_gser_cfg_addr(node, qlm);
+	return readq((uint64_t *)thunder_get_gser_cfg_addr(node, qlm));
 }
 
 static void modify_slix_s2m_regx_acc(int node, int sli, int regnum)
