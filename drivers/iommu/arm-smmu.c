@@ -451,8 +451,6 @@ static struct device *dev_get_dev_node(struct device *dev)
 {
 	struct pci_bus *bus;
 	struct device *device;
-	struct acpi_device *adev;
-	acpi_handle handle;
 
 	if (!dev_is_pci(dev))
 		return dev;
@@ -466,21 +464,22 @@ static struct device *dev_get_dev_node(struct device *dev)
 	if (device)
 		return device;
 
+#ifdef CONFIG_ACPI
 	/*
 	 * ACPI host bridge device is going to be found via ACPI companion
 	 * device
 	 */
-	handle = acpi_find_root_bridge_handle(to_pci_dev(dev));
-	if (!handle)
-		return NULL;
+	if (!acpi_disabled) {
+		struct acpi_device *adev;
 
-	if (acpi_bus_get_device(handle, &adev)) {
-		pr_warn("Failed to get device for ACPI object %s\n",
-			dev_name(&adev->dev));
-		return NULL;
+		if (!acpi_bus_get_device(ACPI_HANDLE(bus->bridge), &adev))
+			return &adev->dev;
 	}
+#endif
 
-	return &adev->dev;
+	pr_warn("Failed to get PCI host bridge device for %s device\n",
+		dev_name(dev));
+	return NULL;
 }
 
 static struct arm_smmu_master *find_smmu_master(struct arm_smmu_device *smmu,
@@ -1956,6 +1955,7 @@ static int arm_smmu_device_cfg_probe(struct arm_smmu_device *smmu)
 	return 0;
 }
 
+#ifdef CONFIG_ACPI
 static int arm_smmu_acpi_probe(struct platform_device *pdev,
 			 struct arm_smmu_device *smmu)
 {
@@ -2038,6 +2038,13 @@ static int arm_smmu_acpi_probe(struct platform_device *pdev,
 
 	return 0;
 }
+#else
+static inline int arm_smmu_acpi_probe(struct platform_device *pdev,
+				      struct arm_smmu_device *smmu)
+{
+	return -ENODEV;
+}
+#endif
 
 static const struct of_device_id arm_smmu_of_match[] = {
 	{ .compatible = "arm,smmu-v1", .data = (void *)ARM_SMMU_V1 },
