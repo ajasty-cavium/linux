@@ -388,24 +388,17 @@ struct bgx_stats_msg {
 	uint64_t   stats;
 };
 
+/* Maximum 8 64bit locations */
+struct nic_mbx {
 #define	NIC_PF_VF_MBX_MSG_MASK		0xFFFF
+	uint16_t	   msg;
 #define	NIC_PF_VF_MBX_LOCK_OFFSET	0
 #define	NIC_PF_VF_MBX_LOCK_VAL(x)	((x >> 16) & 0xFFFF)
 #define	NIC_PF_VF_MBX_LOCK_CLEAR(x)	(x & ~(0xFFFF0000))
 #define	NIC_PF_VF_MBX_LOCK_SET(x)\
 	(NIC_PF_VF_MBX_LOCK_CLEAR(x) | (1 << 16))
-
-/* Maximum 8 64bit locations */
-struct nic_mbx {
-#ifdef __BIG_ENDIAN_BITFIELD
-	uint64_t	   unused:32;
-	uint64_t	   mbx_lock:16;
-	uint64_t	   msg:16;
-#else
-	uint64_t	   msg:16;
-	uint64_t	   mbx_lock:16;
-	uint64_t	   unused:32;
-#endif
+	uint16_t	   mbx_lock;
+	uint32_t	   unused;
 	union	{
 		struct nic_cfg_msg	nic_cfg;
 		struct qs_cfg_msg	qs;
