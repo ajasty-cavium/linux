@@ -136,7 +136,7 @@ struct nicvf_cq_poll {
 };
 
 #define	NIC_RSSI_COUNT			4096 /* Total no of RSS indices */
-#define NIC_MAX_RSS_HASH_BITS		5
+#define NIC_MAX_RSS_HASH_BITS		8
 #define NIC_MAX_RSS_IDR_TBL_SIZE	(1 << NIC_MAX_RSS_HASH_BITS)
 #define RSS_HASH_KEY_SIZE		5 /* 320 bit key */
 

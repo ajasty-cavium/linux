@@ -314,7 +314,7 @@ void nicvf_config_rss(struct nicvf *nic)
 	struct nicvf_rss_info *rss = &nic->rss_info;
 	int ind_tbl_len = rss->rss_size;
 	bool cont = false;
-	int i;
+	int i, nextq = 0;
 
 	mbx.msg = NIC_PF_VF_MSG_RSS_CFG;
 	mbx.data.rss_cfg.vf_id = nic->vf_id;
@@ -328,10 +328,8 @@ void nicvf_config_rss(struct nicvf *nic)
 		else
 			mbx.data.rss_cfg.tbl_len = ind_tbl_len;
 
-		for (i = mbx.data.rss_cfg.tbl_offset;
-		     i < (mbx.data.rss_cfg.tbl_offset +
-		     mbx.data.rss_cfg.tbl_len); i++)
-			mbx.data.rss_cfg.ind_tbl[i] = rss->ind_tbl[i];
+		for (i = 0; i < mbx.data.rss_cfg.tbl_len; i++)
+			mbx.data.rss_cfg.ind_tbl[i] = rss->ind_tbl[nextq++];
 
 		if (cont)
 			mbx.msg = NIC_PF_VF_MSG_RSS_CFG_CONT;
