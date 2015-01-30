@@ -1144,6 +1144,7 @@ static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 }
 
 int pci_requester_id(struct pci_dev *dev);
+
 static int its_msi_setup_irq(struct msi_chip *chip,
 			     struct pci_dev *pdev,
 			     struct msi_desc *desc)
