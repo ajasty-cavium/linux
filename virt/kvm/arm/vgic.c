@@ -17,7 +17,6 @@
  */
 
 #include <linux/cpu.h>
-#include <linux/delay.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/interrupt.h>
