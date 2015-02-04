@@ -284,7 +284,7 @@ static int xhci_setup_msix(struct xhci_hcd *xhci)
 	/* Errata 23238 */
 	if(pdev->vendor == PCI_VENDOR_ID_CAVIUM)
 		xhci->msix_count = pci_msix_vec_count(pdev);
-	
+
 	xhci->msix_entries =
 		kmalloc((sizeof(struct msix_entry))*xhci->msix_count,
 				GFP_KERNEL);
