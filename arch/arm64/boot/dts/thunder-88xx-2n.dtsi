@@ -1562,7 +1562,7 @@
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
 		}; */
 	};
-	
+
 	mdio@0x97e00,5003800 {
 		compatible = "cavium,octeon-3860-mdio";
 		#address-cells = <1>;
@@ -1650,7 +1650,7 @@
 	bgx0 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x87e0 0xe0000000 0x0 0x1000000>; 
+		reg = <0x87e0 0xe0000000 0x0 0x1000000>;
 		mode = "sgmii";
 
 		lmac0 {
@@ -1685,7 +1685,7 @@
 	bgx1 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x87e0 0xe1000000 0x0 0x1000000>; 
+		reg = <0x87e0 0xe1000000 0x0 0x1000000>;
 		mode = "sgmii";
 
 		lmac0 {
@@ -1721,7 +1721,7 @@
 	bgx2 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x97e0 0xe0000000 0x0 0x1000000>; 
+		reg = <0x97e0 0xe0000000 0x0 0x1000000>;
 		mode = "sgmii";
 
 		lmac0 {
@@ -1750,7 +1750,7 @@
 	bgx3 {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		reg = <0x97e0 0xe1000000 0x0 0x1000000>; 
+		reg = <0x97e0 0xe1000000 0x0 0x1000000>;
 		mode = "sgmii";
 
 		lmac0 {
