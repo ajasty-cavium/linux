@@ -1254,14 +1254,14 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 	/* Clear mappings for empty LRs */
 	//for_each_set_bit(lr, elrsr_ptr, vgic->nr_lr) {
-    for(lr=0;lr<VGIC_V3_MAX_LRS; lr++) {
+	for(lr=0;lr<VGIC_V3_MAX_LRS; lr++) {
 		struct vgic_lr vlr;
 
 		vlr = vgic_get_lr(vcpu, lr);
-        if(vlr.state & LR_STATE_MASK) {
-            pending = 1;
-            continue;
-        }
+		if(vlr.state & LR_STATE_MASK) {
+			pending = 1;
+			continue;
+		}
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
@@ -1281,11 +1281,10 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	//pending = find_first_zero_bit(elrsr_ptr, vgic->nr_lr);
 	if (level_pending || pending < vgic->nr_lr) {
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
-        vcpu->arch.hcr_el2 |= HCR_VI;
-    }
-    else { 
-        vcpu->arch.hcr_el2 &= ~HCR_VI;
-    }
+		vcpu->arch.hcr_el2 |= HCR_VI;
+	} else {
+		vcpu->arch.hcr_el2 &= ~HCR_VI;
+	}
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
