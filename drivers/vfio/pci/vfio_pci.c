@@ -47,6 +47,7 @@ static int vfio_pci_enable(struct vfio_pci_device *vdev)
 	int ret;
 	u16 cmd;
 	u8 msix_pos;
+	struct msix_entry entry[6] = {{0, 0}, {0, 1} };
 
 	/* Don't allow our initial saved state to include busmaster */
 	pci_clear_master(pdev);
@@ -90,6 +91,8 @@ static int vfio_pci_enable(struct vfio_pci_device *vdev)
 		vdev->msix_bar = table & PCI_MSIX_TABLE_BIR;
 		vdev->msix_offset = table & PCI_MSIX_TABLE_OFFSET;
 		vdev->msix_size = ((flags & PCI_MSIX_FLAGS_QSIZE) + 1) * 16;
+		/* this is a hack to enable misx field in ECAM */
+		pci_enable_msix_range(pdev, entry, 0, 1);
 	} else
 		vdev->msix_bar = 0xFF;
 
@@ -161,6 +164,7 @@ static void vfio_pci_disable(struct vfio_pci_device *vdev)
 		else
 			vdev->needs_reset = false;
 	}
+	pci_disable_msix(pdev);
 
 	pci_restore_state(pdev);
 out:
@@ -770,7 +774,6 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int index;
 	u64 phys_len, req_len, pgoff, req_start;
-	struct msix_entry entry[6] = {{0, 0}, {0, 1} };
 	int ret;
 
 	index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
@@ -809,8 +812,6 @@ static int vfio_pci_mmap(void *device_data, struct vm_area_struct *vma)
 		      req_start + req_len <= vdev->msix_offset))
 			return -EINVAL;
 #endif
-		/* this is a hack to enable misx field in ECAM */
-		pci_enable_msix_range(pdev, entry, 0, 1);
 	}
 
 	/*
