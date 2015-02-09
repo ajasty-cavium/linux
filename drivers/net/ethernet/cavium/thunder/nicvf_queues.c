@@ -385,6 +385,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 {
 	struct nic_mbx mbx = {};
 	struct rcv_queue *rq;
+	struct cmp_queue *cq;
 	struct rq_cfg rq_cfg;
 #ifdef CONFIG_RPS
 	struct netdev_rx_queue *rxqueue;
@@ -442,9 +443,10 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_0_7_CFG, qidx, *(u64 *)&rq_cfg);
 
 #ifdef CONFIG_RPS
+	cq = &qs->cq[qidx];
 	/* Set RPS CPU map */
 	cpumask_copy(rps_mask, cpu_online_mask);
-	cpumask_clear_cpu(qidx, rps_mask);
+	cpumask_clear_cpu(cpumask_first(&cq->affinity_mask), rps_mask);
 
 	rxqueue = nic->netdev->_rx + qidx;
 	oldmap = rcu_dereference(rxqueue->rps_map);

@@ -283,6 +283,7 @@ struct cmp_queue {
 	void		*desc;
 	struct q_desc_mem   dmem;
 	struct cmp_queue_stats	stats;
+	cpumask_t	affinity_mask;
 } ____cacheline_aligned_in_smp;
 
 struct snd_queue {

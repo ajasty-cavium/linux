@@ -596,6 +596,7 @@ static int nicvf_poll(struct napi_struct *napi, int budget)
 		/* Re-enable interrupts */
 		cq_head = nicvf_queue_reg_read(nic, NIC_QSET_CQ_0_7_HEAD,
 					       cq->cq_idx);
+		nicvf_clear_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
 		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_HEAD,
 				      cq->cq_idx, cq_head);
 		nicvf_enable_intr(nic, NICVF_INTR_CQ, cq->cq_idx);
@@ -655,11 +656,12 @@ static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 
 static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 {
-	uint64_t qidx, intr;
+	uint64_t qidx, intr, clear_intr = 0;
 	uint64_t cq_intr, rbdr_intr, qs_err_intr;
 	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
+	struct cmp_queue *cq;
 
 	intr = nicvf_reg_read(nic, NIC_VF_INT);
 	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n", __func__, intr);
@@ -670,6 +672,7 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 		/* Disable Qset err interrupt and schedule softirq */
 		nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
 		tasklet_hi_schedule(&nic->qs_err_task);
+		clear_intr = qs_err_intr;
 	}
 
 	/* Disable interrupts and start polling */
@@ -678,7 +681,17 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 			continue;
 		if (!nicvf_is_intr_enabled(nic, NICVF_INTR_CQ, qidx))
 			continue;
+
+		/* Makesure NAPI is scheduled on CPU to which
+		 * CQ's IRQ affinity is set.
+		 */
+		cq = &nic->qs->cq[qidx];
+		if (smp_processor_id() != cpumask_first(&cq->affinity_mask))
+			continue;
+
 		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
+		clear_intr |= ((1 << qidx) << NICVF_INTR_CQ_SHIFT);
+
 		cq_poll = nic->napi[qidx];
 		/* Schedule NAPI */
 		napi_schedule(&cq_poll->napi);
@@ -691,14 +704,12 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 			nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
 
+		clear_intr |= (rbdr_intr << NICVF_INTR_RBDR_SHIFT);
 		tasklet_hi_schedule(&nic->rbdr_task);
 	}
 
-	/* Mailbox has a seperate handler */
-	intr &= ~NICVF_INTR_MBOX_MASK;
-
 	/* Clear interrupts */
-	nicvf_reg_write(nic, NIC_VF_INT, intr);
+	nicvf_reg_write(nic, NIC_VF_INT, clear_intr);
 	return IRQ_HANDLED;
 }
 
@@ -737,23 +748,23 @@ static void nicvf_disable_msix(struct nicvf *nic)
 
 static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 {
-	cpumask_t  affinity_mask;
 	int cpu, first_cpu, num_online_cpus;
+	struct cmp_queue *cq = &nic->qs->cq[qidx];
 
 	num_online_cpus = cpumask_weight(cpumask_of_node(nic->node));
 	first_cpu = cpumask_first(cpumask_of_node(nic->node));
 
 	if (num_online_cpus > nic->netdev->real_num_rx_queues)
-		cpu = first_cpu + qidx;
+		cpu = first_cpu + qidx + 1; /* Leave CPU0 for RBDR interrupt */
 	else
 		cpu = first_cpu + (qidx % num_online_cpus);
 
 	if (!(cpu_online(cpu) && irq_can_set_affinity(cpu)))
 		cpu = first_cpu;
 
-	cpumask_clear(&affinity_mask);
-	cpumask_set_cpu(cpu, &affinity_mask);
-	__irq_set_affinity(irq, &affinity_mask, false);
+	cpumask_clear(&cq->affinity_mask);
+	cpumask_set_cpu(cpu, &cq->affinity_mask);
+	__irq_set_affinity(irq, &cq->affinity_mask, false);
 }
 
 static int nicvf_register_interrupts(struct nicvf *nic)
