@@ -1,0 +1,16 @@
+#
+# Cavium thunderx SoC drivers
+#
+config THUNDERX_GTI
+	bool "Thunderx SoC GTI driver to sync timers across nodes"
+	depends on  ARCH_THUNDER && NUMA
+	help
+		Thunderx SoC GTI driver to sync timers across nodes
+
+config THUNDERX_GTI_SYNC_PERIOD
+	int "Sync period in minutes"
+	range 5 120
+	depends on THUNDERX_GTI
+	default "5"
+	help
+		Sync Period in minutes.
