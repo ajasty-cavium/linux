@@ -411,8 +411,8 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->start_qs_rbdr_idx = qs->rbdr_cnt - 1;
 	rq->cont_rbdr_qs = qs->vnic_id;
 	rq->cont_qs_rbdr_idx = qs->rbdr_cnt - 1;
-	/* Load first 2 cache lines of data to L2C */
-	rq->caching = 3;
+	/* all writes of RBDR data to be loaded into L2 Cache as well*/
+	rq->caching = 1;
 
 	/* Send a mailbox msg to PF to config RQ */
 	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
