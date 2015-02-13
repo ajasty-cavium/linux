@@ -1559,6 +1559,7 @@ void kvm_vgic_destroy(struct kvm *kvm)
 	struct kvm_vcpu *vcpu;
 	int i;
 
+	vgic_its_free(kvm);
 	kvm_for_each_vcpu(i, vcpu, kvm)
 		kvm_vgic_vcpu_destroy(vcpu);
 
@@ -1582,6 +1583,7 @@ void kvm_vgic_destroy(struct kvm *kvm)
 	dist->irq_spi_cpu = NULL;
 	dist->irq_spi_target = NULL;
 	dist->irq_pending_on_cpu = NULL;
+
 }
 
 /*

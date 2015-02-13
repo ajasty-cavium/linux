@@ -393,10 +393,12 @@ void its_of_probe(struct device_node *node);
 
 struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 					    int nvecs);
+void its_free_device(struct its_device *its_dev);
 int its_alloc_device_irq(struct its_device *dev, u32 id,
 				int *hwirq, unsigned int *irq);
 int its_get_collection(struct its_node *its, int cpu);
 u64 its_get_target_address(struct its_node *its, int cpu);
+void its_send_discard(struct its_device *dev, u32 id);
 #endif
 
 #endif

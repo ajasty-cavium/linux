@@ -133,6 +133,7 @@ int vgic_v3_init_emulation(struct kvm *kvm);
 
 int vgic_its_handle_guest_commands(struct kvm_vcpu *, u64, int, int, int);
 int vgic_its_init(struct kvm *kvm);
+void vgic_its_free(struct kvm *kvm);
 int vgic_its_cpu_init(struct kvm_vcpu *vcpu);
 int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id);
 u64 vgic_its_get_phys_base(struct kvm_device *dev, u32 vdev_id);

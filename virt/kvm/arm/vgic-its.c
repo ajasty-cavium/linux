@@ -28,6 +28,8 @@ static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
 	struct vgic_its_device *vits_dev = dev;
 	struct vgic_its_irq *vits_irq;
 	unsigned long flag;
+	struct vgic_its_device *its_dev;
+	struct vgic_its *its;
 
 	spin_lock_irqsave(&vits_lock, flag);
 
@@ -110,8 +112,14 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u32 pdev_id = vits_dev->pdev_id;
 
 	size = 1UL <<  (size + 1);
-	vits_dev->pits_dev = its_create_device(get_its_node(vits_dev->pdev),
-			pdev_id, size);
+	if (valid) {
+		vits_dev->pits_dev = its_create_device(
+						get_its_node(vits_dev->pdev),
+							pdev_id, size);
+	} else if (vits_dev->pits_dev) {
+		its_free_device(vits_dev->pits_dev);
+		vits_dev->pits_dev = NULL;
+	}
 }
 
 static void convert_mapi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -121,7 +129,6 @@ static void convert_mapi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u16 collection = (u16) cmd->raw_cmd[2];
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	u32 pdev_id = get_physical_dev_id(its, vdev_id);
-
 }
 
 static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -154,6 +161,7 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	vits_irq->hwirq = hwirq;
 	vits_irq->vcol_id = collection;
 	vits_irq->pcol_id = its_cpu->pcollection;
+	vits_irq->ID = ID;
 	ret = request_irq(pirq, vgic_its_handle_interrupt, IRQF_PERCPU,
 			  "vits-mapvi-int", vits_dev);
 
@@ -178,6 +186,20 @@ static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u32 ID = (u32) cmd->raw_cmd[1];
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	u32 pdev_id = get_physical_dev_id(its, vdev_id);
+	struct vgic_its_irq *vits_irq;
+	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
+
+	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
+		if (vits_irq->ID == ID)
+			break;
+	}
+
+	if (vits_irq) {
+		its_send_discard(vits_dev->pits_dev, vits_irq->ID);
+		list_del(&(vits_irq->entry));
+		free_irq(vits_irq->pirq, vits_dev);
+		kfree(vits_irq);
+	}
 }
 
 static void convert_inv(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -377,4 +399,42 @@ int vgic_its_init(struct kvm *kvm)
 
 	return 0;
 
+}
+
+
+void vgic_its_free(struct kvm *kvm)
+{
+	struct vgic_its *its = &kvm->arch.vgic.its;
+	struct vgic_its_device *vits_dev =  NULL;
+	struct vgic_its_irq *vits_irq = NULL;
+	unsigned long flag;
+
+	if (kvm->arch.vgic.vgic_its_base == VGIC_ADDR_UNDEF)
+		return;
+
+	spin_lock_irqsave(&vits_lock, flag);
+	vits_dev = list_first_entry_or_null(&(its->its_devices),
+					struct vgic_its_device, entry);
+
+	while (vits_dev) {
+		while (vits_irq) {
+			/* Stop the delivery of interrupts */
+			if (vits_dev->pits_dev)
+				its_send_discard(vits_dev->pits_dev,
+						 vits_irq->ID);
+			free_irq(vits_irq->pirq, vits_dev);
+			list_del(&vits_irq->entry);
+			kfree(vits_irq);
+			vits_irq = list_first_entry_or_null(
+						&(vits_dev->pirq_list),
+						struct vgic_its_irq, entry);
+		}
+		if (vits_dev->pits_dev)
+			its_free_device(vits_dev->pits_dev);
+		list_del(&vits_dev->entry);
+		kfree(vits_dev);
+		vits_dev = list_first_entry_or_null(&(its->its_devices),
+						struct vgic_its_device, entry);
+	}
+	spin_unlock_irqrestore(&vits_lock, flag);
 }

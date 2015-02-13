@@ -153,6 +153,7 @@ struct vgic_its_irq {
 	int			hwirq;
 	int			vcol_id;
 	int			pcol_id;
+	int			ID;
 };
 
 struct vgic_its_device {
