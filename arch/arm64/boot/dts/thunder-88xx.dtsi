@@ -635,7 +635,6 @@
 
                 mmu-masters = <&pcie0 0x100>;
 				smmu-use-exid-for-stream-matching;
-				smmu-use,stage2-translations;
         };
 
 	smmu1@0x8310,00000000 {
@@ -667,7 +666,6 @@
 
                 mmu-masters = <&pcie1 0x100>;
 				smmu-use-exid-for-stream-matching;
-				smmu-use,stage2-translations;
         };
 
 	smmu2@0x8320,00000000 {
@@ -699,7 +697,6 @@
 
                 mmu-masters = <&pcie2 0x100>;
 				smmu-use-exid-for-stream-matching;
-				smmu-use,stage2-translations;
         };
 
 	smmu3@0x8330,00000000 {
@@ -731,7 +728,6 @@
 
                 mmu-masters = <&pcie3 0x100>;
 				smmu-use-exid-for-stream-matching;
-				smmu-use,stage2-translations;
         };
 
 	mdio@0x87e00,5003800 {

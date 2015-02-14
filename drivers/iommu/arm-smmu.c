@@ -376,7 +376,6 @@ struct arm_smmu_device {
 
 #define ARM_SMMU_OPT_SECURE_CFG_ACCESS	(1 << 0)
 #define ARM_SMMU_OPT_USE_EXID			(1 << 1)
-#define ARM_SMMU_OPT_USE_STAGE2		(1 << 2)
 	u32				options;
 	enum arm_smmu_arch_version	version;
 
@@ -429,7 +428,6 @@ struct arm_smmu_option_prop {
 static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_SECURE_CFG_ACCESS, "calxeda,smmu-secure-config-access" },
 	{ ARM_SMMU_OPT_USE_EXID, "smmu-use,exid-for-stream-matching"},
-	{ ARM_SMMU_OPT_USE_STAGE2, "smmu-use,stage2-translations"},
 	{ 0, NULL},
 };
 
@@ -774,6 +772,23 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 	stage1 = cfg->cbar != CBAR_TYPE_S2_TRANS;
 	cb_base = ARM_SMMU_CB_BASE(smmu) + ARM_SMMU_CB(smmu, cfg->cbndx);
 
+	/* CBAR */
+	reg = cfg->cbar;
+	if (smmu->version == ARM_SMMU_V1)
+		reg |= cfg->irptndx << CBAR_IRPTNDX_SHIFT;
+
+	/*
+	 * Use the weakest shareability/memory types, so they are
+	 * overridden by the ttbcr/pte.
+	 */
+	if (stage1) {
+		reg |= (CBAR_S1_BPSHCFG_NSH << CBAR_S1_BPSHCFG_SHIFT) |
+			(CBAR_S1_MEMATTR_WB << CBAR_S1_MEMATTR_SHIFT);
+	} else {
+		reg |= ARM_SMMU_CB_VMID(cfg) << CBAR_VMID_SHIFT;
+	}
+	writel_relaxed(reg, gr1_base + ARM_SMMU_GR1_CBAR(cfg->cbndx));
+
 	if (smmu->version > ARM_SMMU_V1) {
 		/* CBA2R */
 #ifdef CONFIG_64BIT
@@ -856,9 +871,6 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 	arm_smmu_flush_pgtable(smmu, cfg->pgd,
 			       PTRS_PER_PGD * sizeof(pgd_t));
 	writeq_relaxed(__pa(cfg->pgd), cb_base + ARM_SMMU_CB_TTBR0_LO);
-
-
-
 	/*
 	 * TTBCR
 	 * We use long descriptor, with inner-shareable WBWA tables in TTBR0.
@@ -939,8 +951,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	if (smmu_domain->smmu)
 		goto out_unlock;
 
-	if (smmu->features & ARM_SMMU_FEAT_TRANS_NESTED &&
-	    !(smmu->options & ARM_SMMU_OPT_USE_STAGE2)) {
+	if (smmu->features & ARM_SMMU_FEAT_TRANS_NESTED) {
 		/*
 		 * We will likely want to change this if/when KVM gets
 		 * involved.
@@ -1539,7 +1550,6 @@ static int arm_smmu_handle_mapping(struct arm_smmu_domain *smmu_domain,
 		paddr += next - iova;
 		iova = next;
 	} while (pgd++, iova != end);
-
 
 out_unlock:
 	spin_unlock_irqrestore(&smmu_domain->lock, flags);
