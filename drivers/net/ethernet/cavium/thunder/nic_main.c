@@ -13,8 +13,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 
-#include <linux/of.h>
-
 #include "nic_reg.h"
 #include "nic.h"
 #include "q_struct.h"
@@ -32,7 +30,7 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx);
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
 static int nic_rcv_queue_sw_sync(struct nicpf *nic);
 static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx);
-static int set_lmac_address(struct mac_address *mac);
+
 /* Supported devices */
 static const struct pci_device_id nic_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
@@ -134,58 +132,6 @@ static int nic_send_msg_to_vf(struct nicpf *nic, int vf,
 	if (lock_needed)
 		nic_release_mbx(nic, vf);
 	return 0;
-}
-
-/*  To get mac id's from dts file
-*
-*  @mac_address  :  pointer to structure  to store mac's
-*
-*    This function will parse the dts file for mac address
-*    get  N number of mac address from  dts in sequence and store
-*    these mac id's in " mac_address" structure.
-*    If node node not found, then by default all mac's in structure
-*    zero's.
-
-*    Note :  N is total number of lmacs (LMAC_EN_COUNT)  provided to kernel
-*    from firmware.
-*/
-
-static int  set_lmac_address(struct mac_address *mac)
-{
-	struct	device_node *np, *np_child;
-	uint8_t	*total_mac = NULL;
-	uint32_t i, lmac_count = 0, len, range, range_len;
-	uint64_t  start_mac = 0;
-	uint8_t cpy_mac[6] = {0}, rev_mac[6] = {0};
-
-	np = of_find_node_by_name(NULL, "ethernet-macs");
-	np_child = of_get_child_by_name(np, "node0");
-	if (!np_child)
-		return -1;
-	total_mac = (uint8_t *)of_get_property(np_child, "mac", &len);
-	if (!total_mac)
-		return -1;
-	for (range = 0; (range < len) && (lmac_count < LMAC_EN_COUNT);
-							range = range+10) {
-		memcpy(cpy_mac, total_mac+range, ETH_ALEN);
-		for (i = 0; i < ETH_ALEN; i++)
-			rev_mac[i] = cpy_mac[ETH_ALEN-1-i];
-		  memcpy(&start_mac, rev_mac, ETH_ALEN);
-		/* Length of this mac range */
-		range_len = total_mac[6+range]<<24 | total_mac[7+range]<<16 |
-			    total_mac[8+range]<<8|total_mac[9+range];
-		for (i = 0; i < range_len; i++) {
-			memcpy(rev_mac, &start_mac, ETH_ALEN);
-			mac->mac[lmac_count] = start_mac;
-			start_mac            = start_mac + 1;
-			lmac_count++;
-		/* check  number of enabled lmacs	*/
-			if (lmac_count > LMAC_EN_COUNT)
-				goto exit_call;
-			}
-	}
-exit_call:
-	return 1;
 }
 
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
@@ -812,22 +758,8 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct device *dev = &pdev->dev;
 	struct net_device *netdev;
 	struct nicpf *nic;
-	struct mac_address mac = {};
-	int    err, i, mac_msg;
-	uint8_t mac_addr[ETH_ALEN];
+	int    err;
 
-	mac_msg = set_lmac_address(&mac);
-	/* list  all enabled mac id's from dts file */
-	if (mac_msg == -1)
-		dev_info(&pdev->dev, " Mac node not present in dts file\n");
-	dev_info(&pdev->dev, " Number of lmacs enabled  : %d\n", LMAC_EN_COUNT);
-	dev_info(&pdev->dev, " *****  List of mac ids  ******\n");
-	for (i = 0; i < LMAC_EN_COUNT; i++) {
-		memcpy(mac_addr, &mac.mac[i], ETH_ALEN);
-		dev_info(&pdev->dev, " %2x : %2x: %2x : %2x : %2x : %2x\n",
-			mac_addr[5], mac_addr[4], mac_addr[3], mac_addr[2],
-			mac_addr[1], mac_addr[0]);
-	}
 	netdev = alloc_etherdev(sizeof(struct nicpf));
 	if (!netdev)
 		return -ENOMEM;

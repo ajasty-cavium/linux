@@ -129,14 +129,6 @@
  * 1 tick per 0.01ms
  */
 #define NICPF_CLK_PER_INT_TICK		438
-struct  mac_address {
-/* Considering  max 128 macs, it can be 256 for 2S */
-#define TOTAL_MACS 128
-
-/* LMAC_EN_COUNT  should be provided to kernel from firmware */
-#define  LMAC_EN_COUNT 8
-	uint64_t mac[TOTAL_MACS];
-};
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
