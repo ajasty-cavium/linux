@@ -852,7 +852,12 @@ static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain)
 	arm_smmu_flush_pgtable(smmu, cfg->pgd,
 			       PTRS_PER_PGD * sizeof(pgd_t));
 	reg = __pa(cfg->pgd);
-	writeq_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_LO);
+	writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_LO);
+	reg = (phys_addr_t)__pa(cfg->pgd) >> 32;
+	if (stage1)
+		reg |= ARM_SMMU_CB_ASID(cfg) << TTBRn_HI_ASID_SHIFT;
+	writel_relaxed(reg, cb_base + ARM_SMMU_CB_TTBR0_HI);
+
 	/*
 	 * TTBCR
 	 * We use long descriptor, with inner-shareable WBWA tables in TTBR0.
