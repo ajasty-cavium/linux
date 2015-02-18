@@ -137,6 +137,20 @@ static void nicvf_get_drvinfo(struct net_device *netdev,
 	strlcpy(info->bus_info, pci_name(nic->pdev), sizeof(info->bus_info));
 }
 
+static u32 nicvf_get_msglevel(struct net_device *netdev)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+
+	return nic->msg_enable;
+}
+
+static void nicvf_set_msglevel(struct net_device *netdev, u32 lvl)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+
+	nic->msg_enable = lvl;
+}
+
 static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 {
 	int stats, qidx;
@@ -325,6 +339,41 @@ static void nicvf_get_regs(struct net_device *dev,
 	}
 }
 
+static int nicvf_get_coalesce(struct net_device *netdev,
+			      struct ethtool_coalesce *cmd)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+
+	cmd->rx_coalesce_usecs = nic->cq_coalesce_usecs;
+	return 0;
+}
+
+static int nicvf_set_coalesce(struct net_device *netdev,
+			      struct ethtool_coalesce *cmd)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+	struct queue_set *qs = nic->qs;
+	int qidx;
+
+	nic->cq_coalesce_usecs = cmd->rx_coalesce_usecs;
+	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
+		nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2,
+				      qidx, nic->cq_coalesce_usecs);
+	return 0;
+}
+
+static void nicvf_get_ringparam(struct net_device *netdev,
+				struct ethtool_ringparam *ring)
+{
+	struct nicvf *nic = netdev_priv(netdev);
+	struct queue_set *qs = nic->qs;
+
+	ring->rx_max_pending = MAX_RCV_BUF_COUNT;
+	ring->rx_pending = qs->rbdr_len;
+	ring->tx_max_pending = MAX_SND_QUEUE_LEN;
+	ring->tx_pending = qs->sq_len;
+}
+
 #ifdef VNIC_RSS_SUPPORT
 static int nicvf_get_rss_hash_opts(struct nicvf *nic,
 				   struct ethtool_rxnfc *info)
@@ -452,7 +501,7 @@ static int nicvf_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info)
 
 static u32 nicvf_get_rxfh_key_size(struct net_device *netdev)
 {
-	return RSS_HASH_KEY_SIZE;
+	return RSS_HASH_KEY_SIZE * sizeof(uint64_t);
 }
 
 static u32 nicvf_get_rxfh_indir_size(struct net_device *dev)
@@ -474,7 +523,7 @@ static int nicvf_get_rxfh(struct net_device *dev, u32 *indir, u8 *hkey)
 	}
 
 	if (hkey)
-		memcpy(hkey, rss->key, RSS_HASH_KEY_SIZE);
+		memcpy(hkey, rss->key, RSS_HASH_KEY_SIZE * sizeof(uint64_t));
 
 	return 0;
 }
@@ -496,6 +545,11 @@ static int nicvf_set_rxfh(struct net_device *dev, const u32 *indir,
 	if (indir) {
 		for (idx = 0; idx < rss->rss_size; idx++)
 			rss->ind_tbl[idx] = indir[idx];
+	}
+
+	if (hkey) {
+		memcpy(rss->key, hkey, RSS_HASH_KEY_SIZE * sizeof(uint64_t));
+		nicvf_set_rss_key(nic);
 	}
 
 	nicvf_config_rss(nic);
@@ -556,11 +610,16 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 	.set_settings		= nicvf_set_settings,
 	.get_link		= ethtool_op_get_link,
 	.get_drvinfo		= nicvf_get_drvinfo,
+	.get_msglevel		= nicvf_get_msglevel,
+	.set_msglevel		= nicvf_set_msglevel,
 	.get_strings		= nicvf_get_strings,
 	.get_sset_count		= nicvf_get_sset_count,
 	.get_ethtool_stats	= nicvf_get_ethtool_stats,
 	.get_regs_len		= nicvf_get_regs_len,
 	.get_regs		= nicvf_get_regs,
+	.get_coalesce		= nicvf_get_coalesce,
+	.set_coalesce		= nicvf_set_coalesce,
+	.get_ringparam		= nicvf_get_ringparam,
 #ifdef VNIC_RSS_SUPPORT
 	.get_rxnfc		= nicvf_get_rxnfc,
 	.set_rxnfc		= nicvf_set_rxnfc,

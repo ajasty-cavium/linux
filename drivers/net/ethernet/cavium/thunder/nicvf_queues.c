@@ -257,7 +257,7 @@ static int nicvf_init_cmp_queue(struct nicvf *nic,
 	}
 	cq->desc = cq->dmem.base;
 	cq->thresh = CMP_QUEUE_CQE_THRESH;
-	cq->intr_timer_thresh = CMP_QUEUE_TIMER_THRESH;
+	nic->cq_coalesce_usecs = CMP_QUEUE_TIMER_THRESH;
 
 	return 0;
 }
@@ -508,7 +508,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	/* Set threshold value for interrupt generation */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_THRESH, qidx, cq->thresh);
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_CFG2,
-			      qidx, cq->intr_timer_thresh);
+			      qidx, nic->cq_coalesce_usecs);
 }
 
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
@@ -1195,6 +1195,12 @@ int nicvf_check_cqe_rx_errs(struct nicvf *nic,
 		stats->rx.errop.good++;
 		return 0;
 	}
+
+	if (netif_msg_rx_err(nic))
+		netdev_err(nic->netdev,
+			   "%s: RX error CQE err_level 0x%x err_opcode 0x%x\n",
+			   nic->netdev->name,
+			   cqe_rx->err_level, cqe_rx->err_opcode);
 
 	switch (cqe_rx->err_level) {
 	case CQ_ERRLVL_MAC:

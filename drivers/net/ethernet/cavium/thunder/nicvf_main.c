@@ -37,6 +37,10 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nicvf_id_table);
 
+static int debug = 0x00;
+module_param(debug, int, 0644);
+MODULE_PARM_DESC(debug, "Debug message level bitmap");
+
 static int cpi_alg = CPI_ALG_NONE;
 module_param(cpi_alg, int, S_IRUGO);
 MODULE_PARM_DESC(cpi_alg,
@@ -49,18 +53,19 @@ static int nicvf_enable_msix(struct nicvf *nic);
 static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev);
 static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx);
 
-#ifdef NICVF_DUMP_PACKET
-static void nicvf_dump_packet(struct sk_buff *skb)
+static void nicvf_dump_packet(struct net_device *netdev, struct sk_buff *skb)
 {
 	int i;
 
+	pr_info("%s: skb 0x%p, len=%d\n",
+		netdev->name, skb, skb->len);
 	for (i = 0; i < skb->len; i++) {
-		if (!(i % 16))
-			pr_cont("\n");
-		pr_debug("%02x ", (u_char)skb->data[i]);
+		if ((i % 16) == 0)
+			pr_info("\n");
+		pr_info(" %02x", ((u8 *)skb->data)[i]);
 	}
+	pr_info("\n");
 }
-#endif
 
 #ifdef NICVF_ETHTOOL_ENABLE
 static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
@@ -345,7 +350,7 @@ void nicvf_config_rss(struct nicvf *nic)
 	}
 }
 
-static void nicvf_set_rss_key(struct nicvf *nic)
+void nicvf_set_rss_key(struct nicvf *nic)
 {
 	struct nicvf_rss_info *rss = &nic->rss_info;
 	int idx;
@@ -476,9 +481,8 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 		return;
 	}
 
-#ifdef NICVF_DUMP_PACKET
-	nicvf_dump_packet(skb);
-#endif
+	if (netif_msg_pktdata(nic))
+		nicvf_dump_packet(netdev, skb);
 
 #ifdef NICVF_ETHTOOL_ENABLE
 	nicvf_set_rx_frame_cnt(nic, skb);
@@ -664,7 +668,9 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 	struct cmp_queue *cq;
 
 	intr = nicvf_reg_read(nic, NIC_VF_INT);
-	nic_dbg(&nic->pdev->dev, "%s intr status 0x%llx\n", __func__, intr);
+	if (netif_msg_intr(nic))
+		dev_info(&nic->pdev->dev, "%s: interrupt status 0x%llx\n",
+			 nic->netdev->name, intr);
 
 	cq_intr = (intr & NICVF_INTR_CQ_MASK) >> NICVF_INTR_CQ_SHIFT;
 	qs_err_intr = intr & NICVF_INTR_QS_ERR_MASK;
@@ -888,6 +894,11 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
 		netif_tx_stop_queue(txq);
 		nic->drv_stats.tx_busy++;
+		if (netif_msg_tx_err(nic))
+			netdev_warn(netdev,
+				    "%s: Transmit ring full, stopping SQ%d\n",
+				    netdev->name, qid);
+
 		return NETDEV_TX_BUSY;
 	}
 
@@ -1208,12 +1219,13 @@ struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
 	return stats;
 }
 
-#ifdef NICVF_TX_TIMEOUT
 static void nicvf_tx_timeout(struct net_device *dev)
 {
 	struct nicvf *nic = netdev_priv(dev);
 
-	netdev_info(dev, "tx timeout\n");
+	if (netif_msg_tx_err(nic))
+		netdev_warn(dev, "%s: Transmit timed out, resetting\n",
+			    dev->name);
 
 	schedule_work(&nic->reset_task);
 }
@@ -1231,7 +1243,6 @@ static void nicvf_reset_task(struct work_struct *work)
 	nicvf_open(nic->netdev);
 	nic->netdev->trans_start = jiffies;
 }
-#endif
 
 static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_open		= nicvf_open,
@@ -1240,9 +1251,7 @@ static const struct net_device_ops nicvf_netdev_ops = {
 	.ndo_change_mtu		= nicvf_change_mtu,
 	.ndo_set_mac_address	= nicvf_set_mac_address,
 	.ndo_get_stats64	= nicvf_get_stats64,
-#ifdef NICVF_TX_TIMEOUT
 	.ndo_tx_timeout         = nicvf_tx_timeout,
-#endif
 };
 
 static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1317,9 +1326,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	netdev->netdev_ops = &nicvf_netdev_ops;
 
-#ifdef NICVF_TX_TIMEOUT
 	INIT_WORK(&nic->reset_task, nicvf_reset_task);
-#endif
 
 	err = register_netdev(netdev);
 	if (err) {
@@ -1327,6 +1334,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_unmap_resources;
 	}
 
+	nic->msg_enable = debug;
 #ifdef NICVF_ETHTOOL_ENABLE
 	nicvf_set_ethtool_ops(netdev);
 #endif

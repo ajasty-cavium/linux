@@ -126,9 +126,9 @@
  * Calculated for SCLK of 700Mhz
  * value written should be a 1/16thof what is expected
  *
- * 1 tick per 0.01ms
+ * 1 tick per usec
  */
-#define NICPF_CLK_PER_INT_TICK		438
+#define NICPF_CLK_PER_INT_TICK		44
 
 struct nicvf_cq_poll {
 	uint8_t	cq_idx;		/* Completion queue index */
@@ -247,7 +247,10 @@ struct nicvf {
 	struct nicvf_rss_info	rss_info;
 #endif
 	uint8_t			cpi_alg;
+	/* Interrupt coalescing settings */
+	uint32_t		cq_coalesce_usecs;
 
+	uint32_t		msg_enable;
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
 	struct bgx_stats	bgx_stats;
@@ -433,6 +436,7 @@ int nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
 void nicvf_config_cpi(struct nicvf *nic);
 #ifdef VNIC_RSS_SUPPORT
 void nicvf_config_rss(struct nicvf *nic);
+void nicvf_set_rss_key(struct nicvf *nic);
 #endif
 void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 #ifdef NICVF_ETHTOOL_ENABLE

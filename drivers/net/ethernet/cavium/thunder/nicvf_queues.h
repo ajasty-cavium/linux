@@ -64,6 +64,7 @@
 
 #define SND_QSIZE		SND_QUEUE_SIZE4
 #define SND_QUEUE_LEN		(1ULL << (SND_QSIZE + 10))
+#define MAX_SND_QUEUE_LEN	(1ULL << (SND_QUEUE_SIZE6 + 10))
 #define SND_QUEUE_THRESH	2ULL
 #define MIN_SQ_DESC_PER_PKT_XMIT	2
 /* Since timestamp not enabled, otherwise 2 */
@@ -72,10 +73,11 @@
 #define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
 #define CMP_QUEUE_CQE_THRESH	0
-#define CMP_QUEUE_TIMER_THRESH	2 /* 0.02 ms */
+#define CMP_QUEUE_TIMER_THRESH	20 /* 20 usecs */
 
 #define RBDR_SIZE		RBDR_SIZE0
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))
+#define MAX_RCV_BUF_COUNT	(1ULL << (RBDR_SIZE6 + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define DMA_BUFFER_LEN		2048 /* In multiples of 128bytes */
 #define RCV_FRAG_LEN		(SKB_DATA_ALIGN(DMA_BUFFER_LEN + NET_SKB_PAD) +\
@@ -277,7 +279,6 @@ struct rcv_queue {
 
 struct cmp_queue {
 	bool		enable;
-	uint16_t	intr_timer_thresh;
 	uint16_t	thresh;
 	spinlock_t	lock;  /* lock to serialize processing CQEs */
 	void		*desc;
