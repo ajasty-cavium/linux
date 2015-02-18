@@ -241,8 +241,6 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
 		nic->node = mbx.data.nic_cfg.node_id;
-		memcpy(nic->netdev->dev_addr, mbx.data.nic_cfg.mac_addr,
-			ETH_ALEN);
 		break;
 	case NIC_PF_VF_MSG_ACK:
 		pf_acked = true;

@@ -326,8 +326,8 @@ struct nicpf {
 struct nic_cfg_msg {
 	uint64_t   vf_id;
 	uint64_t   tns_mode;
-	uint8_t   mac_addr[6];
-	uint64_t    node_id;
+	uint64_t   mac_addr;
+	uint64_t   node_id;
 };
 
 /* Qset configuration */
