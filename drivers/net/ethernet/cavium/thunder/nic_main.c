@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/of.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -134,6 +135,58 @@ static int nic_send_msg_to_vf(struct nicpf *nic, int vf,
 	return 0;
 }
 
+/* Function to read MAC addresses from DTS.
+ * If not found random MACs will be used by VF interface
+ */
+static int nic_get_mac_addresses(struct nicpf *nic)
+{
+	struct device_node *np, *np_child;
+	uint32_t  nplen;
+	uint8_t  *np_ptr = NULL, node[10], next_range_off = 10;
+	uint32_t  i, mac_count = 0, range, mac_range;
+	uint64_t  start_mac = 0, next_mac  = 0;
+
+	np = of_find_node_by_name(NULL, "ethernet-macs");
+	if (!np)
+		return 0;
+
+	sprintf(node, "node%d", nic->node);
+	np_child = of_get_child_by_name(np, node);
+	if (!np_child)
+		return 0;
+
+	np_ptr = (uint8_t *)of_get_property(np_child, "mac", &nplen);
+	if (!np_ptr)
+		return 0;
+
+	for (range = 0; range < nplen; range = range + next_range_off) {
+		/* get first mac into cpu format */
+		memcpy(&start_mac, np_ptr + range, 8);
+#ifdef __BIG_ENDIAN_BITFIELD
+		start_mac = start_mac >> 16; /* MACADDR is only 48bits */
+#else
+		start_mac = start_mac << 16;
+#endif
+		start_mac = be64_to_cpu(start_mac);
+		next_mac  = start_mac;
+		/* get range length for given range */
+		mac_range = be32_to_cpup((uint32_t *)(np_ptr + range +
+					ETH_ALEN));
+		for (i = 0; i < mac_range; i++) {
+#ifdef __BIG_ENDIAN_BITFIELD
+			nic->mac[mac_count++] =
+				cpu_to_be64(next_mac) << 16;
+#else
+			nic->mac[mac_count++] =
+				cpu_to_be64(next_mac) >> 16;
+#endif
+			next_mac++;
+		}
+	}
+
+	return 1;
+}
+
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
@@ -146,7 +199,8 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_MODE;
 	else
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
-
+	ether_addr_copy((uint8_t *)&mbx.data.nic_cfg.mac_addr,
+			(uint8_t *)&nic->mac[vf]);
 	mbx.data.nic_cfg.node_id = nic->node;
 	nic_send_msg_to_vf(nic, vf, &mbx, false);
 }
@@ -822,6 +876,9 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Configure SRIOV */
 	if (!nic_sriov_init(pdev, nic))
 		goto err_unmap_resources;
+
+	if (!nic_get_mac_addresses(nic))
+		dev_info(&pdev->dev, " Mac node not present in dts\n");
 
 	goto exit;
 

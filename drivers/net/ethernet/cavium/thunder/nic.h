@@ -279,6 +279,7 @@ struct nicpf {
 	uint8_t			vf_lmac_map[MAX_LMAC];
 	uint16_t		cpi_base[MAX_NUM_VFS_SUPPORTED];
 	uint16_t		rss_ind_tbl_size;
+	uint64_t mac[MAX_NUM_VFS_SUPPORTED];
 
 	/* MSI-X */
 	bool			msix_enabled;
