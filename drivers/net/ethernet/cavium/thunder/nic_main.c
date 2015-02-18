@@ -142,11 +142,16 @@ static int nic_send_msg_to_vf(struct nicpf *nic, int vf,
 
 /*  To get mac ids from dts file
 *
+*  @mac_address  :  pointer to structure  to store macs
+*
 *    This function will parse the dts file for mac address
 *    get  N number of mac address from  dts in sequence and store
 *    these mac id's in " mac_address" structure.
 *    If node node not found, then by default all macs in structure
 *    zeros.
+
+*    Note :  N is total number of lmacs (LMAC_EN_COUNT)  provided to kernel
+*    from firmware.
 */
 
 static int  set_lmac_address(struct nicpf *nic)
