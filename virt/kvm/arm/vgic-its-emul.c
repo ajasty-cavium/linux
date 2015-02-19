@@ -107,7 +107,7 @@ static bool handle_mmio_cq_base(struct kvm_vcpu *vcpu,
 		} else {
 			its->cq_cachable = ((reg >> 27) & 0x7);
 			its->cq_valid = ((reg >> 31) & 0x1);
-			its->cq_base |= (reg & 0xffff);
+			its->cq_base |= ((u64)(reg & 0xffff)) << 20;
 		}
 		if (its->cq_valid) {
 			/* clear read offset, may be re enabling*/
