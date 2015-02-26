@@ -804,6 +804,8 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 
 static void bgx_set_num_ports(struct bgx *bgx)
 {
+	uint64_t lmac_count;
+
 	switch (bgx->qlm_mode) {
 	case QLM_MODE_SGMII:
 		bgx->lmac_count = 4;
@@ -846,6 +848,14 @@ static void bgx_set_num_ports(struct bgx *bgx)
 		bgx->lmac_count = 0;
 		break;
 	}
+
+	/* Check if low level firmware has programmed LMAC count
+	 * based on board type, if yes consider that otherwise
+	 * the default static values
+	 */
+	lmac_count = bgx_reg_read(bgx, 0, BGX_CMR_RX_LMACS);
+	if (lmac_count != 4)
+		bgx->lmac_count = lmac_count;
 }
 
 /* Most of this will eventually need to be set by bootloader */
