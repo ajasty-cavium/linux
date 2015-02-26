@@ -736,7 +736,8 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003800 0x0 0x30>;
 
-		phy0: sgmii0 {
+		sgmii00: sgmii00 {
+			qlm-mode = "0,sgmii";
 			reg = <0> ;
 			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
 			/* LED[2,1]: Speed, LED[3]: RX, LED[0]: TX, all open-drain */
@@ -746,38 +747,81 @@
 					<3 0x13 0 0x8a08>;
 
 		};
-		phy1: sgmii1 {
+		sgmii01: sgmii01 {
+			qlm-mode = "0,sgmii";
 			reg = <1> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 		};
-		phy2: sgmii2 {
+		sgmii02: sgmii02 {
+			qlm-mode = "0,sgmii";
 			reg = <2> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 
 		};
-		phy3: sgmii3 {
+		sgmii03: sgmii03 {
+			qlm-mode = "0,sgmii";
 			reg = <3> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 		};
-
-		/* For XAUI */
-		/* phy100: xaui0 {
+		xfi00: xfi00 {
+			qlm-mode = "0,xfi","0,xfi-10g-kr";
 			reg = <0> ;
-			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi01: xfi01 {
+			qlm-mode = "0,xfi","0,xfi-10g-kr";
+			reg = <1> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi02: xfi02 {
+			qlm-mode = "0,xfi","0,xfi-10g-kr";
+			reg = <2> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi03: xfi03 {
+			qlm-mode = "0,xfi","0,xfi-10g-kr";
+			reg = <3> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xlaui00: xlaui00 {
+			qlm-mode = "0,xlaui","0,xlaui-40g-kr";
+			reg = <0> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xaui00: xaui00 {
+			qlm-mode = "0,xaui";
+			reg = <0> ;
+			compatible = "broadcom,bcm8706",
+					"ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
-		}; */
+		};
+		rxaui00: rxaui00 {
+			qlm-mode = "0,rxaui";
+			reg = <0> ;
+			compatible = "marvell,88x3120",
+					"ethernet-phy-ieee802.3-c45";
+		};
+		rxaui01: rxaui01 {
+			qlm-mode = "0,rxaui";
+			reg = <1> ;
+			compatible =  "marvell,88x3120",
+					"ethernet-phy-ieee802.3-c45";
+		};
 	};
 
 	mdio@0x87e00,5003880 {
@@ -786,45 +830,91 @@
 		#size-cells = <0>;
 		reg = <0x87e0 0x05003880 0x0 0x30>;
 
-		phy4: sgmii4 {
+		sgmii10: sgmii10 {
+			qlm-mode = "1,sgmii";
 			reg = <4> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 		};
-		phy5: sgmii5 {
+		sgmii11: sgmii11 {
+			qlm-mode = "1,sgmii";
 			reg = <5> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 
 		};
-		phy6: sgmii6 {
+		sgmii12: sgmii12 {
+			qlm-mode = "1,sgmii";
 			reg = <6> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 		};
-		phy7: sgmii7 {
+		sgmii13: sgmii13 {
+			qlm-mode = "1,sgmii";
 			reg = <7> ;
-			compatible = "marvell,88e1240", "ethernet-phy-ieee802.3-c22";
+			compatible = "marvell,88e1240",
+					"ethernet-phy-ieee802.3-c22";
 			marvell,reg-init = <3 0x10 0 0x8665>,
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
 		};
-		/* For XAUI */
-		/* phy104: xaui1 {
+		xfi10: xfi10 {
+			qlm-mode = "1,xfi","1,xfi-10g-kr";
+			reg = <0> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi11: xfi11 {
+			qlm-mode = "1,xfi","1,xfi-10g-kr";
+			reg = <1> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi12: xfi12 {
+			qlm-mode = "1,xfi","1,xfi-10g-kr";
+			reg = <2> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xfi13: xfi13 {
+			qlm-mode = "1,xfi","1,xfi-10g-kr";
+			reg = <3> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xlaui10: xlaui10 {
+			qlm-mode = "1,xlaui","1,xlaui-40g-kr";
+			reg = <0> ;
+			compatible = "cortina,cs4223-slice";
+		};
+		xaui10: xaui10 {
+			qlm-mode = "1,xaui";
 			reg = <4> ;
-			compatible = "broadcom,bcm8706", "ethernet-phy-ieee802.3-c45";
+			compatible = "broadcom,bcm8706",
+					"ethernet-phy-ieee802.3-c45";
 			broadcom,c45-reg-init = <1 0xc808 0xff8f 0x70>;
-		}; */
+		};
+		rxaui10: rxaui10 {
+			qlm-mode = "1,rxaui";
+			reg = <0> ;
+			compatible = "marvell,88x3120",
+					"ethernet-phy-ieee802.3-c45";
+		};
+		rxaui11: rxaui11 {
+			qlm-mode = "1,rxaui";
+			reg = <1> ;
+			compatible =  "marvell,88x3120",
+					"ethernet-phy-ieee802.3-c45";
+		};
 	};
 
 	/**BGX0**/
@@ -832,56 +922,154 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x87e0 0xe0000000 0x0 0x1000000>;
-
-		lmac0 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy0>;
+		/* typename+qlm+typenumber eg :
+		   sgmii+bgx0+sgmii0
+		 */
+		// SGMII
+		sgmii00 {
+			qlm-mode = "0,sgmii";
+			phy-handle = <&sgmii00>;
 		};
-		lmac1 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy1>;
+		sgmii01 {
+			qlm-mode = "0,sgmii";
+			phy-handle = <&sgmii01>;
 		};
-		lmac2 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy2>;
+		sgmii02 {
+			qlm-mode = "0,sgmii";
+			phy-handle = <&sgmii02>;
 		};
-		lmac3 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy3>;
+		sgmii03 {
+			qlm-mode = "0,sgmii";
+			phy-handle = <&sgmii03>;
 		};
-		/* For XAUI */
-		/*  lmac0 {
+		xfi00 {
+			qlm-mode = "0,xfi";
+			phy-handle = <&xfi00>;
+		};
+		xfi01 {
+			qlm-mode = "0,xfi";
+			phy-handle = <&xfi01>;
+		};
+		xfi02 {
+			qlm-mode = "0,xfi";
+			phy-handle = <&xfi02>;
+		};
+		xfi03 {
+			qlm-mode = "0,xfi";
+			phy-handle = <&xfi03>;
+		};
+		// 10g-kr
+		xfi-10g-kr00 {
+			qlm-mode = "0,xfi-10g-kr";
+			phy-handle = <&xfi00>;
+		};
+		xfi-10g-kr01 {
+			qlm-mode = "0,xfi-10g-kr";
+			phy-handle = <&xfi01>;
+		};
+		xfi-10g-kr02 {
+			qlm-mode = "0,xfi-10g-kr";
+			phy-handle = <&xfi02>;
+		};
+		xfi-10g-kr03 {
+			qlm-mode = "0,xfi-10g-kr";
+			phy-handle = <&xfi03>;
+		};
+		xlaui00 {
+			qlm-mode = "0,xlaui";
+			phy-handle = <&xlaui00>;
+			};
+		xlaui-40g-kr00 {
+			qlm-mode = "0,xlaui-40g-kr";
+			phy-handle = <&xlaui00>;
+			};
+		xaui00 {
+			qlm-mode = "0,xaui";
+			phy-handle = <&xaui00>;
+		};
+		rxaui00 {
+			qlm-mode = "0,rxaui";
+			phy-handle = <&rxaui00>;
+		};
+		rxaui01 {
+			qlm-mode = "0,rxaui";
 			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy100>;
-		}; */
+			phy-handle = <&rxaui01>;
+		};
 	};
-
 	/**BGX1**/
 	bgx1 {
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x87e0 0xe1000000 0x0 0x1000000>;
-
-		lmac0 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy4>;
+		sgmii10 {
+			qlm-mode = "1,sgmii";
+			phy-handle = <&sgmii10>; /*"sgmmi"+bgx+no */
 		};
-		lmac1 {
-			phy-handle = <&phy5>;
-			local-mac-address = [ 00 00 00 00 00 00 ];
+		sgmii11 {
+			qlm-mode = "1,sgmii";
+			phy-handle = <&sgmii11>;
 		};
-		lmac2 {
-			phy-handle = <&phy6>;
-			local-mac-address = [ 00 00 00 00 00 00 ];
+		sgmii12 {
+			qlm-mode = "1,sgmii";
+			phy-handle = <&sgmii12>;
 		};
-		lmac3 {
-			phy-handle = <&phy7>;
-			local-mac-address = [ 00 00 00 00 00 00 ];
+		sgmii13 {
+			qlm-mode = "1,sgmii";
+			phy-handle = <&sgmii13>;
 		};
-		/* For XAUI */
-		/*  lmac0 {
-			local-mac-address = [ 00 00 00 00 00 00 ];
-			phy-handle = <&phy104>;
-		}; */
+		xfi10 {
+			qlm-mode = "1,xfi";
+			phy-handle = <&xfi10>;
+		};
+		xfi11 {
+			qlm-mode = "1,xfi";
+			phy-handle = <&xfi11>;
+		};
+		xfi12 {
+			qlm-mode = "1,xfi";
+			phy-handle = <&xfi12>;
+		};
+		xfi13 {
+			qlm-mode = "1,xfi";
+			phy-handle = <&xfi13>;
+		};
+		// 10g_kr
+		xfi-10g-kr10 {
+			qlm-mode = "1,xfi-10g-kr";
+			phy-handle = <&xfi10>;
+		};
+		xfi-10g-kr11 {
+			qlm-mode = "1,xfi-10g-kr";
+			phy-handle = <&xfi11>;
+		};
+		xfi-10g-kr12 {
+			qlm-mode = "1,xfi-10g-kr";
+			phy-handle = <&xfi12>;
+		};
+		xfi-10g-kr13 {
+			qlm-mode = "1,xfi-10g-kr";
+			phy-handle = <&xfi13>;
+		};
+		xlaui10 {
+			qlm-mode = "1,xlaui";
+			phy-handle = <&xlaui10>;
+			};
+		xlaui-40g-kr-10 {
+			qlm-mode = "1,xlaui-40g-kr";
+			phy-handle = <&xlaui10>;
+			};
+		xaui10 {
+			qlm-mode = "1,xaui";
+			phy-handle = <&xaui10>;
+		};
+		rxaui10 {
+			qlm-mode = "1,rxaui";
+			phy-handle = <&rxaui10>;
+		};
+		rxaui11 {
+			qlm-mode = "1,rxaui";
+			phy-handle = <&rxaui11>;
+		};
 	};
 };
