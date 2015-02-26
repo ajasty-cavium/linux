@@ -499,7 +499,13 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, int lmacid, int lmac_type)
 	bgx_reg_write(bgx, lmacid, BGX_CMRX_CFG, cfg);
 
 	bgx_reg_modify(bgx, lmacid, BGX_SPUX_CONTROL1, SPU_CTL_LOW_POWER);
-	bgx_reg_modify(bgx, lmacid, BGX_SPUX_MISC_CONTROL, SPU_MISC_CTL_RX_DIS);
+	/* Set interleaved running disparity for RXAUI */
+	if (bgx->lmac_type != BGX_MODE_RXAUI)
+		bgx_reg_modify(bgx, lmacid,
+			       BGX_SPUX_MISC_CONTROL, SPU_MISC_CTL_RX_DIS);
+	else
+		bgx_reg_modify(bgx, lmacid, BGX_SPUX_MISC_CONTROL,
+			       SPU_MISC_CTL_RX_DIS | SPU_MISC_CTL_INTLV_RDISP);
 
 	/* clear all interrupts */
 	cfg = bgx_reg_read(bgx, lmacid, BGX_SMUX_RX_INT);

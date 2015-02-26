@@ -99,6 +99,7 @@
 #define SPU_AN_CTL_XNP_EN			(1ull << 13)
 #define BGX_SPUX_AN_ADV			0x100D8
 #define BGX_SPUX_MISC_CONTROL		0x10218
+#define SPU_MISC_CTL_INTLV_RDISP		(1ull << 10)
 #define SPU_MISC_CTL_RX_DIS			(1ull << 12)
 #define BGX_SPUX_INT			0x10220	/* +(0..3) << 20 */
 #define BGX_SPUX_INT_W1S		0x10228
