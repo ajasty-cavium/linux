@@ -7,23 +7,17 @@
  *
  * Portions Copyright (C) 2010, 2011 Cavium Networks, Inc.
  *
- * This is a driver for the i2c adapter in Cavium Networks' OCTEON processors.
- *
  * This file is licensed under the terms of the GNU General Public
  * License version 2. This program is licensed "as is" without any
  * warranty of any kind, whether express or implied.
  */
 
-#include <linux/platform_device.h>
+#include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/delay.h>
-#include <linux/sched.h>
-#include <linux/slab.h>
 #include <linux/i2c.h>
-#include <linux/io.h>
+#include <linux/delay.h>
 #include <linux/of.h>
 
 #define DRV_NAME "i2c-thunderx"
@@ -101,7 +95,7 @@ static const struct pci_device_id thunderx_i2c_id_table[] = {
 };
 
 MODULE_AUTHOR("Cavium Inc");
-MODULE_DESCRIPTION("Cavium Thunder I2C Driver");
+MODULE_DESCRIPTION("Cavium ThunderX I2C Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, thunderx_i2c_id_table);
@@ -473,7 +467,7 @@ static const struct i2c_algorithm thunderx_i2c_algo = {
 
 static struct i2c_adapter thunderx_i2c_ops = {
 	.owner = THIS_MODULE,
-	.name = "OCTEON adapter",
+	.name = "ThunderX adapter",
 	.algo = &thunderx_i2c_algo,
 	.timeout = HZ / 50,
 };
@@ -568,13 +562,6 @@ static int thunderx_i2c_probe(struct pci_dev *pdev, const struct pci_device_id *
 	int result = 0;
 	struct device *dev = &pdev->dev;
 	struct thunderx_i2c *i2c;
-
-#if 0
-	/* All adaptors have an irq.  */
-	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
-#endif
 
 	i2c = devm_kzalloc(&pdev->dev, sizeof(*i2c), GFP_KERNEL);
 	if (!i2c) {
@@ -691,18 +678,5 @@ static struct pci_driver thunderx_i2c_driver = {
 	.remove		= thunderx_i2c_remove,
 };
 
-static int __init thunderx_i2c_init_module(void)
-{
-	pr_info("%s, ver %s\n", DRV_NAME, DRV_VERSION);
-
-	return pci_register_driver(&thunderx_i2c_driver);
-}
-
-static void __exit thunderx_i2c_cleanup_module(void)
-{
-	pci_unregister_driver(&thunderx_i2c_driver);
-}
-
-module_init(thunderx_i2c_init_module);
-module_exit(thunderx_i2c_cleanup_module);
+module_pci_driver(thunderx_i2c_driver)
 
