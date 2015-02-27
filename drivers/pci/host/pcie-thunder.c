@@ -1146,7 +1146,7 @@ err_get_host:
 	devm_ioremap_release(pcie->dev, pcie->cfg_base);
 err_ioremap:
 	of_node_put(pcie->node);
-	kfree(pcie);
+	devm_kfree(&pdev->dev, pcie);
 	return ret;
 }
 
