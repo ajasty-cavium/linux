@@ -27,12 +27,7 @@
 
 /* Supported devices */
 static const struct pci_device_id nicvf_id_table[] = {
-	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_CAVIUM,
-			 PCI_DEVICE_ID_THUNDER_NIC_VF,
-			 PCI_VENDOR_ID_CAVIUM, 0xA11E) },
-	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_CAVIUM,
-			 PCI_DEVICE_ID_THUNDER_PASS1_NIC_VF,
-			 PCI_VENDOR_ID_CAVIUM, 0xA11E) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_VF) },
 	{ 0, }  /* end of table */
 };
 
