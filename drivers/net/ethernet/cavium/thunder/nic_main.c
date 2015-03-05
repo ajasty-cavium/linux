@@ -79,59 +79,29 @@ static void nic_clear_mbx_intr(struct nicpf *nic, int vf, int mbx_reg)
 
 static uint64_t nic_get_mbx_addr(int vf)
 {
-	return NIC_PF_VF_0_127_MAILBOX_0_7 + (vf << NIC_VF_NUM_SHIFT);
+	return NIC_PF_VF_0_127_MAILBOX_0_1 + (vf << NIC_VF_NUM_SHIFT);
 }
 
-static int nic_lock_mbox(struct nicpf *nic, int vf)
+static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 {
-	int timeout = NIC_PF_VF_MBX_TIMEOUT;
-	int sleep = 10;
-	uint64_t lock, mbx_addr;
-
-	mbx_addr = nic_get_mbx_addr(vf) + NIC_PF_VF_MBX_LOCK_OFFSET;
-	lock = NIC_PF_VF_MBX_LOCK_VAL(nic_reg_read(nic, mbx_addr));
-	while (lock) {
-		msleep(sleep);
-		lock = NIC_PF_VF_MBX_LOCK_VAL(nic_reg_read(nic, mbx_addr));
-		timeout -= sleep;
-		if (!timeout) {
-			netdev_err(nic->netdev, "PF couldn't lock mailbox\n");
-			return 0;
-		}
-	}
-	lock = nic_reg_read(nic, mbx_addr);
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MBX_LOCK_SET(lock));
-	return 1;
-}
-
-void nic_release_mbx(struct nicpf *nic, int vf)
-{
-	uint64_t mbx_addr, lock;
-
-	mbx_addr = nic_get_mbx_addr(vf) + NIC_PF_VF_MBX_LOCK_OFFSET;
-	lock = nic_reg_read(nic, mbx_addr);
-	nic_reg_write(nic, mbx_addr, NIC_PF_VF_MBX_LOCK_CLEAR(lock));
-}
-
-static int nic_send_msg_to_vf(struct nicpf *nic, int vf,
-			      struct nic_mbx *mbx, bool lock_needed)
-{
-	int i;
 	uint64_t *msg;
 	uint64_t mbx_addr;
 
-	if (lock_needed && (!nic_lock_mbox(nic, vf)))
-		return -EBUSY;
-
-	mbx->mbx_trigger_intr = 1;
 	msg = (uint64_t *)mbx;
 	mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
 
-	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++)
-		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
+	/* In first revision HW, mbox interrupt is triggerred
+	 * when PF writes to MBOX(1), in next revisions when
+	 * PF writes to MBOX(0)
+	 */
+	if (nic->rev_id == 0) {
+		writeq_relaxed(*(msg), (void *)mbx_addr);
+		writeq_relaxed(*(msg + 1), (void *)(mbx_addr + 8));
+	} else {
+		writeq_relaxed(*(msg + 1), (void *)(mbx_addr + 8));
+		writeq_relaxed(*(msg), (void *)mbx_addr);
+	}
 
-	if (lock_needed)
-		nic_release_mbx(nic, vf);
 	return 0;
 }
 
@@ -202,7 +172,7 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 	ether_addr_copy((uint8_t *)&mbx.data.nic_cfg.mac_addr,
 			(uint8_t *)&nic->mac[vf]);
 	mbx.data.nic_cfg.node_id = nic->node;
-	nic_send_msg_to_vf(nic, vf, &mbx, false);
+	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
 static void nic_mbx_send_ack(struct nicpf *nic, int vf)
@@ -210,7 +180,7 @@ static void nic_mbx_send_ack(struct nicpf *nic, int vf)
 	struct nic_mbx mbx = {};
 
 	mbx.msg = NIC_PF_VF_MSG_ACK;
-	nic_send_msg_to_vf(nic, vf, &mbx, false);
+	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
 static void nic_mbx_send_nack(struct nicpf *nic, int vf)
@@ -218,7 +188,7 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 	struct nic_mbx mbx = {};
 
 	mbx.msg = NIC_PF_VF_MSG_NACK;
-	nic_send_msg_to_vf(nic, vf, &mbx, false);
+	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
 /* Handle Mailbox messages from VF and ack the message. */
@@ -238,10 +208,9 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nic_reg_read(nic, mbx_addr);
 		mbx_data++;
-		mbx_addr += NIC_PF_VF_MAILBOX_SIZE;
+		mbx_addr += sizeof(uint64_t);
 	}
 
-	mbx.msg &= NIC_PF_VF_MBX_MSG_MASK;
 	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
 		__func__, mbx.msg, vf);
 	switch (mbx.msg) {
@@ -355,7 +324,7 @@ static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 	else
 		mbx.data.bgx_stats.stats = bgx_get_tx_stats(bgx_idx,
 							    lmac, bgx->idx);
-	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx, false);
+	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx);
 }
 
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
@@ -499,7 +468,7 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_BP_CFG | (chan << 3),
 		      (1ull << 63) | (vnic << 0));
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3),
-		      (cfg->cpi_alg << 62) | (cpi_base << 48));
+		      ((uint64_t)cfg->cpi_alg << 62) | (cpi_base << 48));
 
 	if (cfg->cpi_alg == CPI_ALG_NONE)
 		cpi_count = 1;
@@ -549,10 +518,13 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 static void nic_send_rss_size(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
+	uint64_t  *msg;
+
+	msg = (uint64_t *)&mbx;
 
 	mbx.msg = NIC_PF_VF_MSG_RSS_SIZE;
 	mbx.data.rss_size.ind_tbl_size = nic->rss_ind_tbl_size;
-	nic_send_msg_to_vf(nic, vf, &mbx, false);
+	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
 static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
@@ -857,6 +829,9 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		err = -ENOMEM;
 		goto err_release_regions;
 	}
+
+	pci_read_config_byte(pdev, PCI_REVISION_ID, &nic->rev_id);
+
 	nic->node = NIC_NODE_ID(pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM));
 
 	/* By default set NIC in TNS bypass mode */

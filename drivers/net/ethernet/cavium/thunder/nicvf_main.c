@@ -129,56 +129,20 @@ static bool pf_acked;
 static bool pf_nacked;
 static bool bgx_stats_acked;
 
-int nicvf_lock_mbox(struct nicvf *nic)
-{
-	int timeout = NIC_PF_VF_MBX_TIMEOUT;
-	int sleep = 10;
-	uint64_t lock, mbx_addr;
-
-	mbx_addr = NIC_VF_PF_MAILBOX_0_7 + NIC_PF_VF_MBX_LOCK_OFFSET;
-	lock = NIC_PF_VF_MBX_LOCK_VAL(nicvf_reg_read(nic, mbx_addr));
-	while (lock) {
-		msleep(sleep);
-		lock = NIC_PF_VF_MBX_LOCK_VAL(nicvf_reg_read(nic, mbx_addr));
-		timeout -= sleep;
-		if (!timeout) {
-			netdev_err(nic->netdev,
-				   "VF%d Couldn't lock mailbox\n", nic->vf_id);
-			return 0;
-		}
-	}
-	nicvf_reg_write(nic, mbx_addr, NIC_PF_VF_MBX_LOCK_SET(lock));
-	return 1;
-}
-
-void nicvf_release_mbx(struct nicvf *nic)
-{
-	uint64_t mbx_addr, lock;
-
-	mbx_addr = NIC_VF_PF_MAILBOX_0_7 + NIC_PF_VF_MBX_LOCK_OFFSET;
-	lock = nicvf_reg_read(nic, mbx_addr);
-	nicvf_reg_write(nic, mbx_addr, NIC_PF_VF_MBX_LOCK_CLEAR(lock));
-}
-
 int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
-	int i, timeout = NIC_PF_VF_MBX_TIMEOUT;
+	int timeout = NIC_PF_VF_MBX_TIMEOUT;
 	int sleep = 10;
 	uint64_t *msg;
 	uint64_t mbx_addr;
 
-	if (!nicvf_lock_mbox(nic))
-		return -EBUSY;
-
 	pf_acked = false;
 	pf_nacked = false;
-	mbx->mbx_trigger_intr = 1;
 	msg = (uint64_t *)mbx;
-	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_7;
+	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_1;
 
-	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++)
-		writeq_relaxed(*(msg + i), (void *)(mbx_addr + (i * 8)));
-	nicvf_release_mbx(nic);
+	writeq_relaxed(*(msg), (void *)mbx_addr);
+	writeq_relaxed(*(msg + 1), (void *)(mbx_addr + 8));
 
 	/* Wait for previous message to be acked, timeout 2sec */
 	while (!pf_acked) {
@@ -204,11 +168,11 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 static int nicvf_check_pf_ready(struct nicvf *nic)
 {
 	int timeout = 5000, sleep = 20;
-	uint64_t mbx_addr = NIC_VF_PF_MAILBOX_0_7;
+	uint64_t mbx_addr = NIC_VF_PF_MAILBOX_0_1;
 
 	pf_ready_to_rcv_msg = false;
 
-	nicvf_reg_write(nic, mbx_addr, NIC_PF_VF_MSG_READY);
+	nicvf_reg_write(nic, mbx_addr, le64_to_cpu(NIC_PF_VF_MSG_READY));
 
 	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
 	nicvf_reg_write(nic, mbx_addr, 1ULL);
@@ -234,18 +198,18 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 	uint64_t mbx_addr;
 	int i;
 
-	mbx_addr = NIC_VF_PF_MAILBOX_0_7;
+	mbx_addr = NIC_VF_PF_MAILBOX_0_1;
 	mbx_data = (uint64_t *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nicvf_reg_read(nic, mbx_addr);
 		mbx_data++;
-		mbx_addr += NIC_PF_VF_MAILBOX_SIZE;
+		mbx_addr += sizeof(uint64_t);
 	}
 
 	nic_dbg(&nic->pdev->dev,
 		"Mbox message from PF, msg 0x%x\n", mbx.msg);
-	switch (mbx.msg & NIC_PF_VF_MBX_MSG_MASK) {
+	switch (mbx.msg) {
 	case NIC_PF_VF_MSG_READY:
 		pf_ready_to_rcv_msg = true;
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;

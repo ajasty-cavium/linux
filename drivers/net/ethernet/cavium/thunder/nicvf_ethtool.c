@@ -263,7 +263,7 @@ static void nicvf_get_regs(struct net_device *dev,
 	/* Mailbox registers */
 	for (mbox = 0; mbox < NIC_PF_VF_MAILBOX_SIZE; mbox++)
 		p[i++] = nicvf_reg_read(nic,
-					NIC_VF_PF_MAILBOX_0_7 | (mbox << 3));
+					NIC_VF_PF_MAILBOX_0_1 | (mbox << 3));
 
 	p[i++] = nicvf_reg_read(nic, NIC_VF_INT);
 	p[i++] = nicvf_reg_read(nic, NIC_VF_INT_W1S);

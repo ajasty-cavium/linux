@@ -268,6 +268,7 @@ struct nicvf {
 struct nicpf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
+	uint8_t			rev_id;
 #define NIC_NODE_ID_MASK	0x300000000000
 #define NIC_NODE_ID(x)		((x & NODE_ID_MASK) >> 44)
 	uint8_t			node;
@@ -299,7 +300,7 @@ struct nicpf {
  */
 
 /* PF <--> VF mailbox communication */
-#define	NIC_PF_VF_MAILBOX_SIZE		8
+#define	NIC_PF_VF_MAILBOX_SIZE		2
 #define	NIC_PF_VF_MBX_TIMEOUT		2000 /* ms */
 
 /* Mailbox message types */
@@ -321,96 +322,90 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_BGX_STATS		0x10
 
 struct nic_cfg_msg {
-	uint64_t   vf_id;
-	uint64_t   tns_mode;
+	uint8_t    vf_id;
+	uint8_t    tns_mode;
+	uint8_t    node_id;
+	uint8_t    unused0;
+	uint16_t   unused1;
 	uint64_t   mac_addr;
-	uint64_t   node_id;
-};
+} __packed;
 
 /* Qset configuration */
 struct qs_cfg_msg {
-	uint64_t   num;
+	uint8_t    num;
+	uint8_t    unused0;
+	uint32_t   unused1;
 	uint64_t   cfg;
-};
+} __packed;
 
 /* Receive queue configuration */
 struct rq_cfg_msg {
-	uint64_t   qs_num;
-	uint64_t   rq_num;
+	uint8_t    qs_num;
+	uint8_t    rq_num;
+	uint32_t   unused0;
 	uint64_t   cfg;
-};
+} __packed;
 
 /* Send queue configuration */
 struct sq_cfg_msg {
-	uint64_t   qs_num;
-	uint64_t   sq_num;
+	uint8_t    qs_num;
+	uint8_t    sq_num;
+	uint32_t   unused0;
 	uint64_t   cfg;
-};
+} __packed;
 
 /* Set VF's MAC address */
 struct set_mac_msg {
-	uint64_t   vf_id;
+	uint8_t    vf_id;
+	uint8_t    unused0;
+	uint32_t   unused1;
 	uint64_t   addr;
-};
+} __packed;
 
 /* Set Maximum frame size */
 struct set_frs_msg {
-	uint64_t   vf_id;
-	uint64_t   max_frs;
+	uint8_t    vf_id;
+	uint16_t   max_frs;
 };
 
 /* Set CPI algorithm type */
 struct cpi_cfg_msg {
-	uint64_t   vf_id;
-	uint64_t   rq_cnt;
-	uint64_t   cpi_alg;
+	uint8_t    vf_id;
+	uint8_t    rq_cnt;
+	uint8_t    cpi_alg;
 };
 
 #ifdef VNIC_RSS_SUPPORT
 /* Get RSS table size */
 struct rss_sz_msg {
-	uint64_t   vf_id;
-	uint64_t   ind_tbl_size;
+	uint8_t    vf_id;
+	uint16_t   ind_tbl_size;
 };
 
 /* Set RSS configuration */
 struct rss_cfg_msg {
-	uint8_t   vf_id;
-	uint8_t   hash_bits;
-	uint16_t  tbl_len;
-	uint16_t  tbl_offset;
-#define RSS_IND_TBL_LEN_PER_MBX_MSG	42
-	uint8_t   ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
-};
+	uint8_t    vf_id;
+	uint8_t    hash_bits;
+	uint8_t    tbl_len;
+	uint8_t    tbl_offset;
+	uint16_t   unused0;
+#define RSS_IND_TBL_LEN_PER_MBX_MSG	8
+	uint8_t    ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
+} __packed;
 #endif
 
 struct bgx_stats_msg {
 	uint8_t    vf_id;
 	uint8_t    rx;
 	uint8_t    idx;
-	uint8_t    rsvd0;
-	uint32_t   rsvd1;
+	uint8_t    unused0;
+	uint16_t   unused1;
 	uint64_t   stats;
-};
+} __packed;
 
-#define	NIC_PF_VF_MBX_MSG_MASK		0xFFFF
-#define	NIC_PF_VF_MBX_LOCK_OFFSET	0
-#define	NIC_PF_VF_MBX_LOCK_VAL(x)	((x >> 16) & 0xFFFF)
-#define	NIC_PF_VF_MBX_LOCK_CLEAR(x)	(x & ~(0xFFFF0000))
-#define	NIC_PF_VF_MBX_LOCK_SET(x)\
-	(NIC_PF_VF_MBX_LOCK_CLEAR(x) | (1 << 16))
-
-/* Maximum 8 64bit locations */
+/* 2 64bit locations */
 struct nic_mbx {
-#ifdef __BIG_ENDIAN_BITFIELD
-	uint64_t	   unused:32;
-	uint64_t	   mbx_lock:16;
-	uint64_t	   msg:16;
-#else
-	uint64_t	   msg:16;
-	uint64_t	   mbx_lock:16;
-	uint64_t	   unused:32;
-#endif
+	uint16_t   msg;
 	union	{
 		struct nic_cfg_msg	nic_cfg;
 		struct qs_cfg_msg	qs;
@@ -424,10 +419,8 @@ struct nic_mbx {
 		struct rss_cfg_msg	rss_cfg;
 #endif
 		struct bgx_stats_msg    bgx_stats;
-		uint64_t		rsvd[6];
 	} data;
-	uint64_t	   mbx_trigger_intr;
-} ____cacheline_aligned_in_smp;
+} __packed;
 
 int nicvf_set_real_num_queues(struct net_device *netdev,
 			      int tx_queues, int rx_queues);

@@ -114,7 +114,7 @@
 #define   NIC_PF_TL4_0_1023_SH_STATUS		(0x840000)
 #define   NIC_PF_TL4A_0_1023_CNM_RATE		(0x880000)
 #define   NIC_PF_TL4A_0_1023_CNM_STATUS		(0x8A0000)
-#define   NIC_PF_VF_0_127_MAILBOX_0_7		(0x20002000)
+#define   NIC_PF_VF_0_127_MAILBOX_0_1		(0x20002030)
 #define   NIC_PF_VNIC_0_127_TX_STAT_0_4		(0x20004000)
 #define   NIC_PF_VNIC_0_127_RX_STAT_0_13	(0x20004100)
 #define   NIC_PF_QSET_0_127_LOCK_0_15		(0x20006000)
@@ -133,7 +133,7 @@
 
 /* Virtual function register offsets */
 #define   NIC_VNIC_CFG				(0x000020)
-#define   NIC_VF_PF_MAILBOX_0_7			(0x000100)
+#define   NIC_VF_PF_MAILBOX_0_1			(0x000130)
 #define   NIC_VF_INT				(0x000200)
 #define   NIC_VF_INT_W1S			(0x000220)
 #define   NIC_VF_ENA_W1C			(0x000240)
