@@ -14,6 +14,7 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/compiler.h>
+#include <linux/nodemask.h>
 
 #define DRV_NAME		"thunderx-gti"
 #define DRV_VERSION		"1.0"
@@ -63,6 +64,9 @@ static int __noreturn gti_sync_kthread(void *arg)
 static int __init gti_init_module(void)
 {
 	struct task_struct *tsk;
+
+	if (nr_online_nodes == 1)
+		return  0;
 
 	pr_info("gti: %s, ver %s\n", DRV_NAME, DRV_VERSION);
 	tsk = kthread_run(gti_sync_kthread, NULL, "%s", "gti_sync");
