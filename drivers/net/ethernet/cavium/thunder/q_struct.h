@@ -2,7 +2,7 @@
  * This file contains HW queue descriptor formats, config register
  * structures e.t.c
  *
- * Copyright (C) 2014 Cavium, Inc.
+ * Copyright (C) 2015 Cavium, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
