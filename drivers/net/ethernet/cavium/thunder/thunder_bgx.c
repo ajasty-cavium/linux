@@ -49,20 +49,12 @@ struct bgx {
 	int			use_training;
 	u64			reg_base;
 	struct pci_dev		*pdev;
-
-	 /* MSI-X */
-	bool			msix_enabled;
-	u8			num_vec;
-	struct	msix_entry	msix_entries[BGX_MSIX_VECTORS];
-	char			irq_name[BGX_MSIX_VECTORS][20];
-	bool			irq_allocated[BGX_MSIX_VECTORS];
 } bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
 static int lmac_count = 0; /* Total no of LMACs in system */
 
 static int bgx_xaui_check_link(struct lmac *lmac);
-static void bgx_unregister_interrupts(struct bgx *bgx);
 
 /* Supported devices */
 static const struct pci_device_id bgx_id_table[] = {
@@ -145,18 +137,6 @@ int bgx_get_lmac_count(int node, int bgx_idx)
 	return 0;
 }
 EXPORT_SYMBOL(bgx_get_lmac_count);
-
-#ifdef LINK_INTR_ENABLE
-/* Link Interrupts APIs */
-static void bgx_enable_link_intr(struct bgx *bgx, u8 lmac)
-{
-	u64 val;
-
-	val = bgx_reg_read(bgx, lmac, BGX_SPUX_INT_ENA_W1S);
-	val |= (LMAC_INTR_LINK_UP | LMAC_INTR_LINK_DOWN);
-	bgx_reg_write(bgx, lmac, BGX_SPUX_INT_ENA_W1S, val);
-}
-#endif
 
 static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
@@ -269,61 +249,6 @@ void bgx_lmac_handler(struct net_device *netdev)
 	}
 }
 
-#ifdef LINK_INTR_ENABLE
-static irqreturn_t bgx_lmac_intr_handler (int irq, void *bgx_irq)
-{
-	struct bgx *bgx = (struct bgx *)bgx_irq;
-	u64 result;
-	u8 lmac;
-
-	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
-		result = bgx_reg_read(bgx, lmac, BGX_SPUX_INT);
-		if (result & LMAC_INTR_LINK_UP) {
-			bgx_reg_write(bgx, lmac, BGX_SPUX_INT,
-				      LMAC_INTR_LINK_UP);
-			dev_info(&bgx->pdev->dev, "lmac %d link is Up\n", lmac);
-			bgx->lmac[lmac].link_up = true;
-		}
-
-		if (result & LMAC_INTR_LINK_DOWN) {
-			bgx_reg_write(bgx, lmac, BGX_SPUX_INT,
-				      LMAC_INTR_LINK_DOWN);
-			dev_info(&bgx->pdev->dev,
-				 "lmac %d link is Down\n", lmac);
-			bgx->lmac[lmac].link_up = false;
-		}
-	}
-	return IRQ_HANDLED;
-}
-#endif
-
-static int bgx_enable_msix(struct bgx *bgx)
-{
-	int vec, ret;
-
-	bgx->num_vec = BGX_MSIX_VECTORS;
-	for (vec = 0; vec < bgx->num_vec; vec++)
-		bgx->msix_entries[vec].entry = vec;
-
-	ret = pci_enable_msix(bgx->pdev, bgx->msix_entries, bgx->num_vec);
-	if (ret) {
-		dev_err(&bgx->pdev->dev ,
-			"Request for #%d msix vectors failed\n", bgx->num_vec);
-		return 0;
-	}
-	bgx->msix_enabled = 1;
-	return 1;
-}
-
-static void bgx_disable_msix(struct bgx *bgx)
-{
-	if (bgx->msix_enabled) {
-		pci_disable_msix(bgx->pdev);
-		bgx->msix_enabled = 0;
-		bgx->num_vec = 0;
-	}
-}
-
 u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
 {
 	struct bgx *bgx;
@@ -343,49 +268,6 @@ u64 bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
 	return bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT0 + (idx * 8));
 }
 EXPORT_SYMBOL(bgx_get_tx_stats);
-
-static int bgx_register_interrupts(struct bgx *bgx, u8 lmac)
-{
-#ifdef LINK_INTR_ENABLE
-	int irq, ret = 0;
-
-	/* Register only link interrupts now */
-	irq = SPUX_INT + (lmac * BGX_LMAC_VEC_OFFSET);
-	sprintf(bgx->irq_name[irq], "BGX%d-LMAC%d", bgx->bgx_id, lmac);
-	ret = request_irq(bgx->msix_entries[irq].vector,
-			  bgx_lmac_intr_handler, 0, bgx->irq_name[irq], bgx);
-	if (ret)
-		goto fail;
-
-	bgx->irq_allocated[irq] = true;
-
-	/* Enable link interrupt */
-
-	bgx_enable_link_intr(bgx, lmac);
-
-	return 0;
-
-fail:
-	dev_err(&bgx->pdev->dev, "Request irq failed\n");
-	bgx_unregister_interrupts(bgx);
-	return 1;
-#else
-	return 0;
-#endif
-}
-
-static void bgx_unregister_interrupts(struct bgx *bgx)
-{
-#ifdef LINK_INTR_ENABLE
-	int irq;
-	/* Free registered interrupts */
-	for (irq = 0; irq < bgx->num_vec; irq++) {
-		if (bgx->irq_allocated[irq])
-			free_irq(bgx->msix_entries[irq].vector, bgx);
-		bgx->irq_allocated[irq] = false;
-	}
-#endif
-}
 
 static void bgx_flush_dmac_addrs(struct bgx *bgx, int lmac)
 {
@@ -752,10 +634,6 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	/* Add broadcast MAC into all LMAC's DMAC filters */
 	bgx_add_dmac_addr(dmac_bcast, 0, bgx->bgx_id, lmacid);
 
-	/* Register interrupts */
-	if (bgx_register_interrupts(bgx, lmacid))
-		return -1;
-
 	if ((bgx->lmac_type != BGX_MODE_XFI) &&
 	    (bgx->lmac_type != BGX_MODE_XLAUI) &&
 	    (bgx->lmac_type != BGX_MODE_40G_KR) &&
@@ -794,7 +672,6 @@ void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 	cmrx_cfg &= ~(1 << 15);
 	bgx_reg_write(bgx, lmacid, BGX_CMRX_CFG, cmrx_cfg);
 	bgx_flush_dmac_addrs(bgx, lmacid);
-	bgx_unregister_interrupts(bgx);
 
 	if (lmac->phydev)
 		phy_disconnect(lmac->phydev);
@@ -858,7 +735,6 @@ static void bgx_set_num_ports(struct bgx *bgx)
 		bgx->lmac_count = lmac_count;
 }
 
-/* Most of this will eventually need to be set by bootloader */
 static void bgx_init_hw(struct bgx *bgx)
 {
 	int i;
@@ -1128,12 +1004,6 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	bgx_init_hw(bgx);
 
-	/* Enable MSI-X */
-	if (!bgx_enable_msix(bgx)) {
-		dev_err(dev, "BGX%d: Unable to enable MSI-X\n", bgx->bgx_id);
-		goto err_enable;
-	}
-
 	/* Enable all LMACs */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
 		err = bgx_lmac_enable(bgx, lmac);
@@ -1168,9 +1038,6 @@ static void bgx_remove(struct pci_dev *pdev)
 	/* Disable all LMACs */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
 		bgx_lmac_disable(bgx, lmac);
-
-	/* Disable MSI-X */
-	bgx_disable_msix(bgx);
 
 	pci_set_drvdata(pdev, NULL);
 
