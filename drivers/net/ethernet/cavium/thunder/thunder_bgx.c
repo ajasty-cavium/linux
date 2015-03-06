@@ -40,22 +40,22 @@ struct lmac {
 } lmac;
 
 struct bgx {
-	uint8_t			bgx_id;
-	uint8_t			qlm_mode;
+	u8			bgx_id;
+	u8			qlm_mode;
 	struct	lmac		lmac[MAX_LMAC_PER_BGX];
 	int			lmac_count;
 	int                     lmac_type;
 	int                     lane_to_sds;
 	int			use_training;
-	uint64_t		reg_base;
+	u64			reg_base;
 	struct pci_dev		*pdev;
 
 	 /* MSI-X */
 	bool			msix_enabled;
-	uint16_t		num_vec;
+	u8			num_vec;
 	struct	msix_entry	msix_entries[BGX_MSIX_VECTORS];
 	char			irq_name[BGX_MSIX_VECTORS][20];
-	uint8_t			irq_allocated[BGX_MSIX_VECTORS];
+	bool			irq_allocated[BGX_MSIX_VECTORS];
 } bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
@@ -77,34 +77,34 @@ MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
 
 /* Register read/write APIs */
-static uint64_t bgx_reg_read(struct bgx *bgx, uint8_t lmac, uint64_t offset)
+static u64 bgx_reg_read(struct bgx *bgx, u8 lmac, u64 offset)
 {
-	uint64_t addr = bgx->reg_base + ((uint32_t)lmac << 20) + offset;
+	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
 	return readq_relaxed((void *)addr);
 }
 
-static void bgx_reg_write(struct bgx *bgx, uint8_t lmac,
-			  uint64_t offset, uint64_t val)
+static void bgx_reg_write(struct bgx *bgx, u8 lmac,
+			  u64 offset, u64 val)
 {
-	uint64_t addr = bgx->reg_base + ((uint32_t)lmac << 20) + offset;
+	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
 	writeq_relaxed(val, (void *)addr);
 }
 
-static void bgx_reg_modify(struct bgx *bgx, uint8_t lmac,
-                           uint64_t offset, uint64_t val)
+static void bgx_reg_modify(struct bgx *bgx, u8 lmac,
+			   u64 offset, u64 val)
 {
-	uint64_t addr = bgx->reg_base + ((uint32_t)lmac << 20) + offset;
+	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
         writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
 }
 
-static int bgx_poll_reg(struct bgx *bgx, uint8_t lmac,
-			uint64_t reg, uint64_t mask, bool zero)
+static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
+			u64 reg, u64 mask, bool zero)
 {
 	int timeout = 100;
-	uint64_t reg_val;
+	u64 reg_val;
 
 	while (timeout) {
 		reg_val = bgx_reg_read(bgx, lmac, reg);
@@ -148,9 +148,9 @@ EXPORT_SYMBOL(bgx_get_lmac_count);
 
 #ifdef LINK_INTR_ENABLE
 /* Link Interrupts APIs */
-static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
+static void bgx_enable_link_intr(struct bgx *bgx, u8 lmac)
 {
-	uint64_t val;
+	u64 val;
 
 	val = bgx_reg_read(bgx, lmac, BGX_SPUX_INT_ENA_W1S);
 	val |= (LMAC_INTR_LINK_UP | LMAC_INTR_LINK_DOWN);
@@ -161,9 +161,9 @@ static void bgx_enable_link_intr(struct bgx *bgx, uint8_t lmac)
 static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
 	struct bgx *bgx = lmac->bgx;
-	uint64_t cmr_cfg;
-	uint64_t port_cfg = 0;
-	uint64_t misc_ctl = 0;
+	u64 cmr_cfg;
+	u64 port_cfg = 0;
+	u64 misc_ctl = 0;
 
 	cmr_cfg = bgx_reg_read(bgx, lmac->lmacid, BGX_CMRX_CFG);
 	cmr_cfg &= ~CMR_EN;
@@ -274,7 +274,7 @@ static irqreturn_t bgx_lmac_intr_handler (int irq, void *bgx_irq)
 {
 	struct bgx *bgx = (struct bgx *)bgx_irq;
 	u64 result;
-	uint8_t lmac;
+	u8 lmac;
 
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++) {
 		result = bgx_reg_read(bgx, lmac, BGX_SPUX_INT);
@@ -324,7 +324,7 @@ static void bgx_disable_msix(struct bgx *bgx)
 	}
 }
 
-uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
+u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
 {
 	struct bgx *bgx;
 
@@ -335,7 +335,7 @@ uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
 }
 EXPORT_SYMBOL(bgx_get_rx_stats);
 
-uint64_t bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
+u64 bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
 {
 	struct bgx *bgx;
 
@@ -344,7 +344,7 @@ uint64_t bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
 }
 EXPORT_SYMBOL(bgx_get_tx_stats);
 
-static int bgx_register_interrupts(struct bgx *bgx, uint8_t lmac)
+static int bgx_register_interrupts(struct bgx *bgx, u8 lmac)
 {
 #ifdef LINK_INTR_ENABLE
 	int irq, ret = 0;
@@ -357,7 +357,7 @@ static int bgx_register_interrupts(struct bgx *bgx, uint8_t lmac)
 	if (ret)
 		goto fail;
 
-	bgx->irq_allocated[irq] = 1;
+	bgx->irq_allocated[irq] = true;
 
 	/* Enable link interrupt */
 
@@ -382,15 +382,15 @@ static void bgx_unregister_interrupts(struct bgx *bgx)
 	for (irq = 0; irq < bgx->num_vec; irq++) {
 		if (bgx->irq_allocated[irq])
 			free_irq(bgx->msix_entries[irq].vector, bgx);
-		bgx->irq_allocated[irq] = 0;
+		bgx->irq_allocated[irq] = false;
 	}
 #endif
 }
 
-static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
+static void bgx_flush_dmac_addrs(struct bgx *bgx, int lmac)
 {
-	uint64_t dmac = 0x00;
-	uint64_t offset, addr;
+	u64 dmac = 0x00;
+	u64 offset, addr;
 
 	while (bgx->lmac[lmac].dmac > 0) {
 		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) +
@@ -401,9 +401,9 @@ static void bgx_flush_dmac_addrs(struct bgx *bgx, uint64_t lmac)
 	}
 }
 
-void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
+void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac)
 {
-	uint64_t offset, addr;
+	u64 offset, addr;
 	struct bgx *bgx;
 
 #ifdef BGX_IN_PROMISCUOUS_MODE
@@ -420,7 +420,7 @@ void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac)
 		return;
 	}
 
-	dmac = dmac | (1ULL << 48) | ((uint64_t)lmac << 49); /* Enable DMAC */
+	dmac = dmac | (1ULL << 48) | ((u64)lmac << 49); /* Enable DMAC */
 	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC) {
 		dev_err(&bgx->pdev->dev,
 			"Max DMAC filters for LMAC%d reached, ignoring\n",
@@ -445,7 +445,7 @@ EXPORT_SYMBOL(bgx_add_dmac_addr);
 
 static int bgx_lmac_sgmii_init(struct bgx *bgx, int lmacid)
 {
-	uint64_t cfg;
+	u64 cfg;
 
 	bgx_reg_modify(bgx, lmacid, BGX_GMP_GMI_TXX_THRESH, 0x30);
 	/* max packet size */
@@ -484,7 +484,7 @@ static int bgx_lmac_sgmii_init(struct bgx *bgx, int lmacid)
 
 static int bgx_lmac_xaui_init(struct bgx *bgx, int lmacid, int lmac_type)
 {
-	uint64_t cfg;
+	u64 cfg;
 
 	/* Reset SPU */
 	bgx_reg_modify(bgx, lmacid, BGX_SPUX_CONTROL1, SPU_CTL_RESET);
@@ -574,9 +574,9 @@ static int bgx_lmac_xaui_init(struct bgx *bgx, int lmacid, int lmac_type)
 static int bgx_xaui_check_link(struct lmac *lmac)
 {
 	struct bgx *bgx = lmac->bgx;
-	uint64_t cfg;
 	int lmacid = lmac->lmacid;
 	int lmac_type = bgx->lmac_type;
+	u64 cfg;
 
 	bgx_reg_modify(bgx, lmacid, BGX_SPUX_MISC_CONTROL, SPU_MISC_CTL_RX_DIS);
 	if (bgx->use_training) {
@@ -675,7 +675,7 @@ static int bgx_xaui_check_link(struct lmac *lmac)
 static void bgx_poll_for_link(struct work_struct *work)
 {
 	struct lmac *lmac;
-	uint64_t link;
+	u64 link;
 
 	lmac = container_of(work, struct lmac, dwork.work);
 
@@ -713,9 +713,9 @@ static void bgx_poll_for_link(struct work_struct *work)
 
 static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 {
-	uint64_t dmac_bcast = (1ULL << 48) - 1;
+	u64 dmac_bcast = (1ULL << 48) - 1;
 	struct lmac *lmac;
-	uint64_t cfg;
+	u64 cfg;
 
 	lmac = &bgx->lmac[lmacid];
 	lmac->bgx = bgx;
@@ -783,10 +783,10 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	return 0;
 }
 
-void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
+void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 {
 	struct lmac *lmac;
-	uint64_t cmrx_cfg;
+	u64 cmrx_cfg;
 
 	lmac = &bgx->lmac[lmacid];
 
@@ -804,7 +804,7 @@ void bgx_lmac_disable(struct bgx *bgx, uint8_t lmacid)
 
 static void bgx_set_num_ports(struct bgx *bgx)
 {
-	uint64_t lmac_count;
+	u64 lmac_count;
 
 	switch (bgx->qlm_mode) {
 	case QLM_MODE_SGMII:
@@ -853,7 +853,7 @@ static void bgx_set_num_ports(struct bgx *bgx)
 	 * based on board type, if yes consider that otherwise
 	 * the default static values
 	 */
-	lmac_count = bgx_reg_read(bgx, 0, BGX_CMR_RX_LMACS);
+	lmac_count = bgx_reg_read(bgx, 0, BGX_CMR_RX_LMACS) & 0x7;
 	if (lmac_count != 4)
 		bgx->lmac_count = lmac_count;
 }
@@ -1044,7 +1044,7 @@ bgx_init_of_phy(struct bgx *bgx)
 {
 	struct device_node *np;
 	struct device_node *np_child;
-	uint8_t lmac = 0;
+	u8 lmac = 0;
 	char bgx_sel[5];
 
 	/* Get BGX node from DT */
@@ -1088,7 +1088,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct bgx *bgx = NULL;
-	uint8_t lmac;
+	u8 lmac;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
 	if (!bgx)
@@ -1110,7 +1110,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP configuration registers */
-	bgx->reg_base = (uint64_t)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	bgx->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!bgx->reg_base) {
 		dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
 		err = -ENOMEM;
@@ -1161,7 +1161,7 @@ exit:
 static void bgx_remove(struct pci_dev *pdev)
 {
 	struct bgx *bgx = pci_get_drvdata(pdev);
-	uint8_t lmac;
+	u8 lmac;
 
 	if (!bgx)
 		return;

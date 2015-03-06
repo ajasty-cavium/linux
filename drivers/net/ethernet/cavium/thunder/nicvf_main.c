@@ -92,31 +92,31 @@ static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 }
 
 /* Register read/write APIs */
-void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val)
+void nicvf_reg_write(struct nicvf *nic, u64 offset, u64 val)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	writeq_relaxed(val, (void *)addr);
 }
 
-uint64_t nicvf_reg_read(struct nicvf *nic, uint64_t offset)
+u64 nicvf_reg_read(struct nicvf *nic, u64 offset)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	return readq_relaxed((void *)addr);
 }
 
-void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
-			   uint64_t qidx, uint64_t val)
+void nicvf_queue_reg_write(struct nicvf *nic, u64 offset,
+			   u64 qidx, u64 val)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	writeq_relaxed(val, (void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
-uint64_t nicvf_queue_reg_read(struct nicvf *nic, uint64_t offset, uint64_t qidx)
+u64 nicvf_queue_reg_read(struct nicvf *nic, u64 offset, u64 qidx)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
@@ -131,12 +131,12 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
 	int timeout = NIC_PF_VF_MBX_TIMEOUT;
 	int sleep = 10;
-	uint64_t *msg;
-	uint64_t mbx_addr;
+	u64 *msg;
+	u64 mbx_addr;
 
 	pf_acked = false;
 	pf_nacked = false;
-	msg = (uint64_t *)mbx;
+	msg = (u64 *)mbx;
 	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_1;
 
 	writeq_relaxed(*(msg), (void *)mbx_addr);
@@ -166,7 +166,7 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 static int nicvf_check_pf_ready(struct nicvf *nic)
 {
 	int timeout = 5000, sleep = 20;
-	uint64_t mbx_addr = NIC_VF_PF_MAILBOX_0_1;
+	u64 mbx_addr = NIC_VF_PF_MAILBOX_0_1;
 
 	pf_ready_to_rcv_msg = false;
 
@@ -192,17 +192,17 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 {
 	struct nic_mbx mbx = {};
-	uint64_t *mbx_data;
-	uint64_t mbx_addr;
+	u64 *mbx_data;
+	u64 mbx_addr;
 	int i;
 
 	mbx_addr = NIC_VF_PF_MAILBOX_0_1;
-	mbx_data = (uint64_t *)&mbx;
+	mbx_data = (u64 *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nicvf_reg_read(nic, mbx_addr);
 		mbx_data++;
-		mbx_addr += sizeof(uint64_t);
+		mbx_addr += sizeof(u64);
 	}
 
 	nic_dbg(&nic->pdev->dev,
@@ -214,7 +214,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
 		nic->node = mbx.data.nic_cfg.node_id;
 		ether_addr_copy(nic->netdev->dev_addr,
-				(uint8_t *)&mbx.data.nic_cfg.mac_addr);
+				(u8 *)&mbx.data.nic_cfg.mac_addr);
 		break;
 	case NIC_PF_VF_MSG_ACK:
 		pf_acked = true;
@@ -310,12 +310,12 @@ void nicvf_config_rss(struct nicvf *nic)
 void nicvf_set_rss_key(struct nicvf *nic)
 {
 	struct nicvf_rss_info *rss = &nic->rss_info;
-	uint64_t key_addr = NIC_VNIC_RSS_KEY_0_4;
+	u64 key_addr = NIC_VNIC_RSS_KEY_0_4;
 	int idx;
 
 	for (idx = 0; idx < RSS_HASH_KEY_SIZE; idx++) {
 		nicvf_reg_write(nic, key_addr, rss->key[idx]);
-		key_addr += sizeof(uint64_t);
+		key_addr += sizeof(u64);
 	}
 }
 
@@ -462,7 +462,7 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 		netif_receive_skb(skb);
 }
 
-static int nicvf_cq_intr_handler(struct net_device *netdev, uint8_t cq_idx,
+static int nicvf_cq_intr_handler(struct net_device *netdev, u8 cq_idx,
 				 struct napi_struct *napi, int budget)
 {
 	int processed_cqe, work_done = 0;
@@ -538,8 +538,8 @@ done:
 
 static int nicvf_poll(struct napi_struct *napi, int budget)
 {
+	u64  cq_head;
 	int  work_done = 0;
-	uint64_t cq_head;
 	struct net_device *netdev = napi->dev;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct nicvf_cq_poll *cq;
@@ -575,7 +575,7 @@ void nicvf_handle_qs_err(unsigned long data)
 	struct nicvf *nic = (struct nicvf *)data;
 	struct queue_set *qs = nic->qs;
 	int qidx;
-	uint64_t status;
+	u64 status;
 
 	netif_tx_disable(nic->netdev);
 
@@ -604,7 +604,7 @@ void nicvf_handle_qs_err(unsigned long data)
 static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 {
 	struct nicvf *nic = (struct nicvf *)nicvf_irq;
-	uint64_t intr;
+	u64 intr;
 
 	intr = nicvf_reg_read(nic, NIC_VF_INT);
 	/* Check for spurious interrupt */
@@ -618,8 +618,8 @@ static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 
 static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 {
-	uint64_t qidx, intr, clear_intr = 0;
-	uint64_t cq_intr, rbdr_intr, qs_err_intr;
+	u64 qidx, intr, clear_intr = 0;
+	u64 cq_intr, rbdr_intr, qs_err_intr;
 	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
@@ -755,7 +755,7 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 				  0, nic->irq_name[irq], nic);
 		if (ret)
 			break;
-		nic->irq_allocated[irq] = 1;
+		nic->irq_allocated[irq] = true;
 
 		/* Set CQ irq affinity */
 		nicvf_set_cq_irq_affinity(nic, irq, vector);
@@ -767,7 +767,7 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 				  0, nic->irq_name[irq], nic);
 		if (ret)
 			break;
-		nic->irq_allocated[irq] = 1;
+		nic->irq_allocated[irq] = true;
 	}
 
 	sprintf(nic->irq_name[NICVF_INTR_ID_QS_ERR],
@@ -778,7 +778,7 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 		ret = request_irq(vector, nicvf_intr_handler,
 				  0, nic->irq_name[irq], nic);
 		if (!ret)
-			nic->irq_allocated[irq] = 1;
+			nic->irq_allocated[irq] = true;
 	}
 
 	if (ret) {
@@ -799,7 +799,7 @@ static void nicvf_unregister_interrupts(struct nicvf *nic)
 	for (irq = 0; irq < nic->num_vec; irq++) {
 		if (nic->irq_allocated[irq])
 			free_irq(nic->msix_entries[irq].vector, nic);
-		nic->irq_allocated[irq] = 0;
+		nic->irq_allocated[irq] = false;
 	}
 
 	/* Disable MSI-X */
@@ -822,7 +822,7 @@ static int nicvf_register_misc_interrupt(struct nicvf *nic)
 
 	if (ret)
 		return ret;
-	nic->irq_allocated[irq] = 1;
+	nic->irq_allocated[irq] = true;
 
 	/* Enable mailbox interrupt */
 	nicvf_enable_intr(nic, NICVF_INTR_MBOX, 0);
@@ -1261,7 +1261,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->pdev = pdev;
 
 	/* MAP VF's configuration registers */
-	nic->reg_base = (uint64_t)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	nic->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!nic->reg_base) {
 		dev_err(dev, "Cannot map config register space, aborting\n");
 		err = -ENOMEM;

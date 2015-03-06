@@ -129,8 +129,8 @@
 #define NICPF_CLK_PER_INT_TICK		44
 
 struct nicvf_cq_poll {
-	uint8_t	cq_idx;		/* Completion queue index */
-	struct napi_struct napi;
+	u8	cq_idx;		/* Completion queue index */
+	struct	napi_struct napi;
 };
 
 #define	NIC_RSSI_COUNT			4096 /* Total no of RSS indices */
@@ -150,11 +150,11 @@ struct nicvf_rss_info {
 #define	RSS_ROCE_ENA			(1 << 6)
 #define	RSS_L3_BI_DIRECTION_ENA		(1 << 7)
 #define	RSS_L4_BI_DIRECTION_ENA		(1 << 8)
-	uint64_t cfg;
-	uint8_t  hash_bits;
-	uint16_t rss_size;
-	uint8_t  ind_tbl[NIC_MAX_RSS_IDR_TBL_SIZE];
-	uint64_t key[RSS_HASH_KEY_SIZE];
+	u64 cfg;
+	u8  hash_bits;
+	u16 rss_size;
+	u8  ind_tbl[NIC_MAX_RSS_IDR_TBL_SIZE];
+	u64 key[RSS_HASH_KEY_SIZE];
 } ____cacheline_aligned_in_smp;
 #endif
 
@@ -228,15 +228,15 @@ struct nicvf_drv_stats {
 struct nicvf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
-	uint8_t			vf_id;
-	uint8_t			node;
-	uint8_t			tns_mode;
-	uint16_t		mtu;
+	u8			vf_id;
+	u8			node;
+	u8			tns_mode;
+	u16			mtu;
 	struct queue_set	*qs;
-	uint8_t			num_qs;
+	u8			num_qs;
 	void			*addnl_qs;
-	uint16_t		vf_mtu;
-	uint64_t		reg_base;
+	u16			vf_mtu;
+	u64			reg_base;
 	struct tasklet_struct	rbdr_task;
 	struct tasklet_struct	qs_err_task;
 	struct tasklet_struct	cq_task;
@@ -244,11 +244,11 @@ struct nicvf {
 #ifdef VNIC_RSS_SUPPORT
 	struct nicvf_rss_info	rss_info;
 #endif
-	uint8_t			cpi_alg;
+	u8			cpi_alg;
 	/* Interrupt coalescing settings */
-	uint32_t		cq_coalesce_usecs;
+	u32			cq_coalesce_usecs;
 
-	uint32_t		msg_enable;
+	u32			msg_enable;
 	struct nicvf_hw_stats   stats;
 	struct nicvf_drv_stats  drv_stats;
 	struct bgx_stats	bgx_stats;
@@ -256,38 +256,38 @@ struct nicvf {
 
 	/* MSI-X  */
 	bool			msix_enabled;
-	uint16_t		num_vec;
+	u8			num_vec;
 	struct msix_entry	msix_entries[NIC_VF_MSIX_VECTORS];
 	char			irq_name[NIC_VF_MSIX_VECTORS][20];
-	uint8_t			irq_allocated[NIC_VF_MSIX_VECTORS];
+	bool			irq_allocated[NIC_VF_MSIX_VECTORS];
 } ____cacheline_aligned_in_smp;
 
 struct nicpf {
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
-	uint8_t			rev_id;
+	u8			rev_id;
 #define NIC_NODE_ID_MASK	0x300000000000
 #define NIC_NODE_ID(x)		((x & NODE_ID_MASK) >> 44)
-	uint8_t			node;
+	u8			node;
 	unsigned int		flags;
-	uint16_t		total_vf_cnt;   /* Total num of VF supported */
-	uint16_t		num_vf_en;      /* No of VF enabled */
-	uint64_t		reg_base;       /* Register start address */
+	u8			total_vf_cnt;   /* Total num of VF supported */
+	u8			num_vf_en;      /* No of VF enabled */
+	u64			reg_base;       /* Register start address */
 	struct pkind_cfg	pkind;
-	uint8_t			bgx_cnt;
+	u8			bgx_cnt;
 #define	NIC_SET_VF_LMAC_MAP(bgx, lmac)	(((bgx & 0xF) << 4) | (lmac & 0xF))
 #define	NIC_GET_BGX_FROM_VF_LMAC_MAP(map)	((map >> 4) & 0xF)
 #define	NIC_GET_LMAC_FROM_VF_LMAC_MAP(map)	(map & 0xF)
-	uint8_t			vf_lmac_map[MAX_LMAC];
-	uint16_t		cpi_base[MAX_NUM_VFS_SUPPORTED];
-	uint16_t		rss_ind_tbl_size;
-	uint64_t mac[MAX_NUM_VFS_SUPPORTED];
+	u8			vf_lmac_map[MAX_LMAC];
+	u16			cpi_base[MAX_NUM_VFS_SUPPORTED];
+	u16			rss_ind_tbl_size;
+	u64			mac[MAX_NUM_VFS_SUPPORTED];
 
 	/* MSI-X */
 	bool			msix_enabled;
-	uint16_t		num_vec;
+	u8			num_vec;
 	struct msix_entry	msix_entries[NIC_PF_MSIX_VECTORS];
-	uint8_t			irq_allocated[NIC_PF_MSIX_VECTORS];
+	bool			irq_allocated[NIC_PF_MSIX_VECTORS];
 } ____cacheline_aligned_in_smp;
 
 /* PF <--> VF Mailbox communication
@@ -319,90 +319,90 @@ struct nicpf {
 #define	NIC_PF_VF_MSG_BGX_STATS		0x10
 
 struct nic_cfg_msg {
-	uint8_t    vf_id;
-	uint8_t    tns_mode;
-	uint8_t    node_id;
-	uint8_t    unused0;
-	uint16_t   unused1;
-	uint64_t   mac_addr;
+	u8    vf_id;
+	u8    tns_mode;
+	u8    node_id;
+	u8    unused0;
+	u16   unused1;
+	u64   mac_addr;
 } __packed;
 
 /* Qset configuration */
 struct qs_cfg_msg {
-	uint8_t    num;
-	uint8_t    unused0;
-	uint32_t   unused1;
-	uint64_t   cfg;
+	u8    num;
+	u8    unused0;
+	u32   unused1;
+	u64   cfg;
 } __packed;
 
 /* Receive queue configuration */
 struct rq_cfg_msg {
-	uint8_t    qs_num;
-	uint8_t    rq_num;
-	uint32_t   unused0;
-	uint64_t   cfg;
+	u8    qs_num;
+	u8    rq_num;
+	u32   unused0;
+	u64   cfg;
 } __packed;
 
 /* Send queue configuration */
 struct sq_cfg_msg {
-	uint8_t    qs_num;
-	uint8_t    sq_num;
-	uint32_t   unused0;
-	uint64_t   cfg;
+	u8    qs_num;
+	u8    sq_num;
+	u32   unused0;
+	u64   cfg;
 } __packed;
 
 /* Set VF's MAC address */
 struct set_mac_msg {
-	uint8_t    vf_id;
-	uint8_t    unused0;
-	uint32_t   unused1;
-	uint64_t   addr;
+	u8    vf_id;
+	u8    unused0;
+	u32   unused1;
+	u64   addr;
 } __packed;
 
 /* Set Maximum frame size */
 struct set_frs_msg {
-	uint8_t    vf_id;
-	uint16_t   max_frs;
+	u8    vf_id;
+	u16   max_frs;
 };
 
 /* Set CPI algorithm type */
 struct cpi_cfg_msg {
-	uint8_t    vf_id;
-	uint8_t    rq_cnt;
-	uint8_t    cpi_alg;
+	u8    vf_id;
+	u8    rq_cnt;
+	u8    cpi_alg;
 };
 
 #ifdef VNIC_RSS_SUPPORT
 /* Get RSS table size */
 struct rss_sz_msg {
-	uint8_t    vf_id;
-	uint16_t   ind_tbl_size;
+	u8    vf_id;
+	u16   ind_tbl_size;
 };
 
 /* Set RSS configuration */
 struct rss_cfg_msg {
-	uint8_t    vf_id;
-	uint8_t    hash_bits;
-	uint8_t    tbl_len;
-	uint8_t    tbl_offset;
-	uint16_t   unused0;
+	u8    vf_id;
+	u8    hash_bits;
+	u8    tbl_len;
+	u8    tbl_offset;
+	u16   unused0;
 #define RSS_IND_TBL_LEN_PER_MBX_MSG	8
-	uint8_t    ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
+	u8    ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
 } __packed;
 #endif
 
 struct bgx_stats_msg {
-	uint8_t    vf_id;
-	uint8_t    rx;
-	uint8_t    idx;
-	uint8_t    unused0;
-	uint16_t   unused1;
-	uint64_t   stats;
+	u8    vf_id;
+	u8    rx;
+	u8    idx;
+	u8    unused0;
+	u16   unused1;
+	u64   stats;
 } __packed;
 
 /* 2 64bit locations */
 struct nic_mbx {
-	uint16_t   msg;
+	u16   msg;
 	union	{
 		struct nic_cfg_msg	nic_cfg;
 		struct qs_cfg_msg	qs;

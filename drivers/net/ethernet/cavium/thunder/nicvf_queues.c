@@ -19,16 +19,16 @@
 
 struct rbuf_info {
 	void	*data;
-	uint64_t offset;
+	u64	offset;
 };
 
 #define GET_RBUF_INFO(x) ((struct rbuf_info *)(x - NICVF_RCV_BUF_ALIGN_BYTES))
 
 static int nicvf_poll_reg(struct nicvf *nic, int qidx,
-			  uint64_t reg, int bit_pos, int bits, int val)
+			  u64 reg, int bit_pos, int bits, int val)
 {
-	uint64_t bit_mask;
-	uint64_t reg_val;
+	u64 bit_mask;
+	u64 reg_val;
 	int timeout = 10;
 
 	bit_mask = (1ULL << bits) - 1;
@@ -55,7 +55,7 @@ static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 	if (!dmem->unalign_base)
 		return -1;
 
-	dmem->phys_base = NICVF_ALIGNED_ADDR((uint64_t)dmem->dma, align_bytes);
+	dmem->phys_base = NICVF_ALIGNED_ADDR((u64)dmem->dma, align_bytes);
 	dmem->base = (void *)((u8 *)dmem->unalign_base +
 			      (dmem->phys_base - dmem->dma));
 	return 0;
@@ -72,13 +72,13 @@ static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
 	dmem->base = NULL;
 }
 
-static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic, uint64_t buf_len,
-					 uint64_t **rbuf)
+static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic,
+					 u64 buf_len, u64 **rbuf)
 {
-	uint64_t data;
+	u64 data;
 	struct rbuf_info *rinfo;
 
-	data = (uint64_t)netdev_alloc_frag(buf_len);
+	data = (u64)netdev_alloc_frag(buf_len);
 	if (!data) {
 		netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
 		return -ENOMEM;
@@ -94,16 +94,16 @@ static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic, uint64_t buf_len,
 	data += rinfo->offset;
 
 	/* Give next aligned address to hw for DMA */
-	*rbuf = (uint64_t *)(data + NICVF_RCV_BUF_ALIGN_BYTES);
+	*rbuf = (u64 *)(data + NICVF_RCV_BUF_ALIGN_BYTES);
 	return 0;
 }
 
-static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, uint64_t rb_ptr)
+static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, u64 rb_ptr)
 {
 	struct sk_buff *skb;
 	struct rbuf_info *rinfo;
 
-	rb_ptr = (uint64_t)phys_to_virt(rb_ptr);
+	rb_ptr = (u64)phys_to_virt(rb_ptr);
 	/* Get buffer start address and alignment offset */
 	rinfo = GET_RBUF_INFO(rb_ptr);
 
@@ -124,7 +124,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 			    int ring_len, int buf_size)
 {
 	int idx;
-	uint64_t *rbuf;
+	u64 *rbuf;
 	struct rbdr_entry_t *desc;
 
 	if (nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
@@ -154,7 +154,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 {
 	int head, tail;
-	uint64_t buf_addr;
+	u64 buf_addr;
 	struct rbdr_entry_t *desc;
 	struct rbuf_info *rinfo;
 
@@ -172,7 +172,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 	while (head != tail) {
 		desc = GET_RBDR_DESC(rbdr, head);
 		buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
-		rinfo = GET_RBUF_INFO((uint64_t)phys_to_virt(buf_addr));
+		rinfo = GET_RBUF_INFO((u64)phys_to_virt(buf_addr));
 		put_page(virt_to_head_page(rinfo->data));
 		head++;
 		head &= (rbdr->dmem.q_len - 1);
@@ -180,7 +180,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 	/* Free SKB of tail desc */
 	desc = GET_RBDR_DESC(rbdr, tail);
 	buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
-	rinfo = GET_RBUF_INFO((uint64_t)phys_to_virt(buf_addr));
+	rinfo = GET_RBUF_INFO((u64)phys_to_virt(buf_addr));
 	put_page(virt_to_head_page(rinfo->data));
 
 	/* Free RBDR ring */
@@ -198,8 +198,8 @@ void nicvf_refill_rbdr(unsigned long data)
 	int tail, qcount;
 	int refill_rb_cnt;
 	struct rbdr *rbdr;
-	uint64_t *rbuf;
 	struct rbdr_entry_t *desc;
+	u64 *rbuf;
 
 refill:
 	if (!rbdr_idx)
@@ -284,7 +284,7 @@ static int nicvf_init_snd_queue(struct nicvf *nic,
 	}
 
 	sq->desc = sq->dmem.base;
-	sq->skbuff = kcalloc(q_len, sizeof(uint64_t), GFP_ATOMIC);
+	sq->skbuff = kcalloc(q_len, sizeof(u64), GFP_ATOMIC);
 	sq->head = 0;
 	sq->tail = 0;
 	atomic_set(&sq->free_cnt, q_len - 1);
@@ -341,7 +341,7 @@ static void nicvf_reclaim_cmp_queue(struct nicvf *nic,
 static void nicvf_reclaim_rbdr(struct nicvf *nic,
 			       struct rbdr *rbdr, int qidx)
 {
-	uint64_t tmp;
+	u64 tmp;
 	int timeout = 10;
 
 	/* Save head and tail pointers for feeing up buffers */
@@ -495,7 +495,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 	spin_lock_init(&cq->lock);
 	/* Set completion queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_CQ_0_7_BASE,
-			      qidx, (uint64_t)(cq->dmem.phys_base));
+			      qidx, (u64)(cq->dmem.phys_base));
 
 	/* Enable Completion queue */
 	cq_cfg.ena = 1;
@@ -541,7 +541,7 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Set queue base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_BASE,
-			      qidx, (uint64_t)(sq->dmem.phys_base));
+			      qidx, (u64)(sq->dmem.phys_base));
 
 	/* Enable send queue  & set queue size */
 	sq_cfg.ena = 1;
@@ -575,7 +575,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 
 	/* Set descriptor base address */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_BASE,
-			      qidx, (uint64_t)(rbdr->dmem.phys_base));
+			      qidx, (u64)(rbdr->dmem.phys_base));
 
 	/* Enable RBDR  & set queue size */
 	/* Buffer size should be in multiples of 128 bytes */
@@ -772,7 +772,7 @@ void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt)
 
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx)
 {
-	uint64_t sq_cfg;
+	u64 sq_cfg;
 
 	sq_cfg = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
 	sq_cfg |= NICVF_SQ_EN;
@@ -783,7 +783,7 @@ void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx)
 
 void nicvf_sq_disable(struct nicvf *nic, int qidx)
 {
-	uint64_t sq_cfg;
+	u64 sq_cfg;
 
 	sq_cfg = nicvf_queue_reg_read(nic, NIC_QSET_SQ_0_7_CFG, qidx);
 	sq_cfg &= ~NICVF_SQ_EN;
@@ -793,7 +793,7 @@ void nicvf_sq_disable(struct nicvf *nic, int qidx)
 void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
 			      int qidx)
 {
-	uint64_t head, tail;
+	u64 head, tail;
 	struct sk_buff *skb;
 	struct nicvf *nic = netdev_priv(netdev);
 	struct sq_hdr_subdesc *hdr;
@@ -845,7 +845,7 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 
 	sq = &qs->sq[sq_num];
 	qentry = nicvf_get_sq_desc(qs, sq_num, &desc);
-	sq->skbuff[qentry] = (uint64_t)skb;
+	sq->skbuff[qentry] = (u64)skb;
 
 	hdr = (struct sq_hdr_subdesc *)desc;
 
@@ -967,11 +967,11 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 	struct sk_buff *skb = NULL;
 	struct sk_buff *skb_frag = NULL;
 	struct sk_buff *prev_frag = NULL;
-	uint16_t *rb_lens = NULL;
-	uint64_t *rb_ptrs = NULL;
+	u16 *rb_lens = NULL;
+	u64 *rb_ptrs = NULL;
 
-	rb_lens = (void *)cqe_rx + (3 * sizeof(uint64_t));
-	rb_ptrs = (void *)cqe_rx + (6 * sizeof(uint64_t));
+	rb_lens = (void *)cqe_rx + (3 * sizeof(u64));
+	rb_ptrs = (void *)cqe_rx + (6 * sizeof(u64));
 
 	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
 		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
@@ -1013,7 +1013,7 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 /* Enable interrupt */
 void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 {
-	uint64_t reg_val;
+	u64 reg_val;
 
 	reg_val = nicvf_reg_read(nic, NIC_VF_ENA_W1S);
 
@@ -1051,7 +1051,7 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 /* Disable interrupt */
 void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 {
-	uint64_t reg_val = 0;
+	u64 reg_val = 0;
 
 	switch (int_type) {
 	case NICVF_INTR_CQ:
@@ -1087,7 +1087,7 @@ void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 /* Clear interrupt */
 void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 {
-	uint64_t reg_val = 0;
+	u64 reg_val = 0;
 
 	switch (int_type) {
 	case NICVF_INTR_CQ:
@@ -1123,8 +1123,8 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 /* Check if interrupt is enabled */
 int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 {
-	uint64_t reg_val;
-	uint64_t mask = 0xff;
+	u64 reg_val;
+	u64 mask = 0xff;
 
 	reg_val = nicvf_reg_read(nic, NIC_VF_ENA_W1S);
 

@@ -193,21 +193,21 @@
 /* Port kind configuration register */
 struct pkind_cfg {
 #if defined(__BIG_ENDIAN_BITFIELD)
-	uint64_t reserved_42_63:22;
-	uint64_t hdr_sl:5;	/* Header skip length */
-	uint64_t rx_hdr:3;	/* TNS Receive header present */
-	uint64_t lenerr_en:1;	/* L2 length error check enable */
-	uint64_t reserved_32_32:1;
-	uint64_t maxlen:16;	/* Max frame size */
-	uint64_t minlen:16;	/* Min frame size */
+	u64 reserved_42_63:22;
+	u64 hdr_sl:5;	/* Header skip length */
+	u64 rx_hdr:3;	/* TNS Receive header present */
+	u64 lenerr_en:1;/* L2 length error check enable */
+	u64 reserved_32_32:1;
+	u64 maxlen:16;	/* Max frame size */
+	u64 minlen:16;	/* Min frame size */
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-	uint64_t minlen:16;
-	uint64_t maxlen:16;
-	uint64_t reserved_32_32:1;
-	uint64_t lenerr_en:1;
-	uint64_t rx_hdr:3;
-	uint64_t hdr_sl:5;
-	uint64_t reserved_42_63:22;
+	u64 minlen:16;
+	u64 maxlen:16;
+	u64 reserved_32_32:1;
+	u64 lenerr_en:1;
+	u64 rx_hdr:3;
+	u64 hdr_sl:5;
+	u64 reserved_42_63:22;
 #endif
 };
 

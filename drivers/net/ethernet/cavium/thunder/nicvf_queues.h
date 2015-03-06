@@ -245,8 +245,8 @@ struct rx_tx_queue_stats {
 
 struct q_desc_mem {
 	dma_addr_t	dma;
-	uint64_t	size;
-	uint16_t	q_len;
+	u64		size;
+	u16		q_len;
 	dma_addr_t	phys_base;
 	void		*base;
 	void		*unalign_base;
@@ -254,12 +254,12 @@ struct q_desc_mem {
 
 struct rbdr {
 	bool		enable;
-	uint32_t	dma_size;
-	uint32_t	frag_len;
-	uint32_t	thresh;      /* Threshold level for interrupt */
+	u32		dma_size;
+	u32		frag_len;
+	u32		thresh;      /* Threshold level for interrupt */
 	void		*desc;
-	uint32_t	head;
-	uint32_t	tail;
+	u32		head;
+	u32		tail;
 	struct q_desc_mem   dmem;
 } ____cacheline_aligned_in_smp;
 
@@ -268,19 +268,19 @@ struct rcv_queue {
 	struct	rbdr	*rbdr_start;
 	struct	rbdr	*rbdr_cont;
 	bool		en_tcp_reassembly;
-	uint8_t		cq_qs;  /* CQ's QS to which this RQ is assigned */
-	uint8_t		cq_idx; /* CQ index (0 to 7) in the QS */
-	uint8_t		cont_rbdr_qs;      /* Continue buffer ptrs - QS num */
-	uint8_t		cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
-	uint8_t		start_rbdr_qs;     /* First buffer ptrs - QS num */
-	uint8_t		start_qs_rbdr_idx; /* RBDR idx in the above QS */
-	uint8_t         caching;
+	u8		cq_qs;  /* CQ's QS to which this RQ is assigned */
+	u8		cq_idx; /* CQ index (0 to 7) in the QS */
+	u8		cont_rbdr_qs;      /* Continue buffer ptrs - QS num */
+	u8		cont_qs_rbdr_idx;  /* RBDR idx in the cont QS */
+	u8		start_rbdr_qs;     /* First buffer ptrs - QS num */
+	u8		start_qs_rbdr_idx; /* RBDR idx in the above QS */
+	u8		caching;
 	struct		rx_tx_queue_stats stats;
 } ____cacheline_aligned_in_smp;
 
 struct cmp_queue {
 	bool		enable;
-	uint16_t	thresh;
+	u16		thresh;
 	spinlock_t	lock;  /* lock to serialize processing CQEs */
 	void		*desc;
 	struct q_desc_mem   dmem;
@@ -290,13 +290,13 @@ struct cmp_queue {
 
 struct snd_queue {
 	bool		enable;
-	uint8_t		cq_qs;  /* CQ's QS to which this SQ is pointing */
-	uint8_t		cq_idx; /* CQ index (0 to 7) in the above QS */
-	uint16_t	thresh;
+	u8		cq_qs;  /* CQ's QS to which this SQ is pointing */
+	u8		cq_idx; /* CQ index (0 to 7) in the above QS */
+	u16		thresh;
 	atomic_t	free_cnt;
-	uint32_t	head;
-	uint32_t	tail;
-	uint64_t	*skbuff;
+	u32		head;
+	u32		tail;
+	u64		*skbuff;
 	void		*desc;
 	cpumask_t	affinity_mask;
 	struct q_desc_mem   dmem;
@@ -306,14 +306,14 @@ struct snd_queue {
 struct queue_set {
 	bool		enable;
 	bool		be_en;
-	uint8_t		vnic_id;
-	uint8_t		rq_cnt;
-	uint8_t		cq_cnt;
-	uint64_t	cq_len;
-	uint8_t		sq_cnt;
-	uint64_t	sq_len;
-	uint8_t		rbdr_cnt;
-	uint64_t	rbdr_len;
+	u8		vnic_id;
+	u8		rq_cnt;
+	u8		cq_cnt;
+	u64		cq_len;
+	u8		sq_cnt;
+	u64		sq_len;
+	u8		rbdr_cnt;
+	u64		rbdr_len;
 	struct	rcv_queue	rq[MAX_RCV_QUEUES_PER_QS];
 	struct	cmp_queue	cq[MAX_CMP_QUEUES_PER_QS];
 	struct	snd_queue	sq[MAX_SND_QUEUES_PER_QS];
@@ -357,14 +357,14 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx);
 int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx);
 
 /* Register access APIs */
-void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val);
-uint64_t nicvf_reg_read(struct nicvf *nic, uint64_t offset);
-void nicvf_qset_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val);
-uint64_t nicvf_qset_reg_read(struct nicvf *nic, uint64_t offset);
-void nicvf_queue_reg_write(struct nicvf *nic, uint64_t offset,
-			   uint64_t qidx, uint64_t val);
-uint64_t nicvf_queue_reg_read(struct nicvf *nic,
-			      uint64_t offset, uint64_t qidx);
+void nicvf_reg_write(struct nicvf *nic, u64 offset, u64 val);
+u64  nicvf_reg_read(struct nicvf *nic, u64 offset);
+void nicvf_qset_reg_write(struct nicvf *nic, u64 offset, u64 val);
+u64 nicvf_qset_reg_read(struct nicvf *nic, u64 offset);
+void nicvf_queue_reg_write(struct nicvf *nic, u64 offset,
+			   u64 qidx, u64 val);
+u64  nicvf_queue_reg_read(struct nicvf *nic,
+			  u64 offset, u64 qidx);
 
 /* Stats */
 void nicvf_update_rq_stats(struct nicvf *nic, int rq_idx);

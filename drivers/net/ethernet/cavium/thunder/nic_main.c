@@ -45,16 +45,16 @@ MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nic_id_table);
 
 /* Register read/write APIs */
-static void nic_reg_write(struct nicpf *nic, uint64_t offset, uint64_t val)
+static void nic_reg_write(struct nicpf *nic, u64 offset, u64 val)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	writeq_relaxed(val, (void *)addr);
 }
 
-static uint64_t nic_reg_read(struct nicpf *nic, uint64_t offset)
+static u64 nic_reg_read(struct nicpf *nic, u64 offset)
 {
-	uint64_t addr = nic->reg_base + offset;
+	u64 addr = nic->reg_base + offset;
 
 	return readq_relaxed((void *)addr);
 }
@@ -67,7 +67,7 @@ static void nic_enable_mbx_intr(struct nicpf *nic)
 	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + (1 << 3), ~0x00ull);
 }
 
-static uint64_t nic_get_mbx_intr_status(struct nicpf *nic, int mbx_reg)
+static u64 nic_get_mbx_intr_status(struct nicpf *nic, int mbx_reg)
 {
 	return nic_reg_read(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3));
 }
@@ -77,17 +77,17 @@ static void nic_clear_mbx_intr(struct nicpf *nic, int vf, int mbx_reg)
 	nic_reg_write(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3), (1ULL << vf));
 }
 
-static uint64_t nic_get_mbx_addr(int vf)
+static u64 nic_get_mbx_addr(int vf)
 {
 	return NIC_PF_VF_0_127_MAILBOX_0_1 + (vf << NIC_VF_NUM_SHIFT);
 }
 
 static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 {
-	uint64_t *msg;
-	uint64_t mbx_addr;
+	u64 *msg;
+	u64 mbx_addr;
 
-	msg = (uint64_t *)mbx;
+	msg = (u64 *)mbx;
 	mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
 
 	/* In first revision HW, mbox interrupt is triggerred
@@ -111,10 +111,10 @@ static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 static int nic_get_mac_addresses(struct nicpf *nic)
 {
 	struct device_node *np, *np_child;
-	uint32_t  nplen;
-	uint8_t  *np_ptr = NULL, node[10], next_range_off = 10;
-	uint32_t  i, mac_count = 0, range, mac_range;
-	uint64_t  start_mac = 0, next_mac  = 0;
+	u32  nplen;
+	u8  *np_ptr = NULL, node[10], next_range_off = 10;
+	u32  i, mac_count = 0, range, mac_range;
+	u64  start_mac = 0, next_mac  = 0;
 
 	np = of_find_node_by_name(NULL, "ethernet-macs");
 	if (!np)
@@ -125,7 +125,7 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 	if (!np_child)
 		return 0;
 
-	np_ptr = (uint8_t *)of_get_property(np_child, "mac", &nplen);
+	np_ptr = (u8 *)of_get_property(np_child, "mac", &nplen);
 	if (!np_ptr)
 		return 0;
 
@@ -140,7 +140,7 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 		start_mac = be64_to_cpu(start_mac);
 		next_mac  = start_mac;
 		/* get range length for given range */
-		mac_range = be32_to_cpup((uint32_t *)(np_ptr + range +
+		mac_range = be32_to_cpup((u32 *)(np_ptr + range +
 					ETH_ALEN));
 		for (i = 0; i < mac_range; i++) {
 #ifdef __BIG_ENDIAN_BITFIELD
@@ -169,8 +169,8 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_MODE;
 	else
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
-	ether_addr_copy((uint8_t *)&mbx.data.nic_cfg.mac_addr,
-			(uint8_t *)&nic->mac[vf]);
+	ether_addr_copy((u8 *)&mbx.data.nic_cfg.mac_addr,
+			(u8 *)&nic->mac[vf]);
 	mbx.data.nic_cfg.node_id = nic->node;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
@@ -195,20 +195,20 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
-	uint64_t *mbx_data;
-	uint64_t mbx_addr;
-	uint64_t reg_addr;
+	u64 *mbx_data;
+	u64 mbx_addr;
+	u64 reg_addr;
 	int bgx, lmac;
 	int i;
 	int ret = 0;
 
 	mbx_addr = nic_get_mbx_addr(vf);
-	mbx_data = (uint64_t *)&mbx;
+	mbx_data = (u64 *)&mbx;
 
 	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
 		*mbx_data = nic_reg_read(nic, mbx_addr);
 		mbx_data++;
-		mbx_addr += sizeof(uint64_t);
+		mbx_addr += sizeof(u64);
 	}
 
 	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
@@ -290,7 +290,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 
 static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 {
-	uint16_t timeout = ~0x00;
+	u16 timeout = ~0x00;
 
 	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x01);
 	while (timeout) {
@@ -340,7 +340,7 @@ static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 		return 0;
 
 	nic->pkind.maxlen = new_frs;
-	nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG, *(uint64_t *)&nic->pkind);
+	nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG, *(u64 *)&nic->pkind);
 	return 0;
 }
 
@@ -348,7 +348,7 @@ static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 static void nic_set_tx_pkt_pad(struct nicpf *nic, int size)
 {
 	int lmac;
-	uint64_t lmac_cfg;
+	u64 lmac_cfg;
 
 	/* Max value that can be set is 60 */
 	if (size > 60)
@@ -369,7 +369,7 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 {
 	int bgx, bgx_count, next_bgx_lmac = 0;
 	int lmac, lmac_cnt = 0;
-	uint64_t lmac_credit;
+	u64 lmac_credit;
 
 	nic->num_vf_en = 0;
 	if (nic->flags & NIC_TNS_ENABLED) {
@@ -401,7 +401,7 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 static void nic_init_hw(struct nicpf *nic)
 {
 	int i;
-	uint64_t reg;
+	u64 reg;
 
 	/* Reset NIC, incase if driver is repeatedly inserted and removed */
 	nic_reg_write(nic, NIC_PF_SOFT_RESET, 1);
@@ -441,7 +441,7 @@ static void nic_init_hw(struct nicpf *nic)
 
 	for (i = 0; i < NIC_MAX_PKIND; i++)
 		nic_reg_write(nic, NIC_PF_PKIND_0_15_CFG | (i << 3),
-			      *(uint64_t *)&nic->pkind);
+			      *(u64 *)&nic->pkind);
 
 	nic_set_tx_pkt_pad(nic, NIC_HW_MIN_FRS);
 
@@ -451,10 +451,10 @@ static void nic_init_hw(struct nicpf *nic)
 
 static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 {
-	uint32_t vnic, bgx, lmac, chan;
-	uint32_t padd, cpi_count = 0;
-	uint64_t cpi_base, cpi, rssi_base, rssi;
-	uint8_t qset, rq_idx = 0;
+	u32 vnic, bgx, lmac, chan;
+	u32 padd, cpi_count = 0;
+	u64 cpi_base, cpi, rssi_base, rssi;
+	u8  qset, rq_idx = 0;
 
 	vnic = cfg->vf_id;
 	bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
@@ -468,7 +468,7 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_BP_CFG | (chan << 3),
 		      (1ull << 63) | (vnic << 0));
 	nic_reg_write(nic, NIC_PF_CHAN_0_255_RX_CFG | (chan << 3),
-		      ((uint64_t)cfg->cpi_alg << 62) | (cpi_base << 48));
+		      ((u64)cfg->cpi_alg << 62) | (cpi_base << 48));
 
 	if (cfg->cpi_alg == CPI_ALG_NONE)
 		cpi_count = 1;
@@ -518,9 +518,9 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 static void nic_send_rss_size(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
-	uint64_t  *msg;
+	u64  *msg;
 
-	msg = (uint64_t *)&mbx;
+	msg = (u64 *)&mbx;
 
 	mbx.msg = NIC_PF_VF_MSG_RSS_SIZE;
 	mbx.data.rss_size.ind_tbl_size = nic->rss_ind_tbl_size;
@@ -529,8 +529,8 @@ static void nic_send_rss_size(struct nicpf *nic, int vf)
 
 static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 {
-	uint64_t cpi_cfg, cpi_base, rssi_base, rssi;
-	uint8_t qset, idx = 0;
+	u8  qset, idx = 0;
+	u64 cpi_cfg, cpi_base, rssi_base, rssi;
 
 	cpi_base = nic->cpi_base[cfg->vf_id];
 	cpi_cfg = nic_reg_read(nic, NIC_PF_CPI_0_2047_CFG | (cpi_base << 3));
@@ -563,9 +563,9 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
  */
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 {
-	uint32_t bgx, lmac, chan;
-	uint32_t tl2, tl3, tl4;
-	uint32_t rr_quantum;
+	u32 bgx, lmac, chan;
+	u32 tl2, tl3, tl4;
+	u32 rr_quantum;
 
 	bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vnic]);
@@ -597,8 +597,8 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
 {
 	int vf;
-	uint16_t vf_per_mbx_reg = 64;
-	uint64_t intr;
+	u16 vf_per_mbx_reg = 64;
+	u64 intr;
 	struct nicpf *nic = (struct nicpf *)nic_irq;
 
 	intr = nic_get_mbx_intr_status(nic, 0);
@@ -617,8 +617,8 @@ static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
 static irqreturn_t nic_mbx1_intr_handler (int irq, void *nic_irq)
 {
 	int vf;
-	uint16_t vf_per_mbx_reg = 64;
-	uint64_t intr;
+	u16 vf_per_mbx_reg = 64;
+	u64 intr;
 	struct nicpf *nic = (struct nicpf *)nic_irq;
 
 	if (nic->num_vf_en <= vf_per_mbx_reg)
@@ -682,14 +682,14 @@ static int nic_register_interrupts(struct nicpf *nic)
 	if (ret)
 		goto fail;
 	else
-		nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = 1;
+		nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = true;
 
 	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX1].vector,
 			  nic_mbx1_intr_handler, 0 , "NIC Mbox1", nic);
 	if (ret)
 		goto fail;
 	else
-		nic->irq_allocated[NIC_PF_INTR_ID_MBOX1] = 1;
+		nic->irq_allocated[NIC_PF_INTR_ID_MBOX1] = true;
 
 	/* Enable mailbox interrupt */
 	nic_enable_mbx_intr(nic);
@@ -699,7 +699,7 @@ fail:
 	for (irq = 0; irq < nic->num_vec; irq++) {
 		if (nic->irq_allocated[irq])
 			free_irq(nic->msix_entries[irq].vector, nic);
-		nic->irq_allocated[irq] = 0;
+		nic->irq_allocated[irq] = false;
 	}
 	return 1;
 }
@@ -712,7 +712,7 @@ static void nic_unregister_interrupts(struct nicpf *nic)
 	for (irq = 0; irq < nic->num_vec; irq++) {
 		if (nic->irq_allocated[irq])
 			free_irq(nic->msix_entries[irq].vector, nic);
-		nic->irq_allocated[irq] = 0;
+		nic->irq_allocated[irq] = false;
 	}
 
 	/* Disable MSI-X */
@@ -823,7 +823,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP PF's configuration registers */
-	nic->reg_base = (uint64_t)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	nic->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!nic->reg_base) {
 		dev_err(dev, "Cannot map config register space, aborting\n");
 		err = -ENOMEM;

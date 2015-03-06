@@ -210,15 +210,15 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 
 static int nicvf_get_regs_len(struct net_device *dev)
 {
-	return sizeof(uint64_t) * NIC_VF_REG_COUNT;
+	return sizeof(u64) * NIC_VF_REG_COUNT;
 }
 
 static void nicvf_get_regs(struct net_device *dev,
 			   struct ethtool_regs *regs, void *reg)
 {
 	struct nicvf *nic = netdev_priv(dev);
-	uint64_t *p = (uint64_t *)reg;
-	uint64_t reg_offset;
+	u64 *p = (u64 *)reg;
+	u64 reg_offset;
 	int mbox, key, stat, q;
 	int i = 0;
 
@@ -366,7 +366,7 @@ static int nicvf_get_rss_hash_opts(struct nicvf *nic,
 }
 
 static int nicvf_get_rxnfc(struct net_device *dev,
-			   struct ethtool_rxnfc *info, uint32_t *rules)
+			   struct ethtool_rxnfc *info, u32 *rules)
 {
 	struct nicvf *nic = netdev_priv(dev);
 	int ret = -EOPNOTSUPP;
@@ -388,7 +388,7 @@ static int nicvf_set_rss_hash_opts(struct nicvf *nic,
 				   struct ethtool_rxnfc *info)
 {
 	struct nicvf_rss_info *rss = &nic->rss_info;
-	uint64_t rss_cfg = nicvf_reg_read(nic, NIC_VNIC_RSS_CFG);
+	u64 rss_cfg = nicvf_reg_read(nic, NIC_VNIC_RSS_CFG);
 
 	if (!rss->enable)
 		netdev_err(nic->netdev,
@@ -467,7 +467,7 @@ static int nicvf_set_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info)
 
 static u32 nicvf_get_rxfh_key_size(struct net_device *netdev)
 {
-	return RSS_HASH_KEY_SIZE * sizeof(uint64_t);
+	return RSS_HASH_KEY_SIZE * sizeof(u64);
 }
 
 static u32 nicvf_get_rxfh_indir_size(struct net_device *dev)
@@ -489,7 +489,7 @@ static int nicvf_get_rxfh(struct net_device *dev, u32 *indir, u8 *hkey)
 	}
 
 	if (hkey)
-		memcpy(hkey, rss->key, RSS_HASH_KEY_SIZE * sizeof(uint64_t));
+		memcpy(hkey, rss->key, RSS_HASH_KEY_SIZE * sizeof(u64));
 
 	return 0;
 }
@@ -514,7 +514,7 @@ static int nicvf_set_rxfh(struct net_device *dev, const u32 *indir,
 	}
 
 	if (hkey) {
-		memcpy(rss->key, hkey, RSS_HASH_KEY_SIZE * sizeof(uint64_t));
+		memcpy(rss->key, hkey, RSS_HASH_KEY_SIZE * sizeof(u64));
 		nicvf_set_rss_key(nic);
 	}
 

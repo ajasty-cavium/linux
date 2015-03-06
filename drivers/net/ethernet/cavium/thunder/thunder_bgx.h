@@ -184,17 +184,17 @@ enum MCAST_MODE {
 #define BCAST_ACCEPT	1
 #define CAM_ACCEPT	1
 
-void bgx_add_dmac_addr(uint64_t dmac, int node, int bgx_idx, int lmac);
+void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac);
 void bgx_get_count(int node, int *bgx_count);
 int bgx_get_lmac_count(int node, int bgx);
-uint64_t bgx_get_rx_stats(int bgx_idx, int lmac, int idx);
-uint64_t bgx_get_tx_stats(int bgx_idx, int lmac, int idx);
+u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx);
+u64 bgx_get_tx_stats(int bgx_idx, int lmac, int idx);
 #define BGX_RX_STATS_COUNT 11
 #define BGX_TX_STATS_COUNT 18
 
 struct bgx_stats {
-	uint64_t rx_stats[BGX_RX_STATS_COUNT];
-	uint64_t tx_stats[BGX_TX_STATS_COUNT];
+	u64 rx_stats[BGX_RX_STATS_COUNT];
+	u64 tx_stats[BGX_TX_STATS_COUNT];
 };
 
 #undef LINK_INTR_ENABLE
