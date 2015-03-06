@@ -72,7 +72,6 @@ static void nicvf_dump_packet(struct net_device *netdev, struct sk_buff *skb)
 	pr_info("\n");
 }
 
-#ifdef NICVF_ETHTOOL_ENABLE
 static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 					  struct sk_buff *skb)
 {
@@ -91,7 +90,6 @@ static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 	else if (skb->len > 1518)
 		nic->drv_stats.rx_frames_jumbo++;
 }
-#endif
 
 /* Register read/write APIs */
 void nicvf_reg_write(struct nicvf *nic, uint64_t offset, uint64_t val)
@@ -446,9 +444,7 @@ static void nicvf_rcv_pkt_handler(struct net_device *netdev,
 	if (netif_msg_pktdata(nic))
 		nicvf_dump_packet(netdev, skb);
 
-#ifdef NICVF_ETHTOOL_ENABLE
 	nicvf_set_rx_frame_cnt(nic, skb);
-#endif
 
 	skb_record_rx_queue(skb, cqe_rx->rq_idx);
 	if (netdev->hw_features & NETIF_F_RXCSUM) {
@@ -1297,9 +1293,9 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	nic->msg_enable = debug;
-#ifdef NICVF_ETHTOOL_ENABLE
+
 	nicvf_set_ethtool_ops(netdev);
-#endif
+
 	goto exit;
 
 err_unmap_resources:

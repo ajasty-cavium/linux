@@ -84,45 +84,11 @@ static const unsigned int nicvf_n_queue_stats = ARRAY_SIZE(nicvf_queue_stats);
 static int nicvf_get_settings(struct net_device *netdev,
 			      struct ethtool_cmd *cmd)
 {
-	cmd->supported = (SUPPORTED_1000baseT_Full |
-			SUPPORTED_100baseT_Full |
-			SUPPORTED_10baseT_Full |
-			SUPPORTED_10000baseT_Full | SUPPORTED_FIBRE);
-
-	cmd->advertising = (ADVERTISED_1000baseT_Full |
-			ADVERTISED_100baseT_Full |
-			ADVERTISED_10baseT_Full |
-			ADVERTISED_10000baseT_Full | ADVERTISED_FIBRE);
-
-	cmd->port = PORT_FIBRE;
-	cmd->transceiver = XCVR_EXTERNAL;
-	if (netif_carrier_ok(netdev)) {
-		ethtool_cmd_speed_set(cmd, SPEED_10000);
-		cmd->duplex = DUPLEX_FULL;
-	} else {
-		ethtool_cmd_speed_set(cmd, -1);
-		cmd->duplex = -1;
-	}
-
+	cmd->supported = 0;
 	cmd->autoneg = AUTONEG_DISABLE;
-	ethtool_cmd_speed_set(cmd, SPEED_1000);
-	return 0;
-}
-
-static int nicvf_set_settings(struct net_device *netdev,
-			      struct ethtool_cmd *cmd)
-{
-	return -EOPNOTSUPP;
-
-	/* 10G full duplex setting supported only */
-	if (cmd->autoneg == AUTONEG_ENABLE)
-		return -EOPNOTSUPP;
-
-	if (ethtool_cmd_speed(cmd) != SPEED_10000)
-		return -EOPNOTSUPP;
-
-	if (cmd->duplex != DUPLEX_FULL)
-		return -EOPNOTSUPP;
+	cmd->transceiver = XCVR_DUMMY1;
+	cmd->port = PORT_NONE;
+	cmd->duplex = DUPLEX_FULL;
 
 	return 0;
 }
@@ -607,7 +573,6 @@ static int nicvf_set_channels(struct net_device *dev,
 
 static const struct ethtool_ops nicvf_ethtool_ops = {
 	.get_settings		= nicvf_get_settings,
-	.set_settings		= nicvf_set_settings,
 	.get_link		= ethtool_op_get_link,
 	.get_drvinfo		= nicvf_get_drvinfo,
 	.get_msglevel		= nicvf_get_msglevel,

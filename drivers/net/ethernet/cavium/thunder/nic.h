@@ -38,9 +38,6 @@
 /* VNIC HW optimiation features */
 #define VNIC_RSS_SUPPORT
 
-/* ETHTOOL enable or disable, undef this to disable */
-#define	NICVF_ETHTOOL_ENABLE
-
 /* Min/Max packet size */
 #define	NIC_HW_MIN_FRS			64
 #define	NIC_HW_MAX_FRS			9200 /* 9216 max packet including FCS */
@@ -433,9 +430,7 @@ void nicvf_config_rss(struct nicvf *nic);
 void nicvf_set_rss_key(struct nicvf *nic);
 #endif
 void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
-#ifdef NICVF_ETHTOOL_ENABLE
 void nicvf_set_ethtool_ops(struct net_device *netdev);
-#endif
 void nicvf_update_stats(struct nicvf *nic);
 void nicvf_update_lmac_stats(struct nicvf *nic);
 
