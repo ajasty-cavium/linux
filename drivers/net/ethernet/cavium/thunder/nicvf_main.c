@@ -289,43 +289,36 @@ void nicvf_config_rss(struct nicvf *nic)
 	struct nic_mbx mbx = {};
 	struct nicvf_rss_info *rss = &nic->rss_info;
 	int ind_tbl_len = rss->rss_size;
-	bool cont = false;
 	int i, nextq = 0;
 
-	mbx.msg = NIC_PF_VF_MSG_RSS_CFG;
 	mbx.data.rss_cfg.vf_id = nic->vf_id;
 	mbx.data.rss_cfg.hash_bits = rss->hash_bits;
-	mbx.data.rss_cfg.tbl_len = 0;
-	mbx.data.rss_cfg.tbl_offset = 0;
 	while (ind_tbl_len) {
-		mbx.data.rss_cfg.tbl_offset += mbx.data.rss_cfg.tbl_len;
-		if (ind_tbl_len > RSS_IND_TBL_LEN_PER_MBX_MSG)
-			mbx.data.rss_cfg.tbl_len = RSS_IND_TBL_LEN_PER_MBX_MSG;
-		else
-			mbx.data.rss_cfg.tbl_len = ind_tbl_len;
+		mbx.data.rss_cfg.tbl_offset = nextq;
+		mbx.data.rss_cfg.tbl_len = min(ind_tbl_len,
+					       RSS_IND_TBL_LEN_PER_MBX_MSG);
+		mbx.msg = mbx.data.rss_cfg.tbl_offset ?
+			  NIC_PF_VF_MSG_RSS_CFG_CONT : NIC_PF_VF_MSG_RSS_CFG;
 
 		for (i = 0; i < mbx.data.rss_cfg.tbl_len; i++)
 			mbx.data.rss_cfg.ind_tbl[i] = rss->ind_tbl[nextq++];
 
-		if (cont)
-			mbx.msg = NIC_PF_VF_MSG_RSS_CFG_CONT;
-
 		nicvf_send_msg_to_pf(nic, &mbx);
 
 		ind_tbl_len -= mbx.data.rss_cfg.tbl_len;
-		if (!ind_tbl_len)
-			return;
-		cont = true;
 	}
 }
 
 void nicvf_set_rss_key(struct nicvf *nic)
 {
 	struct nicvf_rss_info *rss = &nic->rss_info;
+	uint64_t key_addr = NIC_VNIC_RSS_KEY_0_4;
 	int idx;
 
-	for (idx = 0; idx < RSS_HASH_KEY_SIZE; idx++)
-		nicvf_reg_write(nic, NIC_VNIC_RSS_KEY_0_4, rss->key[idx]);
+	for (idx = 0; idx < RSS_HASH_KEY_SIZE; idx++) {
+		nicvf_reg_write(nic, key_addr, rss->key[idx]);
+		key_addr += sizeof(uint64_t);
+	}
 }
 
 static int nicvf_rss_init(struct nicvf *nic)
