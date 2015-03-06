@@ -428,13 +428,14 @@ static void its_send_single_command(struct its_node *its,
 {
 	struct its_cmd_block *cmd, *sync_cmd, *next_cmd;
 	struct its_collection *sync_col;
+	unsigned long flags;
 
-	raw_spin_lock(&its->lock);
+	raw_spin_lock_irqsave(&its->lock, flags);
 
 	cmd = its_allocate_entry(its);
 	if (!cmd) {		/* We're soooooo screewed... */
 		pr_err_ratelimited("ITS can't allocate, dropping command\n");
-		raw_spin_unlock(&its->lock);
+		raw_spin_unlock_irqrestore(&its->lock, flags);
 		return;
 	}
 	sync_col = builder(cmd, desc);
@@ -454,7 +455,7 @@ static void its_send_single_command(struct its_node *its,
 
 post:
 	next_cmd = its_post_commands(its);
-	raw_spin_unlock(&its->lock);
+	raw_spin_unlock_irqrestore(&its->lock, flags);
 
 	its_wait_for_range_completion(its, cmd, next_cmd);
 }
@@ -1126,8 +1127,9 @@ static void its_cpu_init_collection(void)
 static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
 {
 	struct its_device *its_dev = NULL, *tmp;
+	unsigned long flags;
 
-	raw_spin_lock(&its->lock);
+	raw_spin_lock_irqsave(&its->lock, flags);
 
 	list_for_each_entry(tmp, &its->its_device_list, entry) {
 		if (tmp->device_id == dev_id) {
@@ -1136,7 +1138,7 @@ static struct its_device *its_find_device(struct its_node *its, u32 dev_id)
 		}
 	}
 
-	raw_spin_unlock(&its->lock);
+	raw_spin_unlock_irqrestore(&its->lock, flags);
 
 	return its_dev;
 }
@@ -1146,6 +1148,7 @@ struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 {
 	struct its_device *dev;
 	unsigned long *lpi_map;
+	unsigned long flags;
 	void *itt;
 	int lpi_base;
 	int nr_lpis;
@@ -1174,9 +1177,9 @@ struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	dev->device_id = dev_id;
 	INIT_LIST_HEAD(&dev->entry);
 
-	raw_spin_lock(&its->lock);
+	raw_spin_lock_irqsave(&its->lock, flags);
 	list_add(&dev->entry, &its->its_device_list);
-	raw_spin_unlock(&its->lock);
+	raw_spin_unlock_irqrestore(&its->lock, flags);
 
 	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
 		dev->itt1 = kmalloc(sz, GFP_KERNEL);
@@ -1204,9 +1207,11 @@ EXPORT_SYMBOL(its_create_device);
 
 void its_free_device(struct its_device *its_dev)
 {
-	raw_spin_lock(&its_dev->its->lock);
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&its_dev->its->lock, flags);
 	list_del(&its_dev->entry);
-	raw_spin_unlock(&its_dev->its->lock);
+	raw_spin_unlock_irqrestore(&its_dev->its->lock, flags);
 	kfree(its_dev->itt);
 	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144))
 		kfree(its_dev->itt1);
