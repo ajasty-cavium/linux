@@ -129,7 +129,7 @@ static bool bgx_stats_acked;
 
 int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
-	int timeout = NIC_PF_VF_MBX_TIMEOUT;
+	int timeout = NIC_MBOX_MSG_TIMEOUT;
 	int sleep = 10;
 	u64 *msg;
 	u64 mbx_addr;
@@ -170,7 +170,7 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 
 	pf_ready_to_rcv_msg = false;
 
-	nicvf_reg_write(nic, mbx_addr, le64_to_cpu(NIC_PF_VF_MSG_READY));
+	nicvf_reg_write(nic, mbx_addr, le64_to_cpu(NIC_MBOX_MSG_READY));
 
 	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
 	nicvf_reg_write(nic, mbx_addr, 1ULL);
@@ -208,7 +208,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 	nic_dbg(&nic->pdev->dev,
 		"Mbox message from PF, msg 0x%x\n", mbx.msg);
 	switch (mbx.msg) {
-	case NIC_PF_VF_MSG_READY:
+	case NIC_MBOX_MSG_READY:
 		pf_ready_to_rcv_msg = true;
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
@@ -216,19 +216,19 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		ether_addr_copy(nic->netdev->dev_addr,
 				(u8 *)&mbx.data.nic_cfg.mac_addr);
 		break;
-	case NIC_PF_VF_MSG_ACK:
+	case NIC_MBOX_MSG_ACK:
 		pf_acked = true;
 		break;
-	case NIC_PF_VF_MSG_NACK:
+	case NIC_MBOX_MSG_NACK:
 		pf_nacked = true;
 		break;
 #ifdef VNIC_RSS_SUPPORT
-	case NIC_PF_VF_MSG_RSS_SIZE:
+	case NIC_MBOX_MSG_RSS_SIZE:
 		nic->rss_info.rss_size = mbx.data.rss_size.ind_tbl_size;
 		pf_acked = true;
 		break;
 #endif
-	case NIC_PF_VF_MSG_BGX_STATS:
+	case NIC_MBOX_MSG_BGX_STATS:
 		nicvf_read_bgx_stats(nic, &mbx.data.bgx_stats);
 		pf_acked = true;
 		bgx_stats_acked = true;
@@ -246,7 +246,7 @@ static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 	struct nic_mbx mbx = {};
 	int i;
 
-	mbx.msg = NIC_PF_VF_MSG_SET_MAC;
+	mbx.msg = NIC_MBOX_MSG_SET_MAC;
 	mbx.data.mac.vf_id = nic->vf_id;
 	for (i = 0; i < ETH_ALEN; i++)
 		mbx.data.mac.addr = (mbx.data.mac.addr << 8) |
@@ -255,16 +255,11 @@ static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 	return nicvf_send_msg_to_pf(nic, &mbx);
 }
 
-static int nicvf_is_link_active(struct nicvf *nic)
-{
-	return 1;
-}
-
 void nicvf_config_cpi(struct nicvf *nic)
 {
 	struct nic_mbx mbx = {};
 
-	mbx.msg = NIC_PF_VF_MSG_CPI_CFG;
+	mbx.msg = NIC_MBOX_MSG_CPI_CFG;
 	mbx.data.cpi_cfg.vf_id = nic->vf_id;
 	mbx.data.cpi_cfg.cpi_alg = nic->cpi_alg;
 	mbx.data.cpi_cfg.rq_cnt = nic->qs->rq_cnt;
@@ -277,7 +272,7 @@ void nicvf_get_rss_size(struct nicvf *nic)
 {
 	struct nic_mbx mbx = {};
 
-	mbx.msg = NIC_PF_VF_MSG_RSS_SIZE;
+	mbx.msg = NIC_MBOX_MSG_RSS_SIZE;
 	mbx.data.rss_size.vf_id = nic->vf_id;
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
@@ -296,7 +291,7 @@ void nicvf_config_rss(struct nicvf *nic)
 		mbx.data.rss_cfg.tbl_len = min(ind_tbl_len,
 					       RSS_IND_TBL_LEN_PER_MBX_MSG);
 		mbx.msg = mbx.data.rss_cfg.tbl_offset ?
-			  NIC_PF_VF_MSG_RSS_CFG_CONT : NIC_PF_VF_MSG_RSS_CFG;
+			  NIC_MBOX_MSG_RSS_CFG_CONT : NIC_MBOX_MSG_RSS_CFG;
 
 		for (i = 0; i < mbx.data.rss_cfg.tbl_len; i++)
 			mbx.data.rss_cfg.ind_tbl[i] = rss->ind_tbl[nextq++];
@@ -378,8 +373,6 @@ int nicvf_set_real_num_queues(struct net_device *netdev,
 static int nicvf_init_resources(struct nicvf *nic)
 {
 	int err;
-
-	nic->num_qs = 1;
 
 	/* Enable Qset */
 	nicvf_qset_config(nic, true);
@@ -679,17 +672,12 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 
 static int nicvf_enable_msix(struct nicvf *nic)
 {
-	int i, ret, vec;
-	struct queue_set *qs = nic->qs;
+	int ret, vec;
 
 	nic->num_vec = NIC_VF_MSIX_VECTORS;
-	vec = qs->cq_cnt + qs->rbdr_cnt + qs->sq_cnt;
-	vec = NIC_VF_MSIX_VECTORS;
-	if (vec > NIC_VF_MSIX_VECTORS)
-		nic->num_vec = vec;
 
-	for (i = 0; i < nic->num_vec; i++)
-		nic->msix_entries[i].entry = i;
+	for (vec = 0; vec < nic->num_vec; vec++)
+		nic->msix_entries[vec].entry = vec;
 
 	ret = pci_enable_msix(nic->pdev, nic->msix_entries, nic->num_vec);
 	if (ret) {
@@ -990,10 +978,8 @@ int nicvf_open(struct net_device *netdev)
 	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
 		nicvf_enable_intr(nic, NICVF_INTR_RBDR, qidx);
 
-	if (nicvf_is_link_active(nic)) {
-		netif_carrier_on(netdev);
-		netif_tx_start_all_queues(netdev);
-	}
+	netif_carrier_on(netdev);
+	netif_tx_start_all_queues(netdev);
 
 	return 0;
 cleanup:
@@ -1017,7 +1003,7 @@ static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)
 {
 	struct nic_mbx mbx = {};
 
-	mbx.msg = NIC_PF_VF_MSG_SET_MAX_FRS;
+	mbx.msg = NIC_MBOX_MSG_SET_MAX_FRS;
 	mbx.data.frs.max_frs = mtu;
 	mbx.data.frs.vf_id = nic->vf_id;
 
@@ -1076,7 +1062,7 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	if (!netif_running(nic->netdev))
 		return;
 
-	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
+	mbx.msg = NIC_MBOX_MSG_BGX_STATS;
 	mbx.data.bgx_stats.vf_id = nic->vf_id;
 	/* Rx stats */
 	mbx.data.bgx_stats.rx = 1;

@@ -90,8 +90,8 @@
 				 MAX_CQE_PER_PKT_XMIT)
 #define RQ_CQ_DROP		((CMP_QUEUE_LEN - MAX_CQES_FOR_TX) / 256)
 
-/* Descriptor size */
-#define SND_QUEUE_DESC_SIZE	16   /* 128 bits */
+/* Descriptor size in bytes */
+#define SND_QUEUE_DESC_SIZE	16
 #define CMP_QUEUE_DESC_SIZE	512
 
 /* Buffer / descriptor alignments */

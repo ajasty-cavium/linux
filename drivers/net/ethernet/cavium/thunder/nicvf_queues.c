@@ -24,6 +24,7 @@ struct rbuf_info {
 
 #define GET_RBUF_INFO(x) ((struct rbuf_info *)(x - NICVF_RCV_BUF_ALIGN_BYTES))
 
+/* Poll a register for a specific value */
 static int nicvf_poll_reg(struct nicvf *nic, int qidx,
 			  u64 reg, int bit_pos, int bits, int val)
 {
@@ -45,22 +46,26 @@ static int nicvf_poll_reg(struct nicvf *nic, int qidx,
 	return 1;
 }
 
+/* Allocate memory for a queue's descriptors */
 static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 				  int q_len, int desc_size, int align_bytes)
 {
 	dmem->q_len = q_len;
 	dmem->size = (desc_size * q_len) + align_bytes;
+	/* Save address, need it while freeing */
 	dmem->unalign_base = dma_zalloc_coherent(&nic->pdev->dev, dmem->size,
 						&dmem->dma, GFP_KERNEL);
 	if (!dmem->unalign_base)
 		return -1;
 
+	/* Align memory address for 'align_bytes' */
 	dmem->phys_base = NICVF_ALIGNED_ADDR((u64)dmem->dma, align_bytes);
 	dmem->base = (void *)((u8 *)dmem->unalign_base +
 			      (dmem->phys_base - dmem->dma));
 	return 0;
 }
 
+/* Free queue's descriptor memory */
 static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
 {
 	if (!dmem)
@@ -72,12 +77,18 @@ static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
 	dmem->base = NULL;
 }
 
+/* Allocate buffer for packet reception
+ * HW returns memory address where packet is DMA'ed but not a pointer
+ * into RBDR ring, so save buffer address at the start of fragment and
+ * align the start address to a cache aligned address
+ */
 static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic,
 					 u64 buf_len, u64 **rbuf)
 {
 	u64 data;
 	struct rbuf_info *rinfo;
 
+	/* SKB is built after packet is received */
 	data = (u64)netdev_alloc_frag(buf_len);
 	if (!data) {
 		netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
@@ -98,6 +109,7 @@ static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic,
 	return 0;
 }
 
+/* Retrieve actual buffer start address and build skb for received packet */
 static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, u64 rb_ptr)
 {
 	struct sk_buff *skb;
@@ -120,6 +132,7 @@ static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, u64 rb_ptr)
 	return skb;
 }
 
+/* Allocate RBDR ring and populate receive buffers */
 static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 			    int ring_len, int buf_size)
 {
@@ -151,6 +164,7 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	return 0;
 }
 
+/* Free RBDR ring and its receive buffers */
 static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 {
 	int head, tail;
@@ -242,9 +256,7 @@ next_rbdr:
 		nicvf_enable_intr(nic, NICVF_INTR_RBDR, rbdr_idx);
 }
 
-/* TBD: how to handle full packets received in CQ
- * i.e conversion of buffers into SKBs
- */
+/* Initialize completion queue */
 static int nicvf_init_cmp_queue(struct nicvf *nic,
 				struct cmp_queue *cq, int q_len)
 {
@@ -272,6 +284,7 @@ static void nicvf_free_cmp_queue(struct nicvf *nic, struct cmp_queue *cq)
 	nicvf_free_q_desc_mem(nic, &cq->dmem);
 }
 
+/* Initialize transmit queue */
 static int nicvf_init_snd_queue(struct nicvf *nic,
 				struct snd_queue *sq, int q_len)
 {
@@ -322,7 +335,7 @@ static void nicvf_reclaim_rcv_queue(struct nicvf *nic,
 	struct nic_mbx mbx = {};
 
 	/* Make sure all packets in the pipeline are written back into mem */
-	mbx.msg = NIC_PF_VF_MSG_RQ_SW_SYNC;
+	mbx.msg = NIC_MBOX_MSG_RQ_SW_SYNC;
 	mbx.data.rq.cfg = 0;
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
@@ -380,6 +393,7 @@ static void nicvf_reclaim_rbdr(struct nicvf *nic,
 		return;
 }
 
+/* Configures receive queue */
 static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
@@ -415,7 +429,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->caching = 1;
 
 	/* Send a mailbox msg to PF to config RQ */
-	mbx.msg = NIC_PF_VF_MSG_RQ_CFG;
+	mbx.msg = NIC_MBOX_MSG_RQ_CFG;
 	mbx.data.rq.qs_num = qs->vnic_id;
 	mbx.data.rq.rq_num = qidx;
 	mbx.data.rq.cfg = (rq->caching << 26) | (rq->cq_qs << 19) |
@@ -424,14 +438,14 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 			  (rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
-	mbx.msg = NIC_PF_VF_MSG_RQ_BP_CFG;
+	mbx.msg = NIC_MBOX_MSG_RQ_BP_CFG;
 	mbx.data.rq.cfg = (1ULL << 63) | (1ULL << 62) | (qs->vnic_id << 0);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* RQ drop config
 	 * Enable CQ drop to reserve sufficient CQEs for all tx packets
 	 */
-	mbx.msg = NIC_PF_VF_MSG_RQ_DROP_CFG;
+	mbx.msg = NIC_MBOX_MSG_RQ_DROP_CFG;
 	mbx.data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
@@ -472,6 +486,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 #endif
 }
 
+/* Configures completion queue */
 void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 			    int qidx, bool enable)
 {
@@ -511,6 +526,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 			      qidx, nic->cq_coalesce_usecs);
 }
 
+/* Configures transmit queue */
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
@@ -533,7 +549,7 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	sq->cq_idx = qidx;
 
 	/* Send a mailbox msg to PF to config SQ */
-	mbx.msg = NIC_PF_VF_MSG_SQ_CFG;
+	mbx.msg = NIC_MBOX_MSG_SQ_CFG;
 	mbx.data.sq.qs_num = qs->vnic_id;
 	mbx.data.sq.sq_num = qidx;
 	mbx.data.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
@@ -562,6 +578,7 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	}
 }
 
+/* Configures receive buffer descriptor ring */
 static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 			      int qidx, bool enable)
 {
@@ -597,6 +614,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 			      qidx, rbdr->thresh - 1);
 }
 
+/* Requests PF to assign and enable Qset */
 void nicvf_qset_config(struct nicvf *nic, bool enable)
 {
 	struct  nic_mbx mbx = {};
@@ -613,7 +631,7 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	qs->vnic_id = nic->vf_id;
 
 	/* Send a mailbox msg to PF to config Qset */
-	mbx.msg = NIC_PF_VF_MSG_QS_CFG;
+	mbx.msg = NIC_MBOX_MSG_QS_CFG;
 	mbx.data.qs.num = qs->vnic_id;
 
 	mbx.data.qs.cfg = 0;
@@ -739,10 +757,7 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 	return 0;
 }
 
-/* Get a free desc from send queue
- * @qs:   Qset from which to get a SQ descriptor
- * @qnum: SQ number (0...7) in the Qset
- *
+/* Get a free desc from SQ
  * returns descriptor ponter & descriptor number
  */
 static inline int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
@@ -761,6 +776,7 @@ static inline int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
 	return qentry;
 }
 
+/* Free descriptor back to SQ for future use */
 void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt)
 {
 	while (desc_cnt--) {
@@ -815,6 +831,7 @@ void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
 	}
 }
 
+/* Get the number of SQ descriptors needed to xmit this skb */
 static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 {
 	int subdesc_cnt = MIN_SQ_DESC_PER_PKT_XMIT;
@@ -851,10 +868,13 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 
 	memset(hdr, 0, SND_QUEUE_DESC_SIZE);
 	hdr->subdesc_type = SQ_DESC_TYPE_HEADER;
+	/* Enable notification via CQE after processing SQE */
 	hdr->post_cqe = 1;
+	/* No of subdescriptors following this */
 	hdr->subdesc_cnt = subdesc_cnt;
 	hdr->tot_len = skb->len;
 
+	/* Offload checksum calculation to HW */
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		if (skb->protocol != htons(ETH_P_IP))
 			return hdr;
@@ -897,6 +917,7 @@ static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
 	gather->size = skb_is_nonlinear(skb) ? skb_headlen(skb) : skb->len;
 	gather->addr = virt_to_phys(skb->data);
 
+	/* Check for scattered buffer */
 	if (!skb_is_nonlinear(skb))
 		return;
 
@@ -960,6 +981,7 @@ static inline unsigned frag_num(unsigned i)
 #endif
 }
 
+/* Returns SKB for a received packet */
 struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 {
 	int frag;

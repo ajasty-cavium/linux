@@ -55,9 +55,9 @@
  * ...
  * BGX1-LMAC3-CHAN0 - VNIC CHAN174
  */
-#define	NIC_INF_COUNT			2  /* No of interfaces */
+#define	NIC_INTF_COUNT			2  /* Interfaces btw VNIC and TNS/BGX */
 #define	NIC_CHANS_PER_INF		128
-#define	NIC_MAX_CHANS			(NIC_INF_COUNT * NIC_CHANS_PER_INF)
+#define	NIC_MAX_CHANS			(NIC_INTF_COUNT * NIC_CHANS_PER_INF)
 #define	NIC_CPI_COUNT			2048 /* No of channel parse indices */
 
 /* TNS bypass mode: 1-1 mapping between VNIC and BGX:LMAC */
@@ -122,7 +122,7 @@
 
 /* Global timer for CQ timer thresh interrupts
  * Calculated for SCLK of 700Mhz
- * value written should be a 1/16thof what is expected
+ * value written should be a 1/16th of what is expected
  *
  * 1 tick per usec
  */
@@ -233,9 +233,6 @@ struct nicvf {
 	u8			tns_mode;
 	u16			mtu;
 	struct queue_set	*qs;
-	u8			num_qs;
-	void			*addnl_qs;
-	u16			vf_mtu;
 	u64			reg_base;
 	struct tasklet_struct	rbdr_task;
 	struct tasklet_struct	qs_err_task;
@@ -270,7 +267,7 @@ struct nicpf {
 #define NIC_NODE_ID(x)		((x & NODE_ID_MASK) >> 44)
 	u8			node;
 	unsigned int		flags;
-	u8			total_vf_cnt;   /* Total num of VF supported */
+	u16			total_vf_cnt;   /* Total num of VF supported */
 	u8			num_vf_en;      /* No of VF enabled */
 	u64			reg_base;       /* Register start address */
 	struct pkind_cfg	pkind;
@@ -298,25 +295,25 @@ struct nicpf {
 
 /* PF <--> VF mailbox communication */
 #define	NIC_PF_VF_MAILBOX_SIZE		2
-#define	NIC_PF_VF_MBX_TIMEOUT		2000 /* ms */
+#define	NIC_MBOX_MSG_TIMEOUT		2000 /* ms */
 
 /* Mailbox message types */
-#define	NIC_PF_VF_MSG_READY		0x01	/* Is PF ready to rcv msgs */
-#define	NIC_PF_VF_MSG_ACK		0x02	/* ACK the message received */
-#define	NIC_PF_VF_MSG_NACK		0x03	/* NACK the message received */
-#define	NIC_PF_VF_MSG_QS_CFG		0x04	/* Configure Qset */
-#define	NIC_PF_VF_MSG_RQ_CFG		0x05	/* Configure receive queue */
-#define	NIC_PF_VF_MSG_SQ_CFG		0x06	/* Configure Send queue */
-#define	NIC_PF_VF_MSG_RQ_DROP_CFG	0x07	/* Configure receive queue */
-#define	NIC_PF_VF_MSG_SET_MAC		0x08	/* Add MAC ID to DMAC filter */
-#define	NIC_PF_VF_MSG_SET_MAX_FRS	0x09	/* Set max frame size */
-#define	NIC_PF_VF_MSG_CPI_CFG		0x0A	/* Config CPI, RSSI */
-#define	NIC_PF_VF_MSG_RSS_SIZE		0x0B	/* Get RSS indir_tbl size */
-#define	NIC_PF_VF_MSG_RSS_CFG		0x0C	/* Config RSS table */
-#define	NIC_PF_VF_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
-#define	NIC_PF_VF_MSG_RQ_BP_CFG		0x0E
-#define	NIC_PF_VF_MSG_RQ_SW_SYNC	0x0F
-#define	NIC_PF_VF_MSG_BGX_STATS		0x10
+#define	NIC_MBOX_MSG_READY		0x01	/* Is PF ready to rcv msgs */
+#define	NIC_MBOX_MSG_ACK		0x02	/* ACK the message received */
+#define	NIC_MBOX_MSG_NACK		0x03	/* NACK the message received */
+#define	NIC_MBOX_MSG_QS_CFG		0x04	/* Configure Qset */
+#define	NIC_MBOX_MSG_RQ_CFG		0x05	/* Configure receive queue */
+#define	NIC_MBOX_MSG_SQ_CFG		0x06	/* Configure Send queue */
+#define	NIC_MBOX_MSG_RQ_DROP_CFG	0x07	/* Configure receive queue */
+#define	NIC_MBOX_MSG_SET_MAC		0x08	/* Add MAC ID to DMAC filter */
+#define	NIC_MBOX_MSG_SET_MAX_FRS	0x09	/* Set max frame size */
+#define	NIC_MBOX_MSG_CPI_CFG		0x0A	/* Config CPI, RSSI */
+#define	NIC_MBOX_MSG_RSS_SIZE		0x0B	/* Get RSS indir_tbl size */
+#define	NIC_MBOX_MSG_RSS_CFG		0x0C	/* Config RSS table */
+#define	NIC_MBOX_MSG_RSS_CFG_CONT	0x0D	/* RSS config continuation */
+#define	NIC_MBOX_MSG_RQ_BP_CFG		0x0E	/* RQ backpressure config */
+#define	NIC_MBOX_MSG_RQ_SW_SYNC		0x0F	/* Flush inflight pkts to RQ */
+#define	NIC_MBOX_MSG_BGX_STATS		0x10	/* Get stats from BGX */
 
 struct nic_cfg_msg {
 	u8    vf_id;
@@ -400,7 +397,7 @@ struct bgx_stats_msg {
 	u64   stats;
 } __packed;
 
-/* 2 64bit locations */
+/* 128 bit shared memory between PF and each VF */
 struct nic_mbx {
 	u16   msg;
 	union	{

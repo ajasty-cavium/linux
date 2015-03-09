@@ -64,12 +64,7 @@ static void nic_enable_mbx_intr(struct nicpf *nic)
 {
 	/* Enable mailbox interrupt for all 128 VFs */
 	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S, ~0x00ull);
-	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + (1 << 3), ~0x00ull);
-}
-
-static u64 nic_get_mbx_intr_status(struct nicpf *nic, int mbx_reg)
-{
-	return nic_reg_read(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3));
+	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + sizeof(u64), ~0x00ull);
 }
 
 static void nic_clear_mbx_intr(struct nicpf *nic, int vf, int mbx_reg)
@@ -82,6 +77,10 @@ static u64 nic_get_mbx_addr(int vf)
 	return NIC_PF_VF_0_127_MAILBOX_0_1 + (vf << NIC_VF_NUM_SHIFT);
 }
 
+/* Send a mailbox message to VF
+ * @vf: vf to which this message to be sent
+ * @mbx: Message to be sent
+ */
 static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 {
 	u64 *msg;
@@ -116,10 +115,12 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 	u32  i, mac_count = 0, range, mac_range;
 	u64  start_mac = 0, next_mac  = 0;
 
+	/* Check if MAC ID list is present in DTS */
 	np = of_find_node_by_name(NULL, "ethernet-macs");
 	if (!np)
 		return 0;
 
+	/* Check if MAC ID list is available for this node (NUMA) */
 	sprintf(node, "node%d", nic->node);
 	np_child = of_get_child_by_name(np, node);
 	if (!np_child)
@@ -157,12 +158,15 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 	return 1;
 }
 
+/* Responds to VF's READY message with VF's
+ * ID, node, MAC address e.t.c
+ * @vf: VF which sent READY message
+ */
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
 
-	/* Respond with VNIC ID */
-	mbx.msg = NIC_PF_VF_MSG_READY;
+	mbx.msg = NIC_MBOX_MSG_READY;
 	mbx.data.nic_cfg.vf_id = vf;
 
 	if (nic->flags & NIC_TNS_ENABLED)
@@ -175,23 +179,30 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
+/* ACKs VF's mailbox message
+ * @vf: VF to which ACK to be sent
+ */
 static void nic_mbx_send_ack(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
 
-	mbx.msg = NIC_PF_VF_MSG_ACK;
+	mbx.msg = NIC_MBOX_MSG_ACK;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
+/* NACKs VF's mailbox message that PF is not able to
+ * complete the action
+ * @vf: VF to which ACK to be sent
+ */
 static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
 
-	mbx.msg = NIC_PF_VF_MSG_NACK;
+	mbx.msg = NIC_MBOX_MSG_NACK;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
-/* Handle Mailbox messages from VF and ack the message. */
+/* Interrupt handler to handle mailbox messages from VFs */
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
@@ -214,66 +225,66 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
 		__func__, mbx.msg, vf);
 	switch (mbx.msg) {
-	case NIC_PF_VF_MSG_READY:
+	case NIC_MBOX_MSG_READY:
 		nic_mbx_send_ready(nic, vf);
 		ret = 1;
 		break;
-	case NIC_PF_VF_MSG_QS_CFG:
+	case NIC_MBOX_MSG_QS_CFG:
 		reg_addr = NIC_PF_QSET_0_127_CFG |
 			   (mbx.data.qs.num << NIC_QS_ID_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
 		break;
-	case NIC_PF_VF_MSG_RQ_CFG:
+	case NIC_MBOX_MSG_RQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
-	case NIC_PF_VF_MSG_RQ_BP_CFG:
+	case NIC_MBOX_MSG_RQ_BP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_BP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
-	case NIC_PF_VF_MSG_RQ_SW_SYNC:
+	case NIC_MBOX_MSG_RQ_SW_SYNC:
 		ret = nic_rcv_queue_sw_sync(nic);
 		break;
-	case NIC_PF_VF_MSG_RQ_DROP_CFG:
+	case NIC_MBOX_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
 		break;
-	case NIC_PF_VF_MSG_SQ_CFG:
+	case NIC_MBOX_MSG_SQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
 			   (mbx.data.sq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.sq.sq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
 		nic_tx_channel_cfg(nic, mbx.data.qs.num, mbx.data.sq.sq_num);
 		break;
-	case NIC_PF_VF_MSG_SET_MAC:
+	case NIC_MBOX_MSG_SET_MAC:
 		lmac = mbx.data.mac.vf_id;
 		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
 		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
 		bgx_add_dmac_addr(mbx.data.mac.addr, nic->node, bgx, lmac);
 		break;
-	case NIC_PF_VF_MSG_SET_MAX_FRS:
+	case NIC_MBOX_MSG_SET_MAX_FRS:
 		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
 					mbx.data.frs.vf_id);
 		break;
-	case NIC_PF_VF_MSG_CPI_CFG:
+	case NIC_MBOX_MSG_CPI_CFG:
 		nic_config_cpi(nic, &mbx.data.cpi_cfg);
 		break;
 #ifdef VNIC_RSS_SUPPORT
-	case NIC_PF_VF_MSG_RSS_SIZE:
+	case NIC_MBOX_MSG_RSS_SIZE:
 		nic_send_rss_size(nic, vf);
 		return;
-	case NIC_PF_VF_MSG_RSS_CFG:
-	case NIC_PF_VF_MSG_RSS_CFG_CONT:
+	case NIC_MBOX_MSG_RSS_CFG:
+	case NIC_MBOX_MSG_RSS_CFG_CONT:
 		nic_config_rss(nic, &mbx.data.rss_cfg);
 		break;
 #endif
-	case NIC_PF_VF_MSG_BGX_STATS:
+	case NIC_MBOX_MSG_BGX_STATS:
 		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
 		return;
 	default:
@@ -284,15 +295,19 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 
 	if (!ret)
 		nic_mbx_send_ack(nic, vf);
-	else if (mbx.msg != NIC_PF_VF_MSG_READY)
+	else if (mbx.msg != NIC_MBOX_MSG_READY)
 		nic_mbx_send_nack(nic, vf);
 }
 
+/* Flush all in flight receive packets to memory and
+ * bring down an active RQ
+ */
 static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 {
 	u16 timeout = ~0x00;
 
 	nic_reg_write(nic, NIC_PF_SW_SYNC_RX, 0x01);
+	/* Wait till sync cycle is finished */
 	while (timeout) {
 		if (nic_reg_read(nic, NIC_PF_SW_SYNC_RX_DONE) & 0x1)
 			break;
@@ -306,6 +321,7 @@ static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 	return 0;
 }
 
+/* Get BGX Rx/Tx stats and respond to VF's request */
 static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 {
 	int bgx_idx, lmac;
@@ -314,7 +330,7 @@ static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
 
-	mbx.msg = NIC_PF_VF_MSG_BGX_STATS;
+	mbx.msg = NIC_MBOX_MSG_BGX_STATS;
 	mbx.data.bgx_stats.vf_id = bgx->vf_id;
 	mbx.data.bgx_stats.rx = bgx->rx;
 	mbx.data.bgx_stats.idx = bgx->idx;
@@ -327,6 +343,7 @@ static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx);
 }
 
+/* Update hardware min/max frame size */
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf)
 {
 	if ((new_frs > NIC_HW_MAX_FRS) || (new_frs < NIC_HW_MIN_FRS)) {
@@ -362,7 +379,7 @@ static void nic_set_tx_pkt_pad(struct nicpf *nic, int size)
 	}
 }
 
-/* Function to check number of LMACs present and set VF to LMAC mapping.
+/* Function to check number of LMACs present and set VF::LMAC mapping.
  * Mapping will be used while initializing channels.
  */
 static void nic_set_lmac_vf_mapping(struct nicpf *nic)
@@ -449,6 +466,7 @@ static void nic_init_hw(struct nicpf *nic)
 	nic_reg_write(nic, NIC_PF_INTR_TIMER_CFG, NICPF_CLK_PER_INT_TICK);
 }
 
+/* Channel parse index configuration */
 static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 {
 	u32 vnic, bgx, lmac, chan;
@@ -515,6 +533,7 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 }
 
 #ifdef VNIC_RSS_SUPPORT
+/* Responsds to VF with its RSS indirection table size */
 static void nic_send_rss_size(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
@@ -522,11 +541,17 @@ static void nic_send_rss_size(struct nicpf *nic, int vf)
 
 	msg = (u64 *)&mbx;
 
-	mbx.msg = NIC_PF_VF_MSG_RSS_SIZE;
+	mbx.msg = NIC_MBOX_MSG_RSS_SIZE;
 	mbx.data.rss_size.ind_tbl_size = nic->rss_ind_tbl_size;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
+/* Receive side scaling configuration
+ * configure:
+ * - RSS index
+ * - indir table i.e hash::RQ mapping
+ * - no of hash bits to consider
+ */
 static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 {
 	u8  qset, idx = 0;
@@ -551,15 +576,18 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 }
 #endif
 
-/* Transmit channel configuration (TL4 -> TL3 -> Chan)
- * VNIC0-SQ0 -> TL4(0)  -> TL4A(0) -> TL3[0] -> BGX0/LMAC0/Chan0
- * VNIC1-SQ0 -> TL4(8)  -> TL4A(2) -> TL3[2] -> BGX0/LMAC1/Chan0
- * VNIC2-SQ0 -> TL4(16) -> TL4A(4) -> TL3[4] -> BGX0/LMAC2/Chan0
- * VNIC3-SQ0 -> TL4(32) -> TL4A(6) -> TL3[6] -> BGX0/LMAC3/Chan0
- * VNIC4-SQ0 -> TL4(512)  -> TL4A(128) -> TL3[128] -> BGX1/LMAC0/Chan0
- * VNIC5-SQ0 -> TL4(520)  -> TL4A(130) -> TL3[130] -> BGX1/LMAC1/Chan0
- * VNIC6-SQ0 -> TL4(528)  -> TL4A(132) -> TL3[132] -> BGX1/LMAC2/Chan0
- * VNIC7-SQ0 -> TL4(536)  -> TL4A(134) -> TL3[134] -> BGX1/LMAC3/Chan0
+/* 4 level transmit side scheduler configutation
+ * for TNS bypass mode
+ *
+ * Sample configuration for SQ0
+ * VNIC0-SQ0 -> TL4(0)   -> TL3[0]   -> TL2[0]  -> TL1[0] -> BGX0
+ * VNIC1-SQ0 -> TL4(8)   -> TL3[2]   -> TL2[0]  -> TL1[0] -> BGX0
+ * VNIC2-SQ0 -> TL4(16)  -> TL3[4]   -> TL2[1]  -> TL1[0] -> BGX0
+ * VNIC3-SQ0 -> TL4(24)  -> TL3[6]   -> TL2[1]  -> TL1[0] -> BGX0
+ * VNIC4-SQ0 -> TL4(512) -> TL3[128] -> TL2[32] -> TL1[1] -> BGX1
+ * VNIC5-SQ0 -> TL4(520) -> TL3[130] -> TL2[32] -> TL1[1] -> BGX1
+ * VNIC6-SQ0 -> TL4(528) -> TL3[132] -> TL2[33] -> TL1[1] -> BGX1
+ * VNIC7-SQ0 -> TL4(536) -> TL3[134] -> TL2[33] -> TL1[1] -> BGX1
  */
 static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 {
@@ -594,46 +622,39 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
 }
 
-static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
+static void nic_mbx_intr_handler (struct nicpf *nic, int mbx)
 {
-	int vf;
-	u16 vf_per_mbx_reg = 64;
 	u64 intr;
-	struct nicpf *nic = (struct nicpf *)nic_irq;
+	u8  vf, vf_per_mbx_reg = 64;
 
-	intr = nic_get_mbx_intr_status(nic, 0);
-	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt Mbox0 0x%llx\n", intr);
-	for (vf = 0; vf < min(nic->num_vf_en, vf_per_mbx_reg); vf++) {
+	intr = nic_reg_read(nic, NIC_PF_MAILBOX_INT + (mbx << 3));
+	nic_dbg(&nic->pdev->dev, "PF interrupt Mbox%d 0x%llx\n", mbx, intr);
+	for (vf = 0; vf < vf_per_mbx_reg; vf++) {
 		if (intr & (1ULL << vf)) {
-			nic_dbg(&nic->pdev->dev, "Intr from VF %d\n", vf);
-			nic_handle_mbx_intr(nic, vf);
-			nic_clear_mbx_intr(nic, vf, 0);
+			nic_dbg(&nic->pdev->dev, "Intr from VF %d\n",
+				vf + (mbx * vf_per_mbx_reg));
+			if ((vf + (mbx * vf_per_mbx_reg)) > nic->num_vf_en)
+				break;
+			nic_handle_mbx_intr(nic, vf + (mbx * vf_per_mbx_reg));
+			nic_clear_mbx_intr(nic, vf, mbx);
 		}
 	}
+}
+
+static irqreturn_t nic_mbx0_intr_handler (int irq, void *nic_irq)
+{
+	struct nicpf *nic = (struct nicpf *)nic_irq;
+
+	nic_mbx_intr_handler(nic, 0);
 
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t nic_mbx1_intr_handler (int irq, void *nic_irq)
 {
-	int vf;
-	u16 vf_per_mbx_reg = 64;
-	u64 intr;
 	struct nicpf *nic = (struct nicpf *)nic_irq;
 
-	if (nic->num_vf_en <= vf_per_mbx_reg)
-		return IRQ_HANDLED;
-
-	intr = nic_get_mbx_intr_status(nic, 1);
-	nic_dbg(&nic->pdev->dev, "PF MSIX interrupt Mbox1 0x%llx\n", intr);
-	for (vf = 0; vf < (nic->num_vf_en - vf_per_mbx_reg); vf++) {
-		if (intr & (1ULL << vf)) {
-			nic_dbg(&nic->pdev->dev,
-				"Intr from VF %d\n", vf + vf_per_mbx_reg);
-			nic_handle_mbx_intr(nic, vf + vf_per_mbx_reg);
-			nic_clear_mbx_intr(nic, vf, 1);
-		}
-	}
+	nic_mbx_intr_handler(nic, 1);
 
 	return IRQ_HANDLED;
 }
