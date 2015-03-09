@@ -399,7 +399,8 @@ struct bgx_stats_msg {
 
 /* 128 bit shared memory between PF and each VF */
 struct nic_mbx {
-	u16   msg;
+	u8    msg;
+	u8    unused;
 	union	{
 		struct nic_cfg_msg	nic_cfg;
 		struct qs_cfg_msg	qs;

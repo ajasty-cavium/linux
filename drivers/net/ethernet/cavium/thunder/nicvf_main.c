@@ -794,10 +794,17 @@ static void nicvf_unregister_interrupts(struct nicvf *nic)
 	nicvf_disable_msix(nic);
 }
 
+/* Initialize MSIX vectors and register MISC interrupt.
+ * Send READY message to PF to check if its alive
+ */
 static int nicvf_register_misc_interrupt(struct nicvf *nic)
 {
 	int ret = 0;
 	int irq = NICVF_INTR_ID_MISC;
+
+	/* Return if mailbox interrupt is already registered */
+	if (nic->msix_enabled)
+		return 0;
 
 	/* Enable MSI-X */
 	if (!nicvf_enable_msix(nic))
@@ -931,11 +938,11 @@ int nicvf_open(struct net_device *netdev)
 		nic->napi[qidx] = cq_poll;
 	}
 
-	/* Set MAC-ID */
-	if (is_zero_ether_addr(netdev->dev_addr))
+	/* Check if we got MAC address from PF or else generate a radom MAC */
+	if (is_zero_ether_addr(netdev->dev_addr)) {
 		eth_hw_addr_random(netdev);
-
-	nicvf_hw_set_mac_addr(nic, netdev);
+		nicvf_hw_set_mac_addr(nic, netdev);
+	}
 
 	/* Init tasklet for handling Qset err interrupt */
 	tasklet_init(&nic->qs_err_task, nicvf_handle_qs_err,
@@ -1261,6 +1268,11 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	qs = nic->qs;
 
 	err = nicvf_set_real_num_queues(netdev, qs->sq_cnt, qs->rq_cnt);
+	if (err)
+		goto err_unmap_resources;
+
+	/* Check if PF is alive and get MAC address for this VF */
+	err = nicvf_register_misc_interrupt(nic);
 	if (err)
 		goto err_unmap_resources;
 
