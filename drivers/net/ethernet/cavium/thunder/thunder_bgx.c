@@ -932,12 +932,15 @@ bgx_init_of_phy(struct bgx *bgx)
 	for_each_child_of_node(np, np_child) {
 		struct device_node *phy_np = of_parse_phandle(np_child,
 							      "phy-handle", 0);
+		if (!phy_np)
+			continue;
 		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
 
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &bgx->pdev->dev);
 		bgx->lmac[lmac].lmacid = lmac;
-		bgx->lmac_count++;
 		lmac++;
+		if (lmac == MAX_LMAC_PER_BGX)
+			break;
 	}
 	return 0;
 }
