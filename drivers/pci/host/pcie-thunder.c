@@ -310,6 +310,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		switch (bdf) {
 		case 0x008:   /* SMMU */
 		case 0x010:   /* NIC Bridge */
+		case 0x018:   /* TNS */
 		case 0x100:   /* NIC PF */
 		case 0x101:   /* NIC VF */
 		case 0x102:   /* NIC VF */
