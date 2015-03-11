@@ -1384,6 +1384,7 @@ int of_property_read_string_helper(struct device_node *np, const char *propname,
 	i -= skip;
 	return i <= 0 ? -ENODATA : i;
 }
+EXPORT_SYMBOL_GPL(of_property_read_string_helper);
 
 void of_print_phandle_args(const char *msg, const struct of_phandle_args *args)
 {
