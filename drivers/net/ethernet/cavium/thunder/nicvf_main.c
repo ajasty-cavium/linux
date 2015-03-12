@@ -215,6 +215,9 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		nic->node = mbx.data.nic_cfg.node_id;
 		ether_addr_copy(nic->netdev->dev_addr,
 				(u8 *)&mbx.data.nic_cfg.mac_addr);
+		nic->link_up = false;
+		nic->duplex = 0;
+		nic->speed = 0;
 		break;
 	case NIC_MBOX_MSG_ACK:
 		pf_acked = true;
@@ -232,6 +235,24 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		nicvf_read_bgx_stats(nic, &mbx.data.bgx_stats);
 		pf_acked = true;
 		bgx_stats_acked = true;
+		break;
+	case NIC_MBOX_MSG_BGX_LINK_CHANGE:
+		pf_acked = true;
+		nic->link_up = mbx.data.link_status.link_up;
+		nic->duplex = mbx.data.link_status.duplex;
+		nic->speed = mbx.data.link_status.speed;
+		if (nic->link_up) {
+			pr_info("%s: Link is Up %d Mbps %s\n",
+				nic->netdev->name,
+				nic->speed, nic->duplex == DUPLEX_FULL ?
+				"Full duplex" : "Half duplex");
+			netif_carrier_on(nic->netdev);
+			netif_tx_wake_all_queues(nic->netdev);
+		} else {
+			pr_info("%s: Link is Down\n", nic->netdev->name);
+			netif_carrier_off(nic->netdev);
+			netif_tx_stop_all_queues(nic->netdev);
+		}
 		break;
 	default:
 		netdev_err(nic->netdev,

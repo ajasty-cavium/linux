@@ -214,6 +214,8 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	int i;
 	int ret = 0;
 
+	nic->mbx_lock[vf] = true;
+
 	mbx_addr = nic_get_mbx_addr(vf);
 	mbx_data = (u64 *)&mbx;
 
@@ -228,6 +230,9 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	switch (mbx.msg) {
 	case NIC_MBOX_MSG_READY:
 		nic_mbx_send_ready(nic, vf);
+		nic->link[vf] = 0;
+		nic->duplex[vf] = 0;
+		nic->speed[vf] = 0;
 		ret = 1;
 		break;
 	case NIC_MBOX_MSG_QS_CFG:
@@ -249,12 +254,16 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		break;
 	case NIC_MBOX_MSG_RQ_SW_SYNC:
 		ret = nic_rcv_queue_sw_sync(nic);
+		/* Last message of VF teardown msg sequence */
+		nic->vf_enabled[vf] = false;
 		break;
 	case NIC_MBOX_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+		/* Last message of VF config msg sequence */
+		nic->vf_enabled[vf] = true;
 		break;
 	case NIC_MBOX_MSG_SQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
@@ -285,7 +294,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_MBOX_MSG_RSS_SIZE:
 		nic_send_rss_size(nic, vf);
-		return;
+		goto unlock;
 	case NIC_MBOX_MSG_RSS_CFG:
 	case NIC_MBOX_MSG_RSS_CFG_CONT:
 		nic_config_rss(nic, &mbx.data.rss_cfg);
@@ -293,7 +302,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #endif
 	case NIC_MBOX_MSG_BGX_STATS:
 		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
-		return;
+		goto unlock;
 	default:
 		netdev_err(nic->netdev,
 			   "Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg);
@@ -304,6 +313,8 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_mbx_send_ack(nic, vf);
 	else if (mbx.msg != NIC_MBOX_MSG_READY)
 		nic_mbx_send_nack(nic, vf);
+unlock:
+	nic->mbx_lock[vf] = false;
 }
 
 /* Flush all in flight receive packets to memory and
@@ -807,6 +818,51 @@ static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
 	return 1;
 }
 
+/* Poll for BGX LMAC link status and update corresponding VF
+ * if there is a change, valid only if internal L2 switch
+ * is not present otherwise VF link is always treated as up
+ */
+static void nic_poll_for_link(struct work_struct *work)
+{
+	struct nic_mbx mbx = {};
+	struct nicpf *nic;
+	struct bgx_link_status link;
+	u8 vf, bgx, lmac;
+
+	nic = container_of(work, struct nicpf, dwork.work);
+
+	mbx.msg = NIC_MBOX_MSG_BGX_LINK_CHANGE;
+
+	for (vf = 0; vf < nic->num_vf_en; vf++) {
+		/* Poll only if VF is UP */
+		if (!nic->vf_enabled[vf])
+			continue;
+
+		/* Get BGX, LMAC indices for the VF */
+		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+		/* Get interface link status */
+		bgx_get_lmac_link_state(nic->node, bgx, lmac, &link);
+
+		/* Inform VF only if link status changed */
+		if (nic->link[vf] == link.link_up)
+			continue;
+
+		if (!nic->mbx_lock[vf]) {
+			nic->link[vf] = link.link_up;
+			nic->duplex[vf] = link.duplex;
+			nic->speed[vf] = link.speed;
+
+			/* Send a mbox message to VF with current link status */
+			mbx.data.link_status.link_up = link.link_up;
+			mbx.data.link_status.duplex = link.duplex;
+			mbx.data.link_status.speed = link.speed;
+			nic_send_msg_to_vf(nic, vf, &mbx);
+		}
+	}
+	queue_delayed_work(nic->check_link, &nic->dwork, HZ * 2);
+}
+
 static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct device *dev = &pdev->dev;
@@ -882,6 +938,17 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (!nic_get_mac_addresses(nic))
 		dev_info(&pdev->dev, " Mac node not present in dts\n");
+
+	if (nic->flags & NIC_TNS_ENABLED)
+		goto exit;
+
+	/* Register a physical link status poll fn() */
+	nic->check_link = alloc_workqueue("check_link_status",
+					  WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
+	if (!nic->check_link)
+		return -ENOMEM;
+	INIT_DELAYED_WORK(&nic->dwork, nic_poll_for_link);
+	queue_delayed_work(nic->check_link, &nic->dwork, 0);
 
 	goto exit;
 

@@ -84,11 +84,19 @@ static const unsigned int nicvf_n_queue_stats = ARRAY_SIZE(nicvf_queue_stats);
 static int nicvf_get_settings(struct net_device *netdev,
 			      struct ethtool_cmd *cmd)
 {
+	struct nicvf *nic = netdev_priv(netdev);
+
 	cmd->supported = 0;
-	cmd->autoneg = AUTONEG_DISABLE;
-	cmd->transceiver = XCVR_DUMMY1;
-	cmd->port = PORT_NONE;
-	cmd->duplex = DUPLEX_FULL;
+	cmd->transceiver = XCVR_EXTERNAL;
+	if (nic->speed <= 1000) {
+		cmd->port = PORT_MII;
+		cmd->autoneg = AUTONEG_ENABLE;
+	} else {
+		cmd->port = PORT_FIBRE;
+		cmd->autoneg = AUTONEG_DISABLE;
+	}
+	cmd->duplex = nic->duplex;
+	ethtool_cmd_speed_set(cmd, nic->speed);
 
 	return 0;
 }

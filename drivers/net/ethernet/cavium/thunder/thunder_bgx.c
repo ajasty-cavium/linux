@@ -138,6 +138,24 @@ int bgx_get_lmac_count(int node, int bgx_idx)
 }
 EXPORT_SYMBOL(bgx_get_lmac_count);
 
+/* Returns the current link status of LMAC */
+void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status)
+{
+	struct bgx_link_status *link = (struct bgx_link_status *)status;
+	struct bgx *bgx;
+	struct lmac *lmac;
+
+	bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+	if (!bgx)
+		return 0;
+
+	lmac = &bgx->lmac[lmacid];
+	link->link_up = lmac->link_up;
+	link->duplex = lmac->last_duplex;
+	link->speed = lmac->last_speed;
+}
+EXPORT_SYMBOL(bgx_get_lmac_link_state);
+
 static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
 	struct bgx *bgx = lmac->bgx;
@@ -232,21 +250,15 @@ void bgx_lmac_handler(struct net_device *netdev)
 	if (!link_changed)
 		return;
 
-	if (link_changed > 0) {
-		pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid_bd,
-			phydev->speed, 
-			DUPLEX_FULL == phydev->duplex ? "Full" : "Half");
+	if (link_changed > 0)
 		lmac->link_up = true;
-	} else {
+	else
 		lmac->link_up = false;
-		pr_info("LMAC%d: Link is down\n", lmac->lmacid_bd);
-	}
 
-	if (lmac->is_sgmii) {
+	if (lmac->is_sgmii)
 		bgx_sgmii_change_link_state(lmac);
-	} else {
+	else
 		bgx_xaui_check_link(lmac);
-	}
 }
 
 u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
@@ -581,13 +593,8 @@ static void bgx_poll_for_link(struct work_struct *work)
 
 	if (lmac->last_link != lmac->link_up) {
 		lmac->last_link = lmac->link_up;
-		if (lmac->link_up) {
+		if (lmac->link_up)
 			bgx_xaui_check_link(lmac);
-			pr_info("LMAC%d: Link is up - %d/%s\n", lmac->lmacid_bd,
-				lmac->last_speed, "Full");
-		} else {
-			pr_info("LMAC%d: Link is down\n", lmac->lmacid_bd);
-		}
 	}
 
 	queue_delayed_work(lmac->check_link, &lmac->dwork, HZ * 2);

@@ -187,6 +187,7 @@ enum MCAST_MODE {
 void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac);
 void bgx_get_count(int node, int *bgx_count);
 int bgx_get_lmac_count(int node, int bgx);
+void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status);
 u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx);
 u64 bgx_get_tx_stats(int bgx_idx, int lmac, int idx);
 #define BGX_RX_STATS_COUNT 11

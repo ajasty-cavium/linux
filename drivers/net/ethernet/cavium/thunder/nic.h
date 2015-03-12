@@ -234,6 +234,9 @@ struct nicvf {
 	u16			mtu;
 	struct queue_set	*qs;
 	u64			reg_base;
+	bool			link_up;
+	u8			duplex;
+	u32			speed;
 	struct tasklet_struct	rbdr_task;
 	struct tasklet_struct	qs_err_task;
 	struct tasklet_struct	cq_task;
@@ -269,6 +272,7 @@ struct nicpf {
 	unsigned int		flags;
 	u16			total_vf_cnt;   /* Total num of VF supported */
 	u8			num_vf_en;      /* No of VF enabled */
+	bool			vf_enabled[MAX_NUM_VFS_SUPPORTED];
 	u64			reg_base;       /* Register start address */
 	struct pkind_cfg	pkind;
 	u8			bgx_cnt;
@@ -276,9 +280,15 @@ struct nicpf {
 #define	NIC_GET_BGX_FROM_VF_LMAC_MAP(map)	((map >> 4) & 0xF)
 #define	NIC_GET_LMAC_FROM_VF_LMAC_MAP(map)	(map & 0xF)
 	u8			vf_lmac_map[MAX_LMAC];
+	struct delayed_work     dwork;
+	struct workqueue_struct *check_link;
+	u8			link[MAX_LMAC];
+	u8			duplex[MAX_LMAC];
+	u32			speed[MAX_LMAC];
 	u16			cpi_base[MAX_NUM_VFS_SUPPORTED];
 	u16			rss_ind_tbl_size;
 	u64			mac[MAX_NUM_VFS_SUPPORTED];
+	bool			mbx_lock[MAX_NUM_VFS_SUPPORTED];
 
 	/* MSI-X */
 	bool			msix_enabled;
@@ -314,6 +324,7 @@ struct nicpf {
 #define	NIC_MBOX_MSG_RQ_BP_CFG		0x0E	/* RQ backpressure config */
 #define	NIC_MBOX_MSG_RQ_SW_SYNC		0x0F	/* Flush inflight pkts to RQ */
 #define	NIC_MBOX_MSG_BGX_STATS		0x10	/* Get stats from BGX */
+#define	NIC_MBOX_MSG_BGX_LINK_CHANGE	0x11	/* BGX:LMAC link status */
 
 struct nic_cfg_msg {
 	u8    vf_id;
@@ -397,6 +408,13 @@ struct bgx_stats_msg {
 	u64   stats;
 } __packed;
 
+/* Physical interface link status */
+struct bgx_link_status {
+	u8    link_up;
+	u8    duplex;
+	u32   speed;
+};
+
 /* 128 bit shared memory between PF and each VF */
 struct nic_mbx {
 	u8    msg;
@@ -414,6 +432,7 @@ struct nic_mbx {
 		struct rss_cfg_msg	rss_cfg;
 #endif
 		struct bgx_stats_msg    bgx_stats;
+		struct bgx_link_status  link_status;
 	} data;
 } __packed;
 
