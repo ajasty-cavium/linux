@@ -62,289 +62,438 @@
 		#address-cells = <2>;
 		#size-cells = <0>;
 
-		cpu@000 {
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&CPU0>;
+				};
+				core1 {
+					cpu = <&CPU1>;
+				};
+				core2 {
+					cpu = <&CPU2>;
+				};
+				core3 {
+					cpu = <&CPU3>;
+				};
+				core4 {
+					cpu = <&CPU4>;
+				};
+				core5 {
+					cpu = <&CPU5>;
+				};
+				core6 {
+					cpu = <&CPU6>;
+				};
+				core7 {
+					cpu = <&CPU7>;
+				};
+				core8 {
+					cpu = <&CPU8>;
+				};
+				core9 {
+					cpu = <&CPU9>;
+				};
+				core10 {
+					cpu = <&CPU10>;
+				};
+				core11 {
+					cpu = <&CPU11>;
+				};
+				core12 {
+					cpu = <&CPU12>;
+				};
+				core13 {
+					cpu = <&CPU13>;
+				};
+				core14 {
+					cpu = <&CPU14>;
+				};
+				core15 {
+					cpu = <&CPU15>;
+				};
+				core16 {
+					cpu = <&CPU16>;
+				};
+				core17 {
+					cpu = <&CPU17>;
+				};
+				core18 {
+					cpu = <&CPU18>;
+				};
+				core19 {
+					cpu = <&CPU19>;
+				};
+				core20 {
+					cpu = <&CPU20>;
+				};
+				core21 {
+					cpu = <&CPU21>;
+				};
+				core22 {
+					cpu = <&CPU22>;
+				};
+				core23 {
+					cpu = <&CPU23>;
+				};
+				core24 {
+					cpu = <&CPU24>;
+				};
+				core25 {
+					cpu = <&CPU25>;
+				};
+				core26 {
+					cpu = <&CPU26>;
+				};
+				core27 {
+					cpu = <&CPU27>;
+				};
+				core28 {
+					cpu = <&CPU28>;
+				};
+				core29 {
+					cpu = <&CPU29>;
+				};
+				core30 {
+					cpu = <&CPU30>;
+				};
+				core31 {
+					cpu = <&CPU31>;
+				};
+				core32 {
+					cpu = <&CPU32>;
+				};
+				core33 {
+					cpu = <&CPU33>;
+				};
+				core34 {
+					cpu = <&CPU34>;
+				};
+				core35 {
+					cpu = <&CPU35>;
+				};
+				core36 {
+					cpu = <&CPU36>;
+				};
+				core37 {
+					cpu = <&CPU37>;
+				};
+				core38 {
+					cpu = <&CPU38>;
+				};
+				core39 {
+					cpu = <&CPU39>;
+				};
+				core40 {
+					cpu = <&CPU40>;
+				};
+				core41 {
+					cpu = <&CPU41>;
+				};
+				core42 {
+					cpu = <&CPU42>;
+				};
+				core43 {
+					cpu = <&CPU43>;
+				};
+				core44 {
+					cpu = <&CPU44>;
+				};
+				core45 {
+					cpu = <&CPU45>;
+				};
+				core46 {
+					cpu = <&CPU46>;
+				};
+				core47 {
+					cpu = <&CPU47>;
+				};
+			};
+		};
+
+		CPU0: cpu@000 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x000>;
 			enable-method = "psci";
 		};
-		cpu@001 {
+		CPU1: cpu@001 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x001>;
 			enable-method = "psci";
 		};
-		cpu@002 {
+		CPU2: cpu@002 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x002>;
 			enable-method = "psci";
 		};
-		cpu@003 {
+		CPU3: cpu@003 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x003>;
 			enable-method = "psci";
 		};
-		cpu@004 {
+		CPU4: cpu@004 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x004>;
 			enable-method = "psci";
 		};
-		cpu@005 {
+		CPU5: cpu@005 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x005>;
 			enable-method = "psci";
 		};
-		cpu@006 {
+		CPU6: cpu@006 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x006>;
 			enable-method = "psci";
 		};
-		cpu@007 {
+		CPU7: cpu@007 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x007>;
 			enable-method = "psci";
 		};
-		cpu@008 {
+		CPU8: cpu@008 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x008>;
 			enable-method = "psci";
 		};
-		cpu@009 {
+		CPU9: cpu@009 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x009>;
 			enable-method = "psci";
 		};
-		cpu@00a {
+		CPU10: cpu@00a {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00a>;
 			enable-method = "psci";
 		};
-		cpu@00b {
+		CPU11: cpu@00b {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00b>;
 			enable-method = "psci";
 		};
-		cpu@00c {
+		CPU12: cpu@00c {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00c>;
 			enable-method = "psci";
 		};
-		cpu@00d {
+		CPU13: cpu@00d {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00d>;
 			enable-method = "psci";
 		};
-		cpu@00e {
+		CPU14: cpu@00e {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00e>;
 			enable-method = "psci";
 		};
-		cpu@00f {
+		CPU15: cpu@00f {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x00f>;
 			enable-method = "psci";
 		};
-		cpu@100 {
+		CPU16: cpu@100 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
 		};
-		cpu@101 {
+		CPU17: cpu@101 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x101>;
 			enable-method = "psci";
 		};
-		cpu@102 {
+		CPU18: cpu@102 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x102>;
 			enable-method = "psci";
 		};
-		cpu@103 {
+		CPU19: cpu@103 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x103>;
 			enable-method = "psci";
 		};
-		cpu@104 {
+		CPU20: cpu@104 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x104>;
 			enable-method = "psci";
 		};
-		cpu@105 {
+		CPU21: cpu@105 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x105>;
 			enable-method = "psci";
 		};
-		cpu@106 {
+		CPU22: cpu@106 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x106>;
 			enable-method = "psci";
 		};
-		cpu@107 {
+		CPU23: cpu@107 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x107>;
 			enable-method = "psci";
 		};
-		cpu@108 {
+		CPU24: cpu@108 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x108>;
 			enable-method = "psci";
 		};
-		cpu@109 {
+		CPU25: cpu@109 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x109>;
 			enable-method = "psci";
 		};
-		cpu@10a {
+		CPU26: cpu@10a {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10a>;
 			enable-method = "psci";
 		};
-		cpu@10b {
+		CPU27: cpu@10b {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10b>;
 			enable-method = "psci";
 		};
-		cpu@10c {
+		CPU28: cpu@10c {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10c>;
 			enable-method = "psci";
 		};
-		cpu@10d {
+		CPU29: cpu@10d {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10d>;
 			enable-method = "psci";
 		};
-		cpu@10e {
+		CPU30: cpu@10e {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10e>;
 			enable-method = "psci";
 		};
-		cpu@10f {
+		CPU31: cpu@10f {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x10f>;
 			enable-method = "psci";
 		};
-		cpu@200 {
+		CPU32: cpu@200 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x200>;
 			enable-method = "psci";
 		};
-		cpu@201 {
+		CPU33: cpu@201 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x201>;
 			enable-method = "psci";
 		};
-		cpu@202 {
+		CPU34: cpu@202 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x202>;
 			enable-method = "psci";
 		};
-		cpu@203 {
+		CPU35: cpu@203 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x203>;
 			enable-method = "psci";
 		};
-		cpu@204 {
+		CPU36: cpu@204 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x204>;
 			enable-method = "psci";
 		};
-		cpu@205 {
+		CPU37: cpu@205 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x205>;
 			enable-method = "psci";
 		};
-		cpu@206 {
+		CPU38: cpu@206 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x206>;
 			enable-method = "psci";
 		};
-		cpu@207 {
+		CPU39: cpu@207 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x207>;
 			enable-method = "psci";
 		};
-		cpu@208 {
+		CPU40: cpu@208 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x208>;
 			enable-method = "psci";
 		};
-		cpu@209 {
+		CPU41: cpu@209 {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x209>;
 			enable-method = "psci";
 		};
-		cpu@20a {
+		CPU42: cpu@20a {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20a>;
 			enable-method = "psci";
 		};
-		cpu@20b {
+		CPU43: cpu@20b {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20b>;
 			enable-method = "psci";
 		};
-		cpu@20c {
+		CPU44: cpu@20c {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20c>;
 			enable-method = "psci";
 		};
-		cpu@20d {
+		CPU45: cpu@20d {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20d>;
 			enable-method = "psci";
 		};
-		cpu@20e {
+		CPU46: cpu@20e {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20e>;
 			enable-method = "psci";
 		};
-		cpu@20f {
+		CPU47: cpu@20f {
 			device_type = "cpu";
 			compatible = "cavium,thunder", "arm,armv8";
 			reg = <0x0 0x20f>;
@@ -417,7 +566,7 @@
 		compatible = "cavium,thunder-8800-mmc";
 		reg = <0x87e0 0x09002000 0x0 0x100>,
 		      <0x87e0 0x09000180 0x0 0x020>;
-		
+
 		#address-cells = <1>;
 		#size-cells = <0>;
 		/*interrupts = <1 23 4>,
@@ -439,7 +588,7 @@
 		             <1 8198 4>,
 		             <1 8199 4>,
 		             <1 8200 4>;
-	
+
 		/*power-gpios = <&gpio 8 0>;*/  /* Power on GPIO 8, active high */
 
 		/* Don't Touch Slot0 on EVB */
@@ -448,7 +597,7 @@
                                 reg = <0>;
                                 voltage-ranges = <3300 3300>;
                         };*/
-	
+
                 mmc-slot@1 {
                                 compatible = "cavium,thunder-8800-mmc-slot";
                                 reg = <1>;
