@@ -707,7 +707,7 @@ static void bgx_set_num_ports(struct bgx *bgx)
 		bgx->lane_to_sds = 0xE4;
 			break;
 	case QLM_MODE_XFI_4X1:
-		bgx->lmac_count = 2;
+		bgx->lmac_count = 4;
 		bgx->lmac_type = BGX_MODE_XFI;
 		bgx->lane_to_sds = 0;
 		break;
