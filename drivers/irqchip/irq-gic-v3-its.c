@@ -591,6 +591,9 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	struct its_collection *target_col;
 	u32 id;
 
+	if(!its_dev)
+		return IRQ_SET_MASK_OK;
+
 #if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
 	u32 node = (its_dev->its->phys_base >> 44) & 0x3;
 	if (!cpumask_intersects(mask_val, cpumask_of_node(node))) {
