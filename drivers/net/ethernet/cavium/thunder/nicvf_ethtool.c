@@ -562,7 +562,7 @@ static int nicvf_set_channels(struct net_device *dev,
 
 	nic->qs->rq_cnt = channel->rx_count;
 	nic->qs->sq_cnt = channel->tx_count;
-	nic->qs->cq_cnt = nic->qs->sq_cnt;
+	nic->qs->cq_cnt = max(nic->qs->rq_cnt, nic->qs->sq_cnt);
 
 	err = nicvf_set_real_num_queues(dev, nic->qs->sq_cnt, nic->qs->rq_cnt);
 	if (err)
