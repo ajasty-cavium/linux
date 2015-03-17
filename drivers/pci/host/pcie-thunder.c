@@ -337,18 +337,18 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x008:   /* SMMU */
 			supported = 1;
 			break;
-		case 0x018:   /* AHCI8 */
-		case 0x020:   /* AHCI9*/
-		case 0x028:   /* AHCI10 */
-		case 0x030:   /* AHCI11 */
+		case 0x020:   /* AHCI8 */
+		case 0x028:   /* AHCI9*/
+		case 0x030:   /* AHCI10 */
+		case 0x038:   /* AHCI11 */
 			gser_cfg = thunder_get_gser_cfg(0,6);
 			if(gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
-		case 0x038:   /* AHCI12 */
-		case 0x040:   /* AHCI13 */
-		case 0x048:   /* AHCI14 */
-		case 0x050:   /* AHCI15 */
+		case 0x040:   /* AHCI12 */
+		case 0x048:   /* AHCI13 */
+		case 0x050:   /* AHCI14 */
+		case 0x058:   /* AHCI15 */
 			gser_cfg = thunder_get_gser_cfg(0,7);
 			if(gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
@@ -451,18 +451,18 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x008:   /* SMMU */
 			supported = 1;
 			break;
-		case 0x018:   /* AHCI8 */
-		case 0x020:   /* AHCI9*/
-		case 0x028:   /* AHCI10 */
-		case 0x030:   /* AHCI11 */
+		case 0x020:   /* AHCI8 */
+		case 0x028:   /* AHCI9*/
+		case 0x030:   /* AHCI10 */
+		case 0x038:   /* AHCI11 */
 			gser_cfg = thunder_get_gser_cfg(1, 6);
 			if(gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
-		case 0x038:   /* AHCI12 */
-		case 0x040:   /* AHCI13 */
-		case 0x048:   /* AHCI14 */
-		case 0x050:   /* AHCI15 */
+		case 0x040:   /* AHCI12 */
+		case 0x048:   /* AHCI13 */
+		case 0x050:   /* AHCI14 */
+		case 0x058:   /* AHCI15 */
 			gser_cfg = thunder_get_gser_cfg(1, 7);
 			if(gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
