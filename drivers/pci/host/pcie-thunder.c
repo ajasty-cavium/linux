@@ -54,9 +54,9 @@
 #define SLIX_S2M_REGX_ACC		0x874001000000
 #define N1_SLIX_S2M_REGX_ACC		0x974001000000
 #define SLIX_S2M_REGX_ACC_SIZE		0x1000
-	
+
 #define THUNDER_GSER_PCIE_MASK		0x01
-#define THUNDER_GSER_BGX_MASK 		0x04
+#define THUNDER_GSER_BGX_MASK		0x04
 #define THUNDER_GSER_SATA_MASK		0x20
 
 void __iomem *gser_base0;
@@ -104,25 +104,25 @@ int pci_requester_id(struct pci_dev *dev)
 {
 	struct thunder_pcie *pcie = dev->bus->sysdata;
 
-	if(pcie->device_type == THUNDER_ECAM)
+	if (pcie->device_type == THUNDER_ECAM)
 		return pci_requester_id_ecam(dev);
 
-	if(pcie->pem < 3 )
+	if (pcie->pem < 3)
 		return ((1 << 16) |
 			((dev)->bus->number << 8) |
 			(dev)->devfn);
 
-	if(pcie->pem < 6 )
+	if (pcie->pem < 6)
 		return ((3 << 16) |
 			((dev)->bus->number << 8) |
 			(dev)->devfn);
 
-	if(pcie->pem < 9 )
+	if (pcie->pem < 9)
 		return ((1 << 19) | (1 << 16) |
 			((dev)->bus->number << 8) |
 			(dev)->devfn);
 
-	if(pcie->pem < 12 )
+	if (pcie->pem < 12)
 		return ((1 << 19) |
 			(3 << 16) |
 			((dev)->bus->number << 8) |
@@ -184,7 +184,7 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 
 static uint64_t thunder_get_gser_cfg_addr(int node, int qlm)
 {
-	if ( node )
+	if (node)
 		return ((uint64_t)gser_base1) + 0x80 + (0x1000000 * qlm);
 	else
 		return ((uint64_t)gser_base0) + 0x80 + (0x1000000 * qlm);
@@ -199,6 +199,7 @@ static void __iomem *slix_s2m_regx_adr(int node, int sli, int regnum)
 {
 	void __iomem *address = NULL;
 	int sli_node;
+
 	sli_node = node << 1 | sli;
 
 	switch (sli_node) {
@@ -286,13 +287,13 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			supported = 1;
 			break;
 		case 0x180:   /* BGX0 */
-			gser_cfg = thunder_get_gser_cfg(0,0);
-			if(gser_cfg & THUNDER_GSER_BGX_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 0);
+			if (gser_cfg & THUNDER_GSER_BGX_MASK)
 				supported = 1;
 			break;
 		case 0x181:   /* BGX1 */
-			gser_cfg = thunder_get_gser_cfg(0,1);
-			if(gser_cfg & THUNDER_GSER_BGX_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 1);
+			if (gser_cfg & THUNDER_GSER_BGX_MASK)
 				supported = 1;
 			break;
 		default:
@@ -305,16 +306,16 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x028:   /* AHCI1 */
 		case 0x030:   /* AHCI2 */
 		case 0x038:   /* AHCI3 */
-			gser_cfg = thunder_get_gser_cfg(0,2);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 2);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x040:   /* AHCI4 */
 		case 0x048:   /* AHCI5 */
 		case 0x050:   /* AHCI5 */
 		case 0x058:   /* AHCI7 */
-			gser_cfg = thunder_get_gser_cfg(0,3);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 3);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC0 */
@@ -358,16 +359,16 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x028:   /* AHCI9*/
 		case 0x030:   /* AHCI10 */
 		case 0x038:   /* AHCI11 */
-			gser_cfg = thunder_get_gser_cfg(0,6);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 6);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x040:   /* AHCI12 */
 		case 0x048:   /* AHCI13 */
 		case 0x050:   /* AHCI14 */
 		case 0x058:   /* AHCI15 */
-			gser_cfg = thunder_get_gser_cfg(0,7);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(0, 7);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC3 */
@@ -401,13 +402,13 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 			supported = 1;
 			break;
 		case 0x180:   /* BGX0 */
-			gser_cfg = thunder_get_gser_cfg(1,0);
-			if(gser_cfg & THUNDER_GSER_BGX_MASK)
+			gser_cfg = thunder_get_gser_cfg(1, 0);
+			if (gser_cfg & THUNDER_GSER_BGX_MASK)
 				supported = 1;
 			break;
 		case 0x181:   /* BGX1 */
-			gser_cfg = thunder_get_gser_cfg(1,1);
-			if(gser_cfg & THUNDER_GSER_BGX_MASK)
+			gser_cfg = thunder_get_gser_cfg(1, 1);
+			if (gser_cfg & THUNDER_GSER_BGX_MASK)
 				supported = 1;
 			break;
 		default:
@@ -420,16 +421,16 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x028:   /* AHCI1 */
 		case 0x030:   /* AHCI2 */
 		case 0x038:   /* AHCI3 */
-			gser_cfg = thunder_get_gser_cfg(1,2);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(1, 2);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x040:   /* AHCI4 */
 		case 0x048:   /* AHCI5 */
 		case 0x050:   /* AHCI5 */
 		case 0x058:   /* AHCI7 */
-			gser_cfg = thunder_get_gser_cfg(1,3);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			gser_cfg = thunder_get_gser_cfg(1, 3);
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC0 */
@@ -473,7 +474,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x030:   /* AHCI10 */
 		case 0x038:   /* AHCI11 */
 			gser_cfg = thunder_get_gser_cfg(1, 6);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x040:   /* AHCI12 */
@@ -481,7 +482,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x050:   /* AHCI14 */
 		case 0x058:   /* AHCI15 */
 			gser_cfg = thunder_get_gser_cfg(1, 7);
-			if(gser_cfg & THUNDER_GSER_SATA_MASK)
+			if (gser_cfg & THUNDER_GSER_SATA_MASK)
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC3 */
@@ -502,71 +503,72 @@ static int thunder_pcie_check_pem_cfg_access(int pem, unsigned int bus,
 	int supported = 0;
 	uint64_t gser_cfg;
 
-	//TODO: 8 lane config needs to be handled supperately.
-	//Hoping it should work..
+	/* TODO: 8 lane config needs to be handled supperately.
+	 * Hoping it should work..
+	 */
 
-	if(PCI_SLOT(devfn))
+	if (PCI_SLOT(devfn))
 		return supported;
 
 	switch (pem) {
 	case 0:
-		gser_cfg = thunder_get_gser_cfg(0,2);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(0, 2);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 1:
-		gser_cfg = thunder_get_gser_cfg(0,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(0, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 2:
 		gser_cfg = thunder_get_gser_cfg(0, 4);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 3:
-		gser_cfg = thunder_get_gser_cfg(0,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(0, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 4:
-		gser_cfg = thunder_get_gser_cfg(0,6);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(0, 6);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 5:
-		gser_cfg = thunder_get_gser_cfg(0,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(0, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 6:
-		gser_cfg = thunder_get_gser_cfg(1,2);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 2);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 7:
-		gser_cfg = thunder_get_gser_cfg(1,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 8:
-		gser_cfg = thunder_get_gser_cfg(1,4);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 4);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 9:
-		gser_cfg = thunder_get_gser_cfg(1,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 10:
-		gser_cfg = thunder_get_gser_cfg(1,6);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 6);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 11:
-		gser_cfg = thunder_get_gser_cfg(1,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(1, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	}
@@ -725,7 +727,7 @@ static int thunder_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 
 	addr = thunder_pcie_get_cfg_addr(pcie, busnr, devfn, reg);
 
-	if(!addr)
+	if (!addr)
 		return PCIBIOS_SUCCESSFUL;
 
 	switch (size) {
@@ -781,21 +783,21 @@ static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
 	address = pcie->pem_base;
 
 	/* check whether PEM is safe to access. */
-	regval = readq(pcie->pem_base+0x420); //PEMx_ON
-	if((regval & 0x3) != 0x3) {
-		printk("PEM%d is not ON\n",pcie->pem);
+	regval = readq(pcie->pem_base+0x420); /* PEMx_ON */
+	if ((regval & 0x3) != 0x3) {
+		pr_err("PEM%d is not ON\n", pcie->pem);
 		return -ENODEV;
 	}
 
 	regval = readq(pcie->pem_base);
-	regval |= 0x10; // Set Link Enable bit
+	regval |= 0x10; /* Set Link Enable bit */
 	writeq(regval, address);
 
 
 	udelay(1000);
-	regval = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG032,0x4);
-	if(((regval>>29 & 0x1) == 0x0) || ((regval>>27 & 0x1) == 0x1)) {
-		printk("PCIe RC: Port %d Link Timeout\n",pcie->pem);
+	regval = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG032, 0x4);
+	if (((regval >> 29 & 0x1) == 0x0) || ((regval >> 27 & 0x1) == 0x1)) {
+		pr_err("PCIe RC: Port %d Link Timeout\n", pcie->pem);
 		return -ENODEV;
 	}
 
@@ -819,11 +821,11 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 		sli =  0;
 		sli_group = 0;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,2);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 2);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 
@@ -831,114 +833,114 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 		sli =  0;
 		sli_group = 1;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 2:
 		sli =  0;
 		sli_group = 2;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,4);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 4);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 3:
 		sli =  1;
 		sli_group = 0;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 4:
 		sli =  1;
 		sli_group = 1;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,6);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 6);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 5:
 		sli =  1;
 		sli_group = 2;
 		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 6:
 		sli =  0;
 		sli_group = 0;
 		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node,2);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 2);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 7:
 		sli =  0;
 		sli_group = 1;
 		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node,3);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 3);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 8:
 		sli =  0;
 		sli_group = 2;
 		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node,4);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 4);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 9:
 		sli =  1;
 		sli_group = 0;
 		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node,5);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 5);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 10:
 		sli =  1;
 		node = 1;
 		sli_group = 1;
-		gser_cfg = thunder_get_gser_cfg(node,6);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 6);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	case 11:
 		sli =  1;
 		sli_group = 2;
 		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node,7);
-		if(gser_cfg & THUNDER_GSER_PCIE_MASK)
+		gser_cfg = thunder_get_gser_cfg(node, 7);
+		if (gser_cfg & THUNDER_GSER_PCIE_MASK)
 			supported = 1;
 		break;
 	default:
 		return -ENODEV;
 	}
 
-	if ( !supported)
+	if (!supported)
 		return -ENODEV;
 
 	ret = thunder_pcierc_link_init(pcie);
-	if(ret)
+	if (ret)
 		return ret;
 
 	/* 1 slot for config access. */
@@ -955,7 +957,7 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 
 static void thunder_pcie_config(struct thunder_pcie *pcie, u64 addr)
 {
-	switch(addr) {
+	switch (addr) {
 	case THUNDER_ECAM0_CFG_BASE:
 		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 0;
@@ -1056,7 +1058,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct resource *cfg_base;
 	struct pci_bus *bus;
 	resource_size_t iobase = 0;
-	int ret=0;
+	int ret = 0;
 	int primary_bus = 0;
 	unsigned int i;
 	LIST_HEAD(res);
@@ -1073,22 +1075,22 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 	thunder_pcie_config(pcie, cfg_base->start);
 
-	if(sli0_s2m_regx_base == NULL)
+	if (sli0_s2m_regx_base == NULL)
 		sli0_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC,
 					 SLIX_S2M_REGX_ACC_SIZE);
-	if(sli1_s2m_regx_base == NULL)
+	if (sli1_s2m_regx_base == NULL)
 		sli1_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC+(1ull<<36),
 					 SLIX_S2M_REGX_ACC_SIZE);
 #ifdef CONFIG_NUMA
-	if(sli2_s2m_regx_base == NULL)
+	if (sli2_s2m_regx_base == NULL)
 		sli2_s2m_regx_base = devm_ioremap(&pdev->dev, N1_SLIX_S2M_REGX_ACC,
 					 SLIX_S2M_REGX_ACC_SIZE);
-	if(sli3_s2m_regx_base == NULL)
+	if (sli3_s2m_regx_base == NULL)
 		sli3_s2m_regx_base = devm_ioremap(&pdev->dev, N1_SLIX_S2M_REGX_ACC+(1ull<<36),
 					 SLIX_S2M_REGX_ACC_SIZE);
 #endif
 
-	if(pcie->device_type == THUNDER_ECAM) {
+	if (pcie->device_type == THUNDER_ECAM) {
 		pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
 		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base0)) {
 			ret = PTR_ERR(pcie->cfg_base);
@@ -1099,7 +1101,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base0);
 
 #ifdef CONFIG_NUMA
-		if ( IS_ERR(gser_base1)) {
+		if (IS_ERR(gser_base1)) {
 			ret = PTR_ERR(pcie->cfg_base);
 			goto err_ioremap;
 		}
@@ -1108,8 +1110,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 #endif
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				0, 255, &res, NULL);
-	}
-	else {
+	} else {
 		u64 val;
 		unsigned sli_pem, node, sli;
 		void __iomem *addr;
@@ -1120,17 +1121,17 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			goto err_ioremap;
 		}
 
-		if(thunder_pcierc_init(pcie)) {
-			pr_err("%s: PCIe RC%d not found\n",__func__,pcie->pem);
+		if (thunder_pcierc_init(pcie)) {
+			pr_err("%s: PCIe RC%d not found\n", __func__, pcie->pem);
 			iounmap(pcie->pem_base);
 			return -ENODEV;
 		}
 
 
-		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006,0x4);
+		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006, 0x4);
 		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base0:%llx primary_bus:%x\n", __func__,
-				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base0,primary_bus);
-		primary_bus = ( primary_bus >>  0x8) & 0xff;
+				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base0, primary_bus);
+		primary_bus = (primary_bus >>  0x8) & 0xff;
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				primary_bus, 255, &res, &iobase);
 
@@ -1165,7 +1166,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	/* Set reference to MSI chip */
 	ret = thunder_pcie_msi_enable(pcie, bus);
 	if (ret) {
-		pr_err("%s: Unable to set reference to MSI chip: ret=%d\n",__func__,ret);
+		pr_err("%s: Unable to set reference to MSI chip: ret=%d\n", __func__, ret);
 		goto err_msi;
 	}
 
@@ -1174,9 +1175,8 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	pci_scan_child_bus(bus);
 	pci_bus_add_devices(bus);
 
-	if (pcie->device_type == THUNDER_PEM) {
+	if (pcie->device_type == THUNDER_PEM)
 		pci_assign_unassigned_root_bus_resources(bus);
-	}
 
 	return 0;
 err_msi:
