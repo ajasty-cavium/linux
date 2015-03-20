@@ -242,8 +242,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC0 */
-		case 0x098:   /* PCIRC1 */
-		case 0x0A8:   /* PCIRC2 */
+		case 0x090:   /* PCIRC1 */
+		case 0x0A0:   /* PCIRC2 */
 		default:
 			supported = 0;
 		}
@@ -281,8 +281,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC3 */
-		case 0x098:   /* PCIRC4 */
-		case 0x0A8:   /* PCIRC5 */
+		case 0x090:   /* PCIRC4 */
+		case 0x0A0:   /* PCIRC5 */
 		default:
 			supported = 0;
 		}
@@ -368,8 +368,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC0 */
-		case 0x098:   /* PCIRC1 */
-		case 0x0A8:   /* PCIRC2 */
+		case 0x090:   /* PCIRC1 */
+		case 0x0A0:   /* PCIRC2 */
 		default:
 			supported = 0;
 		}
@@ -407,8 +407,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 				supported = 1;
 			break;
 		case 0x080:   /* PCIRC3 */
-		case 0x098:   /* PCIRC4 */
-		case 0x0A8:   /* PCIRC5 */
+		case 0x090:   /* PCIRC4 */
+		case 0x0A0:   /* PCIRC5 */
 		default:
 			supported = 0;
 		}
