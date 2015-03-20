@@ -195,14 +195,13 @@ static uint64_t thunder_get_gser_cfg(int node, int qlm)
 	return readq((uint64_t *)thunder_get_gser_cfg_addr(node, qlm));
 }
 
-static void modify_slix_s2m_regx_acc(int node, int sli, int regnum)
+static void __iomem *slix_s2m_regx_adr(int node, int sli, int regnum)
 {
-	uint64_t regval;
 	void __iomem *address = NULL;
 	int sli_node;
 	sli_node = node << 1 | sli;
 
-	switch ( sli_node) {
+	switch (sli_node) {
 	case 0:
 		address = (void *)((uint64_t)sli0_s2m_regx_base) +
 			(regnum & 255) * 0x10ull;
@@ -222,12 +221,30 @@ static void modify_slix_s2m_regx_acc(int node, int sli, int regnum)
 	default:
 		WARN_ON("Sli/Node id are not correct");
 	}
+	return address;
+}
+enum slix_s2m_ctype {
+	CTYPE_MEMORY	= 0,
+	CTYPE_CONFIG	= 1,
+	CTYPE_IO	= 2
+};
 
-	if (address) {
-		regval = readq(address);
-		regval &= ~(0xFFFFFFFFull);
-		writeq(regval, address);
-	}
+static u64 slix_s2m_reg_val(unsigned mac, enum slix_s2m_ctype ctype,
+			    bool merge, bool relaxed, bool snoop, u32 ba_msb)
+{
+	u64 v;
+
+	v = (u64)(mac % 3) << 49;
+	v |= (u64)ctype << 53;
+	if (!merge)
+		v |= 1ull << 48;
+	if (relaxed)
+		v |= 5ull << 40;
+	if (!snoop)
+		v |= 5ull << 41;
+	v |= (u64)ba_msb;
+
+	return v;
 }
 
 static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
@@ -769,7 +786,7 @@ static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
 		printk("PEM%d is not ON\n",pcie->pem);
 		return -ENODEV;
 	}
-		
+
 	regval = readq(pcie->pem_base);
 	regval |= 0x10; // Set Link Enable bit
 	writeq(regval, address);
@@ -791,11 +808,13 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	uint64_t region;
 	uint64_t sli_group;
 	uint64_t gser_cfg;
-	int i, ret = 0;
+	int ret = 0;
 	int64_t node = -1, sli = -1;
 	int supported = 0;
+	u64 val;
+	void __iomem *addr;
 
-	switch ( pcie->pem) {
+	switch (pcie->pem) {
 	case 0:
 		sli =  0;
 		sli_group = 0;
@@ -922,12 +941,10 @@ static int thunder_pcierc_init(struct thunder_pcie *pcie)
 	if(ret)
 		return ret;
 
-
-	/* FIXME: TODO */
-	/* To support 32-bit PCIe devices, set S2M_REGx_ACC[BA]=0x0 */
-	for(i=0; i< 255; i++) {
-		modify_slix_s2m_regx_acc(node, sli, i);
-	}
+	/* 1 slot for config access. */
+	addr = slix_s2m_regx_adr(node, sli, (sli_group << 6));
+	val = slix_s2m_reg_val(sli_group, CTYPE_CONFIG, false, false, false, 0);
+	writeq(val, addr);
 
 	/* PEM number and access type */
 	region = ((sli_group << 6) | (0ULL << 4)) << 32;
@@ -1041,6 +1058,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	resource_size_t iobase = 0;
 	int ret=0;
 	int primary_bus = 0;
+	unsigned int i;
 	LIST_HEAD(res);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
@@ -1092,6 +1110,10 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 				0, 255, &res, NULL);
 	}
 	else {
+		u64 val;
+		unsigned sli_pem, node, sli;
+		void __iomem *addr;
+
 		pcie->pem_base = ioremap(cfg_base->start, 0x500);
 		if (!pcie->pem_base) {
 			pr_err("Unable to map PCIe RC CFG registers\n");
@@ -1111,6 +1133,23 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		primary_bus = ( primary_bus >>  0x8) & 0xff;
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				primary_bus, 255, &res, &iobase);
+
+		sli_pem = pcie->pem % 3;
+		sli = (pcie->pem / 3) % 2;
+		node = pcie->pem / 6;
+		for (i = 0; i < 16; i++) {
+			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x10);
+			val = slix_s2m_reg_val(sli_pem, CTYPE_MEMORY, false, false, false, i);
+			writeq(val, addr);
+
+			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x20);
+			val = slix_s2m_reg_val(sli_pem, CTYPE_MEMORY, true, true, true, i + 0x10);
+			writeq(val, addr);
+
+			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x30);
+			val = slix_s2m_reg_val(sli_pem, CTYPE_IO, true, true, true, i);
+			writeq(val, addr);
+		}
 	}
 
 	if (ret)
@@ -1131,13 +1170,14 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, pcie);
-    
+
 	pci_scan_child_bus(bus);
 	pci_bus_add_devices(bus);
-   
+
 	if (pcie->device_type == THUNDER_PEM) {
 		pci_assign_unassigned_root_bus_resources(bus);
 	}
+
 	return 0;
 err_msi:
 	pci_remove_root_bus(bus);
