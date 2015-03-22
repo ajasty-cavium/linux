@@ -21,7 +21,6 @@
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/interrupt.h>
-#include <linux/acpi.h>
 
 #include <clocksource/arm_arch_timer.h>
 #include <asm/arch_timer.h>
@@ -245,15 +244,6 @@ static const struct of_device_id arch_timer_of_match[] = {
 	{},
 };
 
-#ifdef CONFIG_ACPI
-struct acpi_table_gtdt *gtdt_acpi;
-
-static void arch_timer_acpi_parse(struct acpi_table_header *table)
-{
-	gtdt_acpi = container_of(table, struct acpi_table_gtdt, header);
-}
-#endif
-
 int kvm_timer_hyp_init(void)
 {
 	struct device_node *np;
@@ -264,32 +254,17 @@ int kvm_timer_hyp_init(void)
 	if (!timecounter)
 		return -ENODEV;
 
-	if (acpi_disabled) {
-		np = of_find_matching_node(NULL, arch_timer_of_match);
-		if (!np) {
-			kvm_err("kvm_arch_timer: can't find DT node\n");
-			return -ENODEV;
-		}
+	np = of_find_matching_node(NULL, arch_timer_of_match);
+	if (!np) {
+		kvm_err("kvm_arch_timer: can't find DT node\n");
+		return -ENODEV;
+	}
 
-		ppi = irq_of_parse_and_map(np, 2);
-		if (!ppi) {
-			kvm_err("kvm_arch_timer: no virtual timer interrupt\n");
-			err = -EINVAL;
-			goto out;
-		}
-		kvm_info("%s IRQ%d\n", np->name, ppi);
-	} else {
-		/* The virtual timer interrupt was already
-		 * registered during initialization with ACPI.
-		 * Get the interrupt number from the tables
-		 * and point there.
-		 */
-		acpi_table_parse(ACPI_SIG_GTDT,
-			(acpi_tbl_table_handler)arch_timer_acpi_parse);
-		if (!gtdt_acpi->virtual_timer_interrupt)
-			return -EINVAL;
-		ppi = gtdt_acpi->virtual_timer_interrupt;
-		kvm_info("timer IRQ%d\n", ppi);
+	ppi = irq_of_parse_and_map(np, 2);
+	if (!ppi) {
+		kvm_err("kvm_arch_timer: no virtual timer interrupt\n");
+		err = -EINVAL;
+		goto out;
 	}
 
 	err = request_percpu_irq(ppi, kvm_arch_timer_handler,
@@ -314,6 +289,7 @@ int kvm_timer_hyp_init(void)
 		goto out_free;
 	}
 
+	kvm_info("%s IRQ%d\n", np->name, ppi);
 	on_each_cpu(kvm_timer_init_interrupt, NULL, 1);
 
 	goto out;
