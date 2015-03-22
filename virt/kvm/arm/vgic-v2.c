@@ -23,10 +23,8 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <linux/acpi.h>
 
 #include <linux/irqchip/arm-gic.h>
-#include <linux/irqchip/arm-gic-acpi.h>
 
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_arm.h>
@@ -160,100 +158,24 @@ static const struct vgic_ops vgic_v2_ops = {
 
 static struct vgic_params vgic_v2_params;
 
-#ifdef CONFIG_ACPI
-static struct acpi_madt_generic_interrupt *vgic_acpi;
-
-static void vgic_get_acpi_header(struct acpi_table_header *header)
-{
-	vgic_acpi = (struct acpi_madt_generic_interrupt *)header;
-}
-
 /**
- * vgic_v2_acpi_probe - ACPI probe for a GICv2 compatible interrupt controller
- * @ops:	address of a pointer to the GICv2 operations
+ * vgic_v2_probe - probe for a GICv2 compatible interrupt controller in DT
+ * @node:	pointer to the DT node
+ * @ops: 	address of a pointer to the GICv2 operations
  * @params:	address of a pointer to HW-specific parameters
  *
  * Returns 0 if a GICv2 has been found, with the low level operations
  * in *ops and the HW parameters in *params. Returns an error code
  * otherwise.
  */
-
-static int
-vgic_v2_acpi_probe(struct vgic_params *vgic)
-{
-	int ret, trigger;
-
-	ret = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
-			(acpi_tbl_entry_handler)vgic_get_acpi_header, 1);
-	if (!ret) {
-		pr_err("No GIC CPU interface entries present\n");
-		ret = -ENODEV;
-		goto out;
-	}
-
-	trigger = (vgic_acpi->flags & ACPI_MADT_VGIC_IRQ_MODE) ?
-			  ACPI_EDGE_SENSITIVE : ACPI_LEVEL_SENSITIVE;
-
-	vgic->maint_irq = acpi_register_gsi(NULL,
-		vgic_acpi->vgic_interrupt, trigger, ACPI_ACTIVE_HIGH);
-
-	if (!vgic->maint_irq) {
-		kvm_err("error getting vgic maintenance irq from ACPI\n");
-		ret = -ENXIO;
-		goto out;
-	}
-
-	vgic->vctrl_base =
-		ioremap(vgic_acpi->gich_base_address, VGIC_CPU_INTERFACE_SIZE);
-	if (!vgic->vctrl_base) {
-		kvm_err("Cannot ioremap GICH\n");
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	vgic->nr_lr = readl_relaxed(vgic->vctrl_base + GICH_VTR);
-	vgic->nr_lr = (vgic->nr_lr & 0x3f) + 1;
-
-	ret = create_hyp_io_mappings(vgic->vctrl_base,
-		vgic->vctrl_base + VGIC_CPU_INTERFACE_SIZE,
-		vgic_acpi->gich_base_address);
-
-	if (ret) {
-		kvm_err("Cannot map VCTRL into hyp\n");
-		goto out_unmap;
-	}
-
-	vgic->vcpu_base = vgic_acpi->gicv_base_address;
-
-	if (!PAGE_ALIGNED(vgic->vcpu_base)) {
-		kvm_err("GICV physical address 0x%llx not page aligned\n",
-			(unsigned long long)vgic->vcpu_base);
-		ret = -ENXIO;
-		goto out_unmap;
-	}
-
-	kvm_info("interrupt-controller@%x IRQ%d\n",
-		(unsigned int)vgic_acpi->gich_base_address, vgic->maint_irq);
-
-out_unmap:
-	iounmap(vgic->vctrl_base);
-out:
-	return ret;
-}
-#else
-static int
-vgic_v2_acpi_probe(struct vgic_params *vgic)
-{
-	return -ENXIO;
-}
-#endif
-
-static int
-vgic_v2_of_probe(struct device_node *vgic_node, struct vgic_params *vgic)
+int vgic_v2_probe(struct device_node *vgic_node,
+		  const struct vgic_ops **ops,
+		  const struct vgic_params **params)
 {
 	int ret;
 	struct resource vctrl_res;
 	struct resource vcpu_res;
+	struct vgic_params *vgic = &vgic_v2_params;
 
 	vgic->maint_irq = irq_of_parse_and_map(vgic_node, 0);
 	if (!vgic->maint_irq) {
@@ -307,45 +229,22 @@ vgic_v2_of_probe(struct device_node *vgic_node, struct vgic_params *vgic)
 		goto out_unmap;
 	}
 
+	kvm_register_device_ops(&kvm_arm_vgic_v2_ops, KVM_DEV_TYPE_ARM_VGIC_V2);
+
 	vgic->vcpu_base = vcpu_res.start;
 
 	kvm_info("%s@%llx IRQ%d\n", vgic_node->name,
 		 vctrl_res.start, vgic->maint_irq);
+
+	vgic->type = VGIC_V2;
+	vgic->max_gic_vcpus = VGIC_V2_MAX_CPUS;
+	*ops = &vgic_v2_ops;
+	*params = vgic;
+	goto out;
 
 out_unmap:
 	iounmap(vgic->vctrl_base);
 out:
 	of_node_put(vgic_node);
 	return ret;
-}
-
-/**
- * vgic_v2_probe - probe for a GICv2 compatible interrupt controller in DT
- * @node:	pointer to the DT node
- * @ops: 	address of a pointer to the GICv2 operations
- * @params:	address of a pointer to HW-specific parameters
- *
- * Returns 0 if a GICv2 has been found, with the low level operations
- * in *ops and the HW parameters in *params. Returns an error code
- * otherwise.
- */
-int vgic_v2_probe(struct device_node *vgic_node,
-		  const struct vgic_ops **ops,
-		  const struct vgic_params **params)
-{
-	int ret;
-	struct vgic_params *vgic = &vgic_v2_params;
-
-	ret = vgic_node ? vgic_v2_of_probe(vgic_node, vgic):
-			  vgic_v2_acpi_probe(vgic);
-	if (ret)
-		return ret;
-
-	kvm_register_device_ops(&kvm_arm_vgic_v2_ops, KVM_DEV_TYPE_ARM_VGIC_V2);
-
-	vgic->type = VGIC_V2;
-	vgic->max_gic_vcpus = VGIC_V2_MAX_CPUS;
-	*ops = &vgic_v2_ops;
-	*params = vgic;
-	return 0;
 }

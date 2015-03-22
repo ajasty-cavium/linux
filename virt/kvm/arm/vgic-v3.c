@@ -23,7 +23,6 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <linux/acpi.h>
 
 #include <linux/irqchip/arm-gic-v3.h>
 
@@ -201,68 +200,26 @@ static const struct vgic_ops vgic_v3_ops = {
 	.enable			= vgic_v3_enable,
 };
 
-#ifdef CONFIG_ACPI
-static struct acpi_madt_generic_interrupt *vgic_acpi;
+static struct vgic_params vgic_v3_params;
 
-static void vgic_get_acpi_header(struct acpi_table_header *header)
-{
-	vgic_acpi = (struct acpi_madt_generic_interrupt *)header;
-}
-
-static int
-vgic_v3_acpi_probe(struct vgic_params *vgic)
-{
-	int ret, trigger;
-
-	ret = acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
-			(acpi_tbl_entry_handler)vgic_get_acpi_header, 1);
-	if (!ret) {
-		pr_err("No GIC CPU interface entries present\n");
-		return -ENODEV;
-	}
-
-	trigger = (vgic_acpi->flags & ACPI_MADT_VGIC_IRQ_MODE) ?
-			  ACPI_EDGE_SENSITIVE : ACPI_LEVEL_SENSITIVE;
-
-	vgic->maint_irq = acpi_register_gsi(NULL,
-		vgic_acpi->vgic_interrupt, trigger, ACPI_ACTIVE_HIGH);
-
-	if (!vgic->maint_irq) {
-		kvm_err("error getting vgic maintenance irq from ACPI\n");
-		return -ENXIO;
-	}
-
-	if (vgic_acpi->gich_base_address) {
-		vgic->vctrl_base = ioremap(vgic_acpi->gich_base_address,
-					   VGIC_CPU_INTERFACE_SIZE);
-		if (!vgic->vctrl_base) {
-			kvm_err("Cannot ioremap GICH\n");
-			return -ENOMEM;
-		}
-	} else {
-		kvm_info("GICv3: GICv2 emulation not available\n");
-		vgic->vcpu_base = 0;
-	}
-
-	kvm_info("interrupt-controller@%lx IRQ%d\n",
-		(long)vgic_acpi->gich_base_address, vgic->maint_irq);
-
-	return 0;
-}
-#else
-static int
-vgic_v3_acpi_probe(struct vgic_params *vgic)
-{
-	return -ENXIO;
-}
-#endif
-
-static int
-vgic_v3_of_probe(struct device_node *vgic_node, struct vgic_params *vgic)
+/**
+ * vgic_v3_probe - probe for a GICv3 compatible interrupt controller in DT
+ * @node:	pointer to the DT node
+ * @ops: 	address of a pointer to the GICv3 operations
+ * @params:	address of a pointer to HW-specific parameters
+ *
+ * Returns 0 if a GICv3 has been found, with the low level operations
+ * in *ops and the HW parameters in *params. Returns an error code
+ * otherwise.
+ */
+int vgic_v3_probe(struct device_node *vgic_node,
+		  const struct vgic_ops **ops,
+		  const struct vgic_params **params)
 {
 	int ret = 0;
 	u32 gicv_idx;
 	struct resource vcpu_res;
+	struct vgic_params *vgic = &vgic_v3_params;
 
 	vgic->maint_irq = irq_of_parse_and_map(vgic_node, 0);
 	if (!vgic->maint_irq) {
@@ -270,6 +227,14 @@ vgic_v3_of_probe(struct device_node *vgic_node, struct vgic_params *vgic)
 		ret = -ENXIO;
 		goto out;
 	}
+
+	ich_vtr_el2 = kvm_call_hyp(__vgic_v3_get_ich_vtr_el2);
+
+	/*
+	 * The ListRegs field is 5 bits, but there is a architectural
+	 * maximum of 16 list registers. Just ignore bit 4...
+	 */
+	vgic->nr_lr = (ich_vtr_el2 & 0xf) + 1;
 
 	if (of_property_read_u32(vgic_node, "#redistributor-regions", &gicv_idx))
 		gicv_idx = 1;
@@ -295,62 +260,22 @@ vgic_v3_of_probe(struct device_node *vgic_node, struct vgic_params *vgic)
 		}
 
 		vgic->vcpu_base = vcpu_res.start;
-	}
-
-	kvm_info("%s@%llx IRQ%d\n", vgic_node->name,
-		 vcpu_res.start, vgic->maint_irq);
-
-out:
-	of_node_put(vgic_node);
-	return ret;
-}
-
-static struct vgic_params vgic_v3_params;
-
-/**
- * vgic_v3_probe - probe for a GICv3 compatible interrupt controller in DT
- * @node:	pointer to the DT node
- * @ops: 	address of a pointer to the GICv3 operations
- * @params:	address of a pointer to HW-specific parameters
- *
- * Returns 0 if a GICv3 has been found, with the low level operations
- * in *ops and the HW parameters in *params. Returns an error code
- * otherwise.
- */
-int vgic_v3_probe(struct device_node *vgic_node,
-		  const struct vgic_ops **ops,
-		  const struct vgic_params **params)
-{
-	int ret = 0;
-	struct vgic_params *vgic = &vgic_v3_params;
-
-	ret = vgic_node ? vgic_v3_of_probe(vgic_node, vgic):
-			  vgic_v3_acpi_probe(vgic);
-	if (ret)
-		return ret;
-
-	ich_vtr_el2 = kvm_call_hyp(__vgic_v3_get_ich_vtr_el2);
-
-	/*
-	 * The ListRegs field is 5 bits, but there is a architectural
-	 * maximum of 16 list registers. Just ignore bit 4...
-	 */
-	vgic->nr_lr = (ich_vtr_el2 & 0xf) + 1;
-
-	if (vgic->vcpu_base == 0) {
-		kvm_info("disabling GICv2 emulation\n");
-		kvm_register_device_ops(&kvm_arm_vgic_v3_ops,
-					KVM_DEV_TYPE_ARM_VGIC_V3);
-	} else
 		kvm_register_device_ops(&kvm_arm_vgic_v2_ops,
 					KVM_DEV_TYPE_ARM_VGIC_V2);
-
+	}
+	kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3);
 
 	vgic->vctrl_base = NULL;
 	vgic->type = VGIC_V3;
 	vgic->max_gic_vcpus = KVM_MAX_VCPUS;
 
+	kvm_info("%s@%llx IRQ%d\n", vgic_node->name,
+		 vcpu_res.start, vgic->maint_irq);
+
 	*ops = &vgic_v3_ops;
 	*params = vgic;
-	return 0;
+
+out:
+	of_node_put(vgic_node);
+	return ret;
 }

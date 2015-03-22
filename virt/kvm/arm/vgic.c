@@ -27,7 +27,6 @@
 #include <linux/of_irq.h>
 #include <linux/uaccess.h>
 #include <linux/spinlock.h>
-#include <linux/acpi.h>
 
 #include <linux/irqchip/arm-gic.h>
 
@@ -2022,30 +2021,22 @@ static const struct of_device_id vgic_ids[] = {
 	{},
 };
 
-typedef const int (*vgic_init_t)(struct device_node *,const struct vgic_ops **,
-			const struct vgic_params **);
-
 int kvm_vgic_hyp_init(void)
 {
 	const struct of_device_id *matched_id;
-	vgic_init_t vgic_probe;
-	struct device_node *vgic_node = NULL;
+	const int (*vgic_probe)(struct device_node *,const struct vgic_ops **,
+				const struct vgic_params **);
+	struct device_node *vgic_node;
 	int ret;
 
-	if (acpi_disabled) {
-		vgic_node = of_find_matching_node_and_match(NULL,
+	vgic_node = of_find_matching_node_and_match(NULL,
 						    vgic_ids, &matched_id);
-		if (!vgic_node) {
-			kvm_err("error: no compatible GIC node found\n");
-			return -ENODEV;
-		}
+	if (!vgic_node) {
+		kvm_err("error: no compatible GIC node found\n");
+		return -ENODEV;
+	}
 
-		vgic_probe = (vgic_init_t)matched_id->data;
-	} else
-		vgic_probe =
-			(vgic_init_t)(acpi_gic_ver < ACPI_MADT_GIC_VER_V3 ?
-			vgic_v2_probe :	vgic_v3_probe);
-
+	vgic_probe = matched_id->data;
 	ret = vgic_probe(vgic_node, &vgic_ops, &vgic);
 	if (ret)
 		return ret;
