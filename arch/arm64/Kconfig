@@ -161,6 +161,7 @@ config ARCH_THUNDER
 	select VFIO_PCI
 	select PCI_HOST_GENERIC
 	select THUNDERX_GTI if NUMA
+	select HAVE_UNSTABLE_SCHED_CLOCK if NUMA
 
 menu   "Cavium ThunderX errata"
 
