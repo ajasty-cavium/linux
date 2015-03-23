@@ -425,11 +425,15 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 
 		/* Program LMAC credits */
 		lmac_credit = (1ull << 1); /* channel credit enable */
-		lmac_credit |= (0x1ff << 2);
+		lmac_credit |= (0x1ff << 2); /* Max outstanding pkt count */
+		/* 48KB BGX Tx buffer size, each unit is of size 16bytes */
 		lmac_credit |= (((((48 * 1024) / lmac_cnt) -
 				NIC_HW_MAX_FRS) / 16) << 12);
-		nic_reg_write(nic,
-			      NIC_PF_LMAC_0_7_CREDIT + (lmac * 8), lmac_credit);
+		lmac = bgx * MAX_LMAC_PER_BGX;
+		for (; lmac < lmac_cnt + (bgx * MAX_LMAC_PER_BGX); lmac++)
+			nic_reg_write(nic,
+				      NIC_PF_LMAC_0_7_CREDIT + (lmac * 8),
+				      lmac_credit);
 	}
 }
 
