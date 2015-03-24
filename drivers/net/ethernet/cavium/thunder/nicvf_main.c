@@ -909,7 +909,6 @@ int nicvf_stop(struct net_device *netdev)
 			continue;
 		napi_synchronize(&cq_poll->napi);
 		napi_disable(&cq_poll->napi);
-		napi_hash_del(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
 		nic->napi[qidx] = NULL;
@@ -954,7 +953,6 @@ int nicvf_open(struct net_device *netdev)
 		cq_poll->cq_idx = qidx;
 		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll,
 			       NAPI_POLL_WEIGHT);
-		napi_hash_add(&cq_poll->napi);
 		napi_enable(&cq_poll->napi);
 		nic->napi[qidx] = cq_poll;
 	}
@@ -1019,7 +1017,6 @@ napi_del:
 		if (!cq_poll)
 			continue;
 		napi_disable(&cq_poll->napi);
-		napi_hash_del(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
 		nic->napi[qidx] = NULL;
