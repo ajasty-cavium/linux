@@ -27,7 +27,7 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg);
 static void nic_send_rss_size(struct nicpf *nic, int vf);
 static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg);
 #endif
-static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx);
+static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic, u8 sq_idx);
 static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
 static int nic_rcv_queue_sw_sync(struct nicpf *nic);
 static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx);
@@ -611,7 +611,7 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
  * VNIC6-SQ0 -> TL4(528) -> TL3[132] -> TL2[33] -> TL1[1] -> BGX1
  * VNIC7-SQ0 -> TL4(536) -> TL3[134] -> TL2[33] -> TL1[1] -> BGX1
  */
-static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
+static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic, u8 sq_idx)
 {
 	u32 bgx, lmac, chan;
 	u32 tl2, tl3, tl4;
@@ -626,10 +626,10 @@ static void nic_tx_channel_cfg(struct nicpf *nic, int vnic, int sq_idx)
 	tl4 += sq_idx;
 	tl3 = tl4 / (NIC_MAX_TL4 / NIC_MAX_TL3);
 	nic_reg_write(nic, NIC_PF_QSET_0_127_SQ_0_7_CFG2 |
-		      (vnic << NIC_QS_ID_SHIFT) |
-		      (sq_idx << NIC_Q_NUM_SHIFT), tl4);
+		      ((u64)vnic << NIC_QS_ID_SHIFT) |
+		      ((u32)sq_idx << NIC_Q_NUM_SHIFT), tl4);
 	nic_reg_write(nic, NIC_PF_TL4_0_1023_CFG | (tl4 << 3),
-		      (vnic << 27) | (sq_idx << 24) | rr_quantum);
+		      ((u64)vnic << 27) | ((u32)sq_idx << 24) | rr_quantum);
 
 	nic_reg_write(nic, NIC_PF_TL3_0_255_CFG | (tl3 << 3), rr_quantum);
 	chan = (lmac * MAX_BGX_CHANS_PER_LMAC) + (bgx * NIC_CHANS_PER_INF);
