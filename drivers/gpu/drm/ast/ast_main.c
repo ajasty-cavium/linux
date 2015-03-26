@@ -412,7 +412,11 @@ int ast_driver_load(struct drm_device *dev, unsigned long flags)
 	 * assume the chip has MMIO enabled by default (rev 0x20
 	 * and higher).
 	 */
-	if (!(pci_resource_flags(dev->pdev, 2) & IORESOURCE_IO)) {
+
+	/* Skip IO space checking and use MMIO */
+        /* TODO: Need a proper fix from ASPEED */
+	//if (!(pci_resource_flags(dev->pdev, 2) & IORESOURCE_IO)) {
+	if(1) {
 		DRM_INFO("platform has no IO space, trying MMIO\n");
 		ast->ioregs = ast->regs + AST_IO_MM_OFFSET;
 	}
