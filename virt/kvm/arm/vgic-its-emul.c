@@ -1,7 +1,6 @@
 #include <linux/acpi.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
-#include <linux/iort.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/iommu.h>
