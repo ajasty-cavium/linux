@@ -329,21 +329,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x010:   /* NIC Bridge */
 		case 0x018:   /* TNS */
 		case 0x100:   /* NIC PF */
-		case 0x101:   /* NIC VF */
-		case 0x102:   /* NIC VF */
-		case 0x103:   /* NIC VF */
-		case 0x104:   /* NIC VF */
-		case 0x105:   /* NIC VF */
-		case 0x106:   /* NIC VF */
-		case 0x107:   /* NIC VF */
-		case 0x108:   /* NIC VF */
-		case 0x109:   /* NIC VF */
-		case 0x10A:   /* NIC VF */
-		case 0x10B:   /* NIC VF */
-		case 0x10C:   /* NIC VF */
-		case 0x10D:   /* NIC VF */
-		case 0x10E:   /* NIC VF */
-		case 0x110:   /* NIC VF */
+		case 0x101 ... 0x180:   /* NIC VF */
 			supported = 1;
 			break;
 		default:
@@ -451,20 +437,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x010:   /* NIC Bridge */
 		case 0x100:   /* NIC PF */
 		case 0x101:   /* NIC VF */
-		case 0x102:   /* NIC VF */
-		case 0x103:   /* NIC VF */
-		case 0x104:   /* NIC VF */
-		case 0x105:   /* NIC VF */
-		case 0x106:   /* NIC VF */
-		case 0x107:   /* NIC VF */
-		case 0x108:   /* NIC VF */
-		case 0x109:   /* NIC VF */
-		case 0x10A:   /* NIC VF */
-		case 0x10B:   /* NIC VF */
-		case 0x10C:   /* NIC VF */
-		case 0x10D:   /* NIC VF */
-		case 0x10E:   /* NIC VF */
-		case 0x110:   /* NIC VF */
+		case 0x102 ... 0x180:   /* NIC VF */
 			supported = 1;
 			break;
 		default:
