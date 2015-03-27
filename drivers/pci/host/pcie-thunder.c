@@ -133,7 +133,6 @@ int pci_requester_id(struct pci_dev *dev)
 }
 EXPORT_SYMBOL(pci_requester_id);
 
-
 /*
  * This bridge is just for the sake of supporting ARI for
  * downstream devices. No resources are attached to it.

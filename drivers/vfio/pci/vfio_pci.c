@@ -355,6 +355,7 @@ static int vfio_pci_for_each_slot_or_bus(struct pci_dev *pdev,
 }
 
 int pci_requester_id(struct pci_dev *dev);
+
 static long vfio_pci_ioctl(void *device_data,
 			   unsigned int cmd, unsigned long arg)
 {
