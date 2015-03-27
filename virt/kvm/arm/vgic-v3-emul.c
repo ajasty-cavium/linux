@@ -103,7 +103,8 @@ static bool handle_mmio_typer(struct kvm_vcpu *vcpu,
 	reg |= (INTERRUPT_ID_BITS - 1) << 19;
 
 	/* set LPIs supported */
-	reg |= (1 << 17);
+	if (vcpu->kvm->arch.vgic.vgic_its_base != VGIC_ADDR_UNDEF)
+		reg |= (1 << 17);
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 
@@ -675,7 +676,8 @@ static bool handle_mmio_typer_redist(struct kvm_vcpu *vcpu,
 		reg |= GICR_TYPER_LAST;
 
 	/* set physical LPIs supported */
-	reg |= 0x1;
+	if (vcpu->kvm->arch.vgic.vgic_its_base != VGIC_ADDR_UNDEF)
+		reg |= 0x1;
 	vgic_reg_access(mmio, &reg, offset,
 			ACCESS_READ_VALUE | ACCESS_WRITE_IGNORED);
 	return false;
