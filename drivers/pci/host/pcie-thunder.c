@@ -84,13 +84,13 @@ struct thunder_pcie {
 };
 
 struct sli_mem_addr {
-	uint64_t addr:32;
-	uint64_t region:8;
-	uint64_t did_hi:4;
-	uint64_t node:2;
-	uint64_t reserved_46_46:1;
-	uint64_t io:1;
-	uint64_t reserved_48_63:16;
+	u64 addr:32;
+	u64 region:8;
+	u64 did_hi:4;
+	u64 node:2;
+	u64 reserved_46_46:1;
+	u64 io:1;
+	u64 reserved_48_63:16;
 };
 
 static int pci_requester_id_ecam(struct pci_dev *dev)
@@ -181,17 +181,17 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID,
 			pci_dev_resource_fixup);
 
-static uint64_t thunder_get_gser_cfg_addr(int node, int qlm)
+static u64 thunder_get_gser_cfg_addr(int node, int qlm)
 {
 	if (node)
-		return ((uint64_t)gser_base1) + 0x80 + (0x1000000 * qlm);
+		return ((u64)gser_base1) + 0x80 + (0x1000000 * qlm);
 	else
-		return ((uint64_t)gser_base0) + 0x80 + (0x1000000 * qlm);
+		return ((u64)gser_base0) + 0x80 + (0x1000000 * qlm);
 }
 
-static uint64_t thunder_get_gser_cfg(int node, int qlm)
+static u64 thunder_get_gser_cfg(int node, int qlm)
 {
-	return readq((uint64_t *)thunder_get_gser_cfg_addr(node, qlm));
+	return readq((u64 *)thunder_get_gser_cfg_addr(node, qlm));
 }
 
 static void __iomem *slix_s2m_regx_adr(int node, int sli, int regnum)
@@ -203,19 +203,19 @@ static void __iomem *slix_s2m_regx_adr(int node, int sli, int regnum)
 
 	switch (sli_node) {
 	case 0:
-		address = (void *)((uint64_t)sli0_s2m_regx_base) +
+		address = (void *)((u64)sli0_s2m_regx_base) +
 			(regnum & 255) * 0x10ull;
 		break;
 	case 1:
-		address = (void *)((uint64_t)sli1_s2m_regx_base) +
+		address = (void *)((u64)sli1_s2m_regx_base) +
 			(regnum & 255) * 0x10ull;
 		break;
 	case 2:
-		address = (void *)((uint64_t)sli2_s2m_regx_base) +
+		address = (void *)((u64)sli2_s2m_regx_base) +
 			(regnum & 255) * 0x10ull;
 		break;
 	case 3:
-		address = (void *)((uint64_t)sli3_s2m_regx_base) +
+		address = (void *)((u64)sli3_s2m_regx_base) +
 			(regnum & 255) * 0x10ull;
 		break;
 	default:
@@ -251,8 +251,8 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 					 unsigned int devfn)
 {
 	int supported = 0;
-	uint16_t bdf = (bus << 8) | devfn;
-	uint64_t gser_cfg;
+	u16 bdf = (bus << 8) | devfn;
+	u64 gser_cfg;
 
 	if (ecam == 0) {
 		switch (bdf) {
@@ -480,7 +480,7 @@ static int thunder_pcie_check_pem_cfg_access(int pem, unsigned int bus,
 					 unsigned int devfn)
 {
 	int supported = 0;
-	uint64_t gser_cfg;
+	u64 gser_cfg;
 
 	/* TODO: 8 lane config needs to be handled supperately.
 	 * Hoping it should work..
@@ -756,7 +756,7 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 
 static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
 {
-	uint64_t regval;
+	u64 regval;
 	void __iomem *address;
 
 	address = pcie->pem_base;
@@ -785,10 +785,10 @@ static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
 
 static int thunder_pcierc_init(struct thunder_pcie *pcie)
 {
-	uint64_t pem_addr;
-	uint64_t region;
-	uint64_t sli_group;
-	uint64_t gser_cfg;
+	u64 pem_addr;
+	u64 region;
+	u64 sli_group;
+	u64 gser_cfg;
 	int ret = 0;
 	int64_t node = -1, sli = -1;
 	int supported = 0;
@@ -1077,7 +1077,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		}
 
 		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base0:%llx\n", __func__,
-				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base0);
+				pcie->ecam, (u64)cfg_base->start, (u64)gser_base0);
 
 #ifdef CONFIG_NUMA
 		if (IS_ERR(gser_base1)) {
@@ -1085,7 +1085,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 			goto err_ioremap;
 		}
 		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base1:%llx\n", __func__,
-				pcie->ecam, (uint64_t)cfg_base->start, (uint64_t)gser_base1);
+				pcie->ecam, (u64)cfg_base->start, (u64)gser_base1);
 #endif
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				0, 255, &res, NULL);
@@ -1109,7 +1109,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006, 0x4);
 		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base0:%llx primary_bus:%x\n", __func__,
-				pcie->pem, (uint64_t)cfg_base->start, (uint64_t)gser_base0, primary_bus);
+				pcie->pem, (u64)cfg_base->start, (u64)gser_base0, primary_bus);
 		primary_bus = (primary_bus >>  0x8) & 0xff;
 		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
 				primary_bus, 255, &res, &iobase);
