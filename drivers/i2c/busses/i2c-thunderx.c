@@ -26,8 +26,8 @@
 #define DRV_VERSION	"1.0"
 
 /* register offsets */
-#define SW_TWSI	 		0x1000
-#define TWSI_INT 		0x1010
+#define SW_TWSI			0x1000
+#define TWSI_INT		0x1010
 #define TWSI_INT_ENA_W1C	0x1028
 #define TWSI_INT_ENA_W1S	0x1030
 
@@ -673,10 +673,9 @@ static void thunderx_i2c_remove(struct pci_dev *pdev)
 
 static struct pci_driver thunderx_i2c_driver = {
 	.name		= DRV_NAME,
-	.id_table 	= thunderx_i2c_id_table,
+	.id_table	= thunderx_i2c_id_table,
 	.probe		= thunderx_i2c_probe,
 	.remove		= thunderx_i2c_remove,
 };
 
 module_pci_driver(thunderx_i2c_driver)
-
