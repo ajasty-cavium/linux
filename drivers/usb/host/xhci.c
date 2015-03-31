@@ -279,7 +279,6 @@ static int xhci_setup_msix(struct xhci_hcd *xhci)
 	 */
 	xhci->msix_count = min(num_online_cpus() + 1,
 				HCS_MAX_INTRS(xhci->hcs_params1));
-
 	/* TODO: */
 	/* Errata 23238 */
 	if(pdev->vendor == PCI_VENDOR_ID_CAVIUM)
