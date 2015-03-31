@@ -322,6 +322,7 @@ static int nicvf_get_coalesce(struct net_device *netdev,
 	return 0;
 }
 
+#ifdef NOT_SUPPORTED_FOR_NOW
 static int nicvf_set_coalesce(struct net_device *netdev,
 			      struct ethtool_coalesce *cmd)
 {
@@ -335,6 +336,7 @@ static int nicvf_set_coalesce(struct net_device *netdev,
 				      qidx, nic->cq_coalesce_usecs);
 	return 0;
 }
+#endif
 
 static void nicvf_get_ringparam(struct net_device *netdev,
 				struct ethtool_ringparam *ring)
@@ -591,7 +593,9 @@ static const struct ethtool_ops nicvf_ethtool_ops = {
 	.get_regs_len		= nicvf_get_regs_len,
 	.get_regs		= nicvf_get_regs,
 	.get_coalesce		= nicvf_get_coalesce,
+#ifdef NOT_SUPPORTED_FOR_NOW
 	.set_coalesce		= nicvf_set_coalesce,
+#endif
 	.get_ringparam		= nicvf_get_ringparam,
 #ifdef VNIC_RSS_SUPPORT
 	.get_rxnfc		= nicvf_get_rxnfc,

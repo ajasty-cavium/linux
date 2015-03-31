@@ -74,7 +74,7 @@
 #define CMP_QSIZE		CMP_QUEUE_SIZE4
 #define CMP_QUEUE_LEN		(1ULL << (CMP_QSIZE + 10))
 #define CMP_QUEUE_CQE_THRESH	0
-#define CMP_QUEUE_TIMER_THRESH	20 /* 20 usecs */
+#define CMP_QUEUE_TIMER_THRESH	220 /* 10usec */
 
 #define RBDR_SIZE		RBDR_SIZE0
 #define RCV_BUF_COUNT		(1ULL << (RBDR_SIZE + 13))

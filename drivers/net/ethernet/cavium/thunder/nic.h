@@ -124,9 +124,10 @@
  * Calculated for SCLK of 700Mhz
  * value written should be a 1/16th of what is expected
  *
- * 1 tick per usec
+ * 1 tick per 0.05usec = value of 2.2
+ * This 10% would be covered in CQ timer thresh value
  */
-#define NICPF_CLK_PER_INT_TICK		44
+#define NICPF_CLK_PER_INT_TICK		2
 
 struct nicvf_cq_poll {
 	u8	cq_idx;		/* Completion queue index */
