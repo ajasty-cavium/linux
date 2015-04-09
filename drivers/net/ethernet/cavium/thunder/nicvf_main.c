@@ -638,6 +638,7 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
 	struct cmp_queue *cq;
+	struct irq_desc *irq_desc;
 
 	intr = nicvf_reg_read(nic, NIC_VF_INT);
 	if (netif_msg_intr(nic))
@@ -664,7 +665,9 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 		 * CQ's IRQ affinity is set.
 		 */
 		cq = &nic->qs->cq[qidx];
-		if (smp_processor_id() != cpumask_first(&cq->affinity_mask))
+		irq_desc = irq_to_desc(cq->irq);
+		if (smp_processor_id() !=
+		    cpumask_first(irq_desc_get_irq_data(irq_desc)->affinity))
 			continue;
 
 		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
@@ -723,6 +726,8 @@ static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 {
 	int cpu, first_cpu, num_online_cpus;
 	struct cmp_queue *cq = &nic->qs->cq[qidx];
+
+	cq->irq = irq;
 
 	num_online_cpus = cpumask_weight(cpumask_of_node(nic->node));
 	first_cpu = cpumask_first(cpumask_of_node(nic->node));
