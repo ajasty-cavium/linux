@@ -353,10 +353,10 @@ static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 	mbx.data.bgx_stats.rx = bgx->rx;
 	mbx.data.bgx_stats.idx = bgx->idx;
 	if (bgx->rx)
-		mbx.data.bgx_stats.stats = bgx_get_rx_stats(bgx_idx,
+		mbx.data.bgx_stats.stats = bgx_get_rx_stats(nic->node, bgx_idx,
 							    lmac, bgx->idx);
 	else
-		mbx.data.bgx_stats.stats = bgx_get_tx_stats(bgx_idx,
+		mbx.data.bgx_stats.stats = bgx_get_tx_stats(nic->node, bgx_idx,
 							    lmac, bgx->idx);
 	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx);
 }

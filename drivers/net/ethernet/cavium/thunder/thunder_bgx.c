@@ -147,7 +147,7 @@ void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status)
 
 	bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
 	if (!bgx)
-		return 0;
+		return;
 
 	lmac = &bgx->lmac[lmacid];
 	link->link_up = lmac->link_up;
@@ -261,22 +261,28 @@ void bgx_lmac_handler(struct net_device *netdev)
 		bgx_xaui_check_link(lmac);
 }
 
-u64 bgx_get_rx_stats(int bgx_idx, int lmac, int idx)
+u64 bgx_get_rx_stats(int node, int bgx_idx, int lmac, int idx)
 {
 	struct bgx *bgx;
 
-	bgx = bgx_vnic[bgx_idx];
+	bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+	if (!bgx)
+		return 0;
+
 	if (idx > 8)
 		lmac = 0;
 	return bgx_reg_read(bgx, lmac, BGX_CMRX_RX_STAT0 + (idx * 8));
 }
 EXPORT_SYMBOL(bgx_get_rx_stats);
 
-u64 bgx_get_tx_stats(int bgx_idx, int lmac, int idx)
+u64 bgx_get_tx_stats(int node, int bgx_idx, int lmac, int idx)
 {
 	struct bgx *bgx;
 
-	bgx = bgx_vnic[bgx_idx];
+	bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+	if (!bgx)
+		return 0;
+
 	return bgx_reg_read(bgx, lmac, BGX_CMRX_TX_STAT0 + (idx * 8));
 }
 EXPORT_SYMBOL(bgx_get_tx_stats);
