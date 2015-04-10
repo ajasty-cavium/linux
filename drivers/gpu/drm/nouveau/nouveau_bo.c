@@ -1383,9 +1383,9 @@ nouveau_ttm_tt_populate(struct ttm_tt *ttm)
 #endif
 
 #ifdef CONFIG_SWIOTLB
-	if (swiotlb_nr_tbl()) {
-		return ttm_dma_populate((void *)ttm, dev->dev);
-	}
+//	if (swiotlb_nr_tbl()) {
+//		return ttm_dma_populate((void *)ttm, dev->dev);
+//	}
 #endif
 
 	r = ttm_pool_populate(ttm);
