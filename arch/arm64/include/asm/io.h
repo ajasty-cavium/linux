@@ -125,6 +125,11 @@ static inline u64 __raw_readq(const volatile void __iomem *addr)
 #define IO_SPACE_LIMIT		(SZ_32M - 1)
 #define PCI_IOBASE		((void __iomem *)(MODULES_VADDR - SZ_32M))
 
+#define HAVE_ARCH_PIO_SIZE	1
+#define PIO_RESERVED		SZ_32M
+#define PIO_OFFSET		0
+#define PIO_MASK		(PIO_RESERVED - 1)
+
 static inline u8 inb(unsigned long addr)
 {
 	return readb(addr + PCI_IOBASE);
