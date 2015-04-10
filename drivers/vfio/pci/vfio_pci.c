@@ -844,6 +844,7 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.read		= vfio_pci_read,
 	.write		= vfio_pci_write,
 	.mmap		= vfio_pci_mmap,
+	.external_ops	= NULL,
 };
 
 static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
