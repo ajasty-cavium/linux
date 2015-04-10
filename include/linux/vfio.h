@@ -17,6 +17,23 @@
 #include <uapi/linux/vfio.h>
 
 /**
+ * struct vfio_device_external_ops - VFIO bus driver device callbacks
+ * used as external API
+ * @mask: mask any IRQ defined by triplet
+ * @is_active: returns whether any IRQ defined by triplet is active
+ * @set_automasked: sets the automasked flag of triplet's IRQ
+ */
+struct vfio_device_external_ops  {
+	int (*mask)(void *device_data, unsigned index, unsigned start,
+		    unsigned count);
+	int (*is_active)(void *device_data, unsigned index, unsigned start,
+			 unsigned count);
+	int (*set_automasked)(void *device_data, unsigned index,
+			      unsigned start, unsigned count,
+			       bool automasked);
+};
+
+/**
  * struct vfio_device_ops - VFIO bus driver device callbacks
  *
  * @open: Called when userspace creates new file descriptor for device
@@ -38,6 +55,7 @@ struct vfio_device_ops {
 	long	(*ioctl)(void *device_data, unsigned int cmd,
 			 unsigned long arg);
 	int	(*mmap)(void *device_data, struct vm_area_struct *vma);
+	struct vfio_device_external_ops *external_ops;
 };
 
 extern int vfio_add_group_dev(struct device *dev,
