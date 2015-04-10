@@ -496,7 +496,6 @@ struct mlx4_buf_list {
 
 struct mlx4_buf {
 	struct mlx4_buf_list	direct;
-	struct mlx4_buf_list   *page_list;
 	int			nbufs;
 	int			npages;
 	int			page_shift;
@@ -858,16 +857,12 @@ static inline int mlx4_is_slave(struct mlx4_dev *dev)
 	return dev->flags & MLX4_FLAG_SLAVE;
 }
 
-int mlx4_buf_alloc(struct mlx4_dev *dev, int size, int max_direct,
+int mlx4_buf_alloc(struct mlx4_dev *dev, int size,
 		   struct mlx4_buf *buf, gfp_t gfp);
 void mlx4_buf_free(struct mlx4_dev *dev, int size, struct mlx4_buf *buf);
 static inline void *mlx4_buf_offset(struct mlx4_buf *buf, int offset)
 {
-	if (BITS_PER_LONG == 64 || buf->nbufs == 1)
-		return buf->direct.buf + offset;
-	else
-		return buf->page_list[offset >> PAGE_SHIFT].buf +
-			(offset & (PAGE_SIZE - 1));
+	return buf->direct.buf + offset;
 }
 
 int mlx4_pd_alloc(struct mlx4_dev *dev, u32 *pdn);
@@ -903,7 +898,7 @@ int mlx4_db_alloc(struct mlx4_dev *dev, struct mlx4_db *db, int order,
 void mlx4_db_free(struct mlx4_dev *dev, struct mlx4_db *db);
 
 int mlx4_alloc_hwq_res(struct mlx4_dev *dev, struct mlx4_hwq_resources *wqres,
-		       int size, int max_direct);
+		       int size);
 void mlx4_free_hwq_res(struct mlx4_dev *mdev, struct mlx4_hwq_resources *wqres,
 		       int size);
 
