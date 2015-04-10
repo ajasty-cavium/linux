@@ -8,6 +8,7 @@
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
  */
+/* #define DEBUG 1 */
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -34,19 +35,6 @@
 #define THUNDER_ECAM6_CFG_BASE		0x94a000000000
 #define THUNDER_ECAM7_CFG_BASE		0x94b000000000
 
-#define THUNDER_PEM0_REG_BASE		(0x87e0c0000000 | (0 << 24))
-#define THUNDER_PEM1_REG_BASE		(0x87e0c0000000 | (1 << 24))
-#define THUNDER_PEM2_REG_BASE		(0x87e0c0000000 | (2 << 24))
-#define THUNDER_PEM3_REG_BASE		(0x87e0c0000000 | (3 << 24))
-#define THUNDER_PEM4_REG_BASE		(0x87e0c0000000 | (4 << 24))
-#define THUNDER_PEM5_REG_BASE		(0x87e0c0000000 | (5 << 24))
-#define THUNDER_PEM6_REG_BASE		(0x97e0c0000000 | (0 << 24))
-#define THUNDER_PEM7_REG_BASE		(0x97e0c0000000 | (1 << 24))
-#define THUNDER_PEM8_REG_BASE		(0x97e0c0000000 | (2 << 24))
-#define THUNDER_PEM9_REG_BASE		(0x97e0c0000000 | (3 << 24))
-#define THUNDER_PEM10_REG_BASE		(0x97e0c0000000 | (4 << 24))
-#define THUNDER_PEM11_REG_BASE		(0x97e0c0000000 | (5 << 24))
-
 #define THUNDER_GSER_N0_BASE		0x87e090000000
 #define THUNDER_GSER_N1_BASE		0x97e090000000
 #define THUNDER_GSER_SIZE		0x00000d000000
@@ -57,43 +45,24 @@
 #define THUNDER_GSER_CFG_BGX		(1ULL << 2)
 #define THUNDER_GSER_CFG_SATA		(1ULL << 5)
 
-#define SLIX_S2M_REGX_ACC		0x874001000000
-#define N1_SLIX_S2M_REGX_ACC		0x974001000000
-#define SLIX_S2M_REGX_ACC_SIZE		0x1000
+#define THUNDER_GICD_SETSPI_NSR		0x801000000040ull
+#define THUNDER_GICD_CLRSPI_NSR		0x801000000048ull
 
 void __iomem *gser_base0;
 void __iomem *gser_base1;
-void __iomem *sli0_s2m_regx_base;
-void __iomem *sli1_s2m_regx_base;
-void __iomem *sli2_s2m_regx_base;
-void __iomem *sli3_s2m_regx_base;
-
-enum thunder_pcie_device_type {
-	THUNDER_ECAM,
-	THUNDER_PEM,
-};
 
 struct thunder_pcie {
+	struct list_head	list; /* on thunder_pcie_pem_buses */
+	struct pci_bus		*bus;
 	struct device_node	*node;
 	struct device		*dev;
 	void __iomem		*cfg_base;
-	void __iomem		*pem_base;
-	void __iomem		*pem_sli_base;
 	struct msi_chip		*msi;
-	int			device_type;
 	int			ecam;
-	int			pem;
+	bool			valid;
 };
 
-struct sli_mem_addr {
-	u64 addr:32;
-	u64 region:8;
-	u64 did_hi:4;
-	u64 node:2;
-	u64 reserved_46_46:1;
-	u64 io:1;
-	u64 reserved_48_63:16;
-};
+int thunder_pem_requester_id(struct pci_dev *dev);
 
 static int pci_requester_id_ecam(struct pci_dev *dev)
 {
@@ -104,34 +73,13 @@ static int pci_requester_id_ecam(struct pci_dev *dev)
 
 int pci_requester_id(struct pci_dev *dev)
 {
-	struct thunder_pcie *pcie = dev->bus->sysdata;
+	int ret;
 
-	if (pcie->device_type == THUNDER_ECAM)
-		return pci_requester_id_ecam(dev);
+	ret = thunder_pem_requester_id(dev);
+	if (ret >= 0)
+		return ret;
 
-	if (pcie->pem < 3)
-		return ((1 << 16) |
-			((dev)->bus->number << 8) |
-			(dev)->devfn);
-
-	if (pcie->pem < 6)
-		return ((3 << 16) |
-			((dev)->bus->number << 8) |
-			(dev)->devfn);
-
-	if (pcie->pem < 9)
-		return ((1 << 19) | (1 << 16) |
-			((dev)->bus->number << 8) |
-			(dev)->devfn);
-
-	if (pcie->pem < 12)
-		return ((1 << 19) |
-			(3 << 16) |
-			((dev)->bus->number << 8) |
-			(dev)->devfn);
-
-	WARN_ON("Not Valid PEM id");
-	return -ENODEV;
+	return pci_requester_id_ecam(dev);
 }
 EXPORT_SYMBOL(pci_requester_id);
 
@@ -200,59 +148,6 @@ static u64 thunder_get_gser_cfg(int node, int qlm)
 	return readq(thunder_get_gser_base(node, qlm) + THUNDER_GSER_CFG);
 }
 
-static void __iomem *slix_s2m_regx_adr(int node, int sli, int regnum)
-{
-	void __iomem *address = NULL;
-	int sli_node;
-
-	sli_node = node << 1 | sli;
-
-	switch (sli_node) {
-	case 0:
-		address = (void *)((u64)sli0_s2m_regx_base) +
-			(regnum & 255) * 0x10ull;
-		break;
-	case 1:
-		address = (void *)((u64)sli1_s2m_regx_base) +
-			(regnum & 255) * 0x10ull;
-		break;
-	case 2:
-		address = (void *)((u64)sli2_s2m_regx_base) +
-			(regnum & 255) * 0x10ull;
-		break;
-	case 3:
-		address = (void *)((u64)sli3_s2m_regx_base) +
-			(regnum & 255) * 0x10ull;
-		break;
-	default:
-		WARN_ON("Sli/Node id are not correct");
-	}
-	return address;
-}
-enum slix_s2m_ctype {
-	CTYPE_MEMORY	= 0,
-	CTYPE_CONFIG	= 1,
-	CTYPE_IO	= 2
-};
-
-static u64 slix_s2m_reg_val(unsigned mac, enum slix_s2m_ctype ctype,
-			    bool merge, bool relaxed, bool snoop, u32 ba_msb)
-{
-	u64 v;
-
-	v = (u64)(mac % 3) << 49;
-	v |= (u64)ctype << 53;
-	if (!merge)
-		v |= 1ull << 48;
-	if (relaxed)
-		v |= 5ull << 40;
-	if (!snoop)
-		v |= 5ull << 41;
-	v |= (u64)ba_msb;
-
-	return v;
-}
-
 static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 					 unsigned int devfn)
 {
@@ -286,9 +181,18 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x14B:   /* TWSI3 */
 		case 0x14C:   /* TWSI4 */
 		case 0x14D:   /* TWSI5 */
+
 		case 0x200:   /* RAD */
 		case 0x300:   /* ZIP */
 		case 0x400:   /* HFA */
+			supported = 1;
+			break;
+		case 0x170:   /* PEM0 */
+		case 0x171:   /* PEM1 */
+		case 0x172:   /* PEM2 */
+		case 0x173:   /* PEM3 */
+		case 0x174:   /* PEM4 */
+		case 0x175:   /* PEM5 */
 			supported = 1;
 			break;
 		case 0x180:   /* BGX0 */
@@ -481,161 +385,6 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 	return supported;
 }
 
-
-static int thunder_pcie_check_pem_cfg_access(int pem, unsigned int bus,
-					 unsigned int devfn)
-{
-	int supported = 0;
-	u64 gser_cfg;
-
-	/* TODO: 8 lane config needs to be handled supperately.
-	 * Hoping it should work..
-	 */
-
-	if (PCI_SLOT(devfn))
-		return supported;
-
-	switch (pem) {
-	case 0:
-		gser_cfg = thunder_get_gser_cfg(0, 2);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 1:
-		gser_cfg = thunder_get_gser_cfg(0, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 2:
-		gser_cfg = thunder_get_gser_cfg(0, 4);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 3:
-		gser_cfg = thunder_get_gser_cfg(0, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 4:
-		gser_cfg = thunder_get_gser_cfg(0, 6);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 5:
-		gser_cfg = thunder_get_gser_cfg(0, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 6:
-		gser_cfg = thunder_get_gser_cfg(1, 2);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 7:
-		gser_cfg = thunder_get_gser_cfg(1, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 8:
-		gser_cfg = thunder_get_gser_cfg(1, 4);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 9:
-		gser_cfg = thunder_get_gser_cfg(1, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 10:
-		gser_cfg = thunder_get_gser_cfg(1, 6);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 11:
-		gser_cfg = thunder_get_gser_cfg(1, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	}
-
-	return supported;
-}
-
-int first_bar0_read = 0;
-int first_bar1_read = 0;
-
-static int thunder_pcierc_config_read(void __iomem *pem_base, int reg, int size)
-{
-	void __iomem *addr;
-	unsigned int val;
-
-	if (reg == 0x10) /* BAR 0 */ {
-		if (!first_bar0_read)
-			val = 0xC0000004;
-		else
-			val = 0xffff800f;
-		first_bar0_read = 1;
-		return val;
-	}
-
-	if (reg == 0x14) /* BAR 1 */ {
-		if (!first_bar1_read)
-			val = 0x87E0;
-		else
-			val = 0xffffffff;
-		first_bar1_read = 1;
-		return val;
-	}
-
-
-	if (reg == 0x38) /* ROM */
-		return 0x00;
-
-	addr = pem_base + 0x30; /* RD_CFG reg */
-	writeq(reg & ~3, addr);
-	val = readq(addr) >> 32;
-
-	if (size == 1)
-		val = (val >> (8 * (reg & 3))) & 0xff;
-	else if (size == 2)
-		val = (val >> (8 * (reg & 3))) & 0xffff;
-
-	return val;
-}
-
-static void thunder_pcierc_config_write(void __iomem *pem_base, int reg,
-					int size, u64 val)
-{
-	void __iomem *addr;
-	u32 mask = 0;
-	u64 tmp;
-
-	addr = pem_base + 0x28; /* WR_CFG reg */
-
-	if (size == 4) {
-		writeq(((val << 32) | reg), addr);
-		return;
-	}
-
-	if (size == 2)
-		mask = ~(0xffff << ((reg & 0x3) * 8));
-	else if (size == 1)
-		mask = ~(0xff << ((reg & 0x3) * 8));
-
-	tmp = thunder_pcierc_config_read(pem_base, reg, size) & mask;
-	tmp |= val << ((reg & 0x3) * 8);
-	writeq((tmp << 32) | reg, addr);
-}
-
-static void __iomem *thunder_pcie_external_addr(struct thunder_pcie *pcie,
-						unsigned int bus, unsigned int devfn, int reg)
-{
-	return pcie->pem_sli_base + ((bus << 24)  | (devfn << 16) | reg);
-}
-
-
-
-
 static void __iomem *thunder_pcie_cfg_base(struct thunder_pcie *pcie,
 				 unsigned int bus, unsigned int devfn)
 {
@@ -648,18 +397,9 @@ static void __iomem *
 thunder_pcie_get_cfg_addr(struct thunder_pcie *pcie, unsigned int busnr,
 			unsigned int devfn, int reg)
 {
-	switch (pcie->device_type) {
-	case THUNDER_ECAM:
-		if (!thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn))
-			return NULL;
-		return thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
-	case THUNDER_PEM:
-		if (!thunder_pcie_check_pem_cfg_access(pcie->pem, busnr, devfn))
-			return NULL;
-		return thunder_pcie_external_addr(pcie, busnr, devfn, reg);
-	default:
+	if (!thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn))
 		return NULL;
-	}
+	return thunder_pcie_cfg_base(pcie, busnr, devfn) + reg;
 }
 
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
@@ -756,273 +496,37 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 	return 0;
 }
 
-#define PCIERC_CFG002 0x08
-#define PCIERC_CFG006 0x18
-#define PCIERC_CFG032 0x80
-
-static int thunder_pcierc_link_init(struct thunder_pcie *pcie)
-{
-	u64 regval;
-	void __iomem *address;
-
-	address = pcie->pem_base;
-
-	/* check whether PEM is safe to access. */
-	regval = readq(pcie->pem_base+0x420); /* PEMx_ON */
-	if ((regval & 0x3) != 0x3) {
-		pr_err("PEM%d is not ON\n", pcie->pem);
-		return -ENODEV;
-	}
-
-	regval = readq(pcie->pem_base);
-	regval |= 0x10; /* Set Link Enable bit */
-	writeq(regval, address);
-
-
-	udelay(1000);
-	regval = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG032, 0x4);
-	if (((regval >> 29 & 0x1) == 0x0) || ((regval >> 27 & 0x1) == 0x1)) {
-		pr_err("PCIe RC: Port %d Link Timeout\n", pcie->pem);
-		return -ENODEV;
-	}
-
-	return 0;
-}
-
-static int thunder_pcierc_init(struct thunder_pcie *pcie)
-{
-	u64 pem_addr;
-	u64 region;
-	u64 sli_group;
-	u64 gser_cfg;
-	int ret = 0;
-	int64_t node = -1, sli = -1;
-	int supported = 0;
-	u64 val;
-	void __iomem *addr;
-
-	switch (pcie->pem) {
-	case 0:
-		sli =  0;
-		sli_group = 0;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 2);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-
-	case 1:
-		sli =  0;
-		sli_group = 1;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 2:
-		sli =  0;
-		sli_group = 2;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 4);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 3:
-		sli =  1;
-		sli_group = 0;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 4:
-		sli =  1;
-		sli_group = 1;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 6);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 5:
-		sli =  1;
-		sli_group = 2;
-		node = 0;
-		gser_cfg = thunder_get_gser_cfg(node, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 6:
-		sli =  0;
-		sli_group = 0;
-		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 2);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 7:
-		sli =  0;
-		sli_group = 1;
-		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 3);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 8:
-		sli =  0;
-		sli_group = 2;
-		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 4);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 9:
-		sli =  1;
-		sli_group = 0;
-		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 5);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 10:
-		sli =  1;
-		node = 1;
-		sli_group = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 6);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	case 11:
-		sli =  1;
-		sli_group = 2;
-		node = 1;
-		gser_cfg = thunder_get_gser_cfg(node, 7);
-		if (gser_cfg & THUNDER_GSER_CFG_PCIE)
-			supported = 1;
-		break;
-	default:
-		return -ENODEV;
-	}
-
-	if (!supported)
-		return -ENODEV;
-
-	ret = thunder_pcierc_link_init(pcie);
-	if (ret)
-		return ret;
-
-	/* 1 slot for config access. */
-	addr = slix_s2m_regx_adr(node, sli, (sli_group << 6));
-	val = slix_s2m_reg_val(sli_group, CTYPE_CONFIG, false, false, false, 0);
-	writeq(val, addr);
-
-	/* PEM number and access type */
-	region = ((sli_group << 6) | (0ULL << 4)) << 32;
-	pem_addr = (1ULL << 47) | (node << 44) | ((0x8 + sli) << 40) | region;
-	pcie->pem_sli_base = ioremap(pem_addr, (0xFFULL << 24) - 1);
-	return ret;
-}
-
 static void thunder_pcie_config(struct thunder_pcie *pcie, u64 addr)
 {
+	pcie->valid = true;
+
 	switch (addr) {
 	case THUNDER_ECAM0_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 0;
 		break;
 	case THUNDER_ECAM1_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 1;
 		break;
 	case THUNDER_ECAM2_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 2;
 		break;
 	case THUNDER_ECAM3_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 3;
 		break;
 	case THUNDER_ECAM4_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 4;
 		break;
 	case THUNDER_ECAM5_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 5;
 		break;
 	case THUNDER_ECAM6_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 6;
 		break;
 	case THUNDER_ECAM7_CFG_BASE:
-		pcie->device_type = THUNDER_ECAM;
 		pcie->ecam = 7;
 		break;
-	case THUNDER_PEM0_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 0;
-		break;
-	case THUNDER_PEM1_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 1;
-		break;
-	case THUNDER_PEM2_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 2;
-		break;
-	case THUNDER_PEM3_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 3;
-		break;
-	case THUNDER_PEM4_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 4;
-		break;
-	case THUNDER_PEM5_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 5;
-		break;
-	case THUNDER_PEM6_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 6;
-		break;
-	case THUNDER_PEM7_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 7;
-		break;
-	case THUNDER_PEM8_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 8;
-		break;
-	case THUNDER_PEM9_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 9;
-		break;
-	case THUNDER_PEM10_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 10;
-		break;
-	case THUNDER_PEM11_REG_BASE:
-		pcie->device_type = THUNDER_PEM;
-		pcie->pem = 11;
-		break;
+	default:
+		pcie->valid = false;
 	}
 
 	if (gser_base0 == NULL)
@@ -1042,10 +546,8 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct thunder_pcie *pcie;
 	struct resource *cfg_base;
 	struct pci_bus *bus;
-	resource_size_t iobase = 0;
 	int ret = 0;
 	int primary_bus = 0;
-	unsigned int i;
 	LIST_HEAD(res);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
@@ -1055,98 +557,40 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	pcie->node = of_node_get(pdev->dev.of_node);
 	pcie->dev = &pdev->dev;
 
+
 	/* Get controller's configuration space range */
 	cfg_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	thunder_pcie_config(pcie, cfg_base->start);
 
-	if (sli0_s2m_regx_base == NULL)
-		sli0_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC,
-					 SLIX_S2M_REGX_ACC_SIZE);
-	if (sli1_s2m_regx_base == NULL)
-		sli1_s2m_regx_base = devm_ioremap(&pdev->dev, SLIX_S2M_REGX_ACC+(1ull<<36),
-					 SLIX_S2M_REGX_ACC_SIZE);
-#ifdef CONFIG_NUMA
-	if (sli2_s2m_regx_base == NULL)
-		sli2_s2m_regx_base = devm_ioremap(&pdev->dev, N1_SLIX_S2M_REGX_ACC,
-					 SLIX_S2M_REGX_ACC_SIZE);
-	if (sli3_s2m_regx_base == NULL)
-		sli3_s2m_regx_base = devm_ioremap(&pdev->dev, N1_SLIX_S2M_REGX_ACC+(1ull<<36),
-					 SLIX_S2M_REGX_ACC_SIZE);
-#endif
-
-	if (pcie->device_type == THUNDER_ECAM) {
-		pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
-		if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base0)) {
-			ret = PTR_ERR(pcie->cfg_base);
-			goto err_ioremap;
-		}
-
-		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base0:%llx\n", __func__,
-				pcie->ecam, (u64)cfg_base->start, (u64)gser_base0);
-
-#ifdef CONFIG_NUMA
-		if (IS_ERR(gser_base1)) {
-			ret = PTR_ERR(pcie->cfg_base);
-			goto err_ioremap;
-		}
-		pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base1:%llx\n", __func__,
-				pcie->ecam, (u64)cfg_base->start, (u64)gser_base1);
-#endif
-		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
-				0, 255, &res, NULL);
-	} else {
-		u64 val;
-		unsigned sli_pem, node, sli;
-		void __iomem *addr;
-
-		pcie->pem_base = ioremap(cfg_base->start, 0x500);
-		if (!pcie->pem_base) {
-			pr_err("Unable to map PCIe RC CFG registers\n");
-			goto err_ioremap;
-		}
-
-		if (thunder_pcierc_init(pcie)) {
-			pr_err("%s: PCIe RC%d not found\n", __func__, pcie->pem);
-			iounmap(pcie->pem_base);
-			return -ENODEV;
-		}
-
-
-		primary_bus = thunder_pcierc_config_read(pcie->pem_base, PCIERC_CFG006, 0x4);
-		pr_err("%s: PEM%d CFG BASE 0x%llx gser_base0:%llx primary_bus:%x\n", __func__,
-				pcie->pem, (u64)cfg_base->start, (u64)gser_base0, primary_bus);
-		primary_bus = (primary_bus >>  0x8) & 0xff;
-		ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
-				primary_bus, 255, &res, &iobase);
-
-		sli_pem = pcie->pem % 3;
-		sli = (pcie->pem / 3) % 2;
-		node = pcie->pem / 6;
-		for (i = 0; i < 16; i++) {
-			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x10);
-			val = slix_s2m_reg_val(sli_pem, CTYPE_MEMORY, false, false, false, i);
-			writeq(val, addr);
-
-			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x20);
-			val = slix_s2m_reg_val(sli_pem, CTYPE_MEMORY, true, true, true, i + 0x10);
-			writeq(val, addr);
-
-			addr = slix_s2m_regx_adr(node, sli, (sli_pem << 6) + i + 0x30);
-			val = slix_s2m_reg_val(sli_pem, CTYPE_IO, true, true, true, i);
-			writeq(val, addr);
-		}
+	pcie->cfg_base = devm_ioremap_resource(&pdev->dev, cfg_base);
+	if (IS_ERR(pcie->cfg_base) || IS_ERR(gser_base0)) {
+		ret = PTR_ERR(pcie->cfg_base);
+		goto err_ioremap;
 	}
 
-	if (ret)
-		goto err_get_host;
+	pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base0:%llx\n", __func__,
+	       pcie->ecam, (u64)cfg_base->start, (u64)gser_base0);
 
+#ifdef CONFIG_NUMA
+	if (IS_ERR(gser_base1)) {
+		ret = PTR_ERR(pcie->cfg_base);
+		goto err_ioremap;
+	}
+	pr_err("%s: ECAM%d CFG BASE 0x%llx gser_base1:%llx\n", __func__,
+	       pcie->ecam, (u64)cfg_base->start, (u64)gser_base1);
+#endif
+	ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
+					       0, 255, &res, NULL);
+	if (ret)
+		goto err_root_bus;
 
 	bus = pci_create_root_bus(&pdev->dev, primary_bus, &thunder_pcie_ops, pcie, &res);
 	if (!bus) {
 		ret = -ENODEV;
 		goto err_root_bus;
 	}
+	pcie->bus = bus;
 
 	/* Set reference to MSI chip */
 	ret = thunder_pcie_msi_enable(pcie, bus);
@@ -1160,19 +604,13 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	pci_scan_child_bus(bus);
 	pci_bus_add_devices(bus);
 
-	if (pcie->device_type == THUNDER_PEM)
-		pci_assign_unassigned_root_bus_resources(bus);
-
 	return 0;
 err_msi:
 	pci_remove_root_bus(bus);
 err_root_bus:
 	pci_free_resource_list(&res);
-err_get_host:
-	devm_ioremap_release(pcie->dev, pcie->cfg_base);
 err_ioremap:
 	of_node_put(pcie->node);
-	devm_kfree(&pdev->dev, pcie);
 	return ret;
 }
 
@@ -1190,7 +628,19 @@ static struct platform_driver thunder_pcie_driver = {
 	},
 	.probe = thunder_pcie_probe,
 };
-module_platform_driver(thunder_pcie_driver);
+
+static int __init thunder_pcie_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&thunder_pcie_driver);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+module_init(thunder_pcie_init);
+
 
 #ifdef CONFIG_ACPI
 
@@ -1201,7 +651,7 @@ thunder_mmcfg_read_config(struct pci_mmcfg_region *cfg, unsigned int busnr,
 	struct thunder_pcie *pcie = cfg->data;
 	void __iomem *addr;
 
-	if (pcie->device_type == THUNDER_PEM) {
+	if (!pcie->valid) {
 		/* Not support for now */
 		pr_err("RC PEM not supported !!!\n");
 		return PCIBIOS_DEVICE_NOT_FOUND;
@@ -1241,7 +691,7 @@ static int thunder_mmcfg_write_config(struct pci_mmcfg_region *cfg,
 	struct thunder_pcie *pcie = cfg->data;
 	void __iomem *addr;
 
-	if (pcie->device_type == THUNDER_PEM) {
+	if (!pcie->valid) {
 		/* Not support for now */
 		pr_err("RC PEM not supported !!!\n");
 		return PCIBIOS_DEVICE_NOT_FOUND;

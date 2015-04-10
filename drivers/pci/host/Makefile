@@ -12,3 +12,4 @@ obj-$(CONFIG_PCI_KEYSTONE) += pci-keystone-dw.o pci-keystone.o
 obj-$(CONFIG_PCIE_XILINX) += pcie-xilinx.o
 obj-$(CONFIG_PCI_XGENE) += pci-xgene.o
 obj-$(CONFIG_PCI_THUNDER) += pcie-thunder.o
+obj-$(CONFIG_PCI_THUNDER_PEM) += pcie-thunder-pem.o
