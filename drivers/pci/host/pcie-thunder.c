@@ -45,15 +45,10 @@
 #define THUNDER_GSER_CFG_BGX		(1ULL << 2)
 #define THUNDER_GSER_CFG_SATA		(1ULL << 5)
 
-#define THUNDER_GICD_SETSPI_NSR		0x801000000040ull
-#define THUNDER_GICD_CLRSPI_NSR		0x801000000048ull
-
 void __iomem *gser_base0;
 void __iomem *gser_base1;
 
 struct thunder_pcie {
-	struct list_head	list; /* on thunder_pcie_pem_buses */
-	struct pci_bus		*bus;
 	struct device_node	*node;
 	struct device		*dev;
 	void __iomem		*cfg_base;
@@ -182,19 +177,19 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x14C:   /* TWSI4 */
 		case 0x14D:   /* TWSI5 */
 
-		case 0x200:   /* RAD */
-		case 0x300:   /* ZIP */
-		case 0x400:   /* HFA */
-			supported = 1;
-			break;
 		case 0x170:   /* PEM0 */
 		case 0x171:   /* PEM1 */
 		case 0x172:   /* PEM2 */
 		case 0x173:   /* PEM3 */
 		case 0x174:   /* PEM4 */
 		case 0x175:   /* PEM5 */
+
+		case 0x200:   /* RAD */
+		case 0x300:   /* ZIP */
+		case 0x400:   /* HFA */
 			supported = 1;
 			break;
+
 		case 0x180:   /* BGX0 */
 			gser_cfg = thunder_get_gser_cfg(0, 0);
 			if (gser_cfg & THUNDER_GSER_CFG_BGX)
@@ -300,6 +295,13 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x14B:   /* TWSI3 */
 		case 0x14C:   /* TWSI4 */
 		case 0x14D:   /* TWSI5 */
+
+		case 0x170:   /* PEM0 */
+		case 0x171:   /* PEM1 */
+		case 0x172:   /* PEM2 */
+		case 0x173:   /* PEM3 */
+		case 0x174:   /* PEM4 */
+		case 0x175:   /* PEM5 */
 
 			supported = 1;
 			break;
@@ -590,7 +592,6 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 		ret = -ENODEV;
 		goto err_root_bus;
 	}
-	pcie->bus = bus;
 
 	/* Set reference to MSI chip */
 	ret = thunder_pcie_msi_enable(pcie, bus);
@@ -628,19 +629,7 @@ static struct platform_driver thunder_pcie_driver = {
 	},
 	.probe = thunder_pcie_probe,
 };
-
-static int __init thunder_pcie_init(void)
-{
-	int ret;
-
-	ret = platform_driver_register(&thunder_pcie_driver);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-module_init(thunder_pcie_init);
-
+module_platform_driver(thunder_pcie_driver);
 
 #ifdef CONFIG_ACPI
 
