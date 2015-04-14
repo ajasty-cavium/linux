@@ -675,7 +675,8 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 
 		cq_poll = nic->napi[qidx];
 		/* Schedule NAPI */
-		napi_schedule(&cq_poll->napi);
+		if (cq_poll)
+			napi_schedule(&cq_poll->napi);
 	}
 
 	/* Handle RBDR interrupts */
@@ -894,12 +895,13 @@ int nicvf_stop(struct net_device *netdev)
 	netif_carrier_off(netdev);
 	netif_tx_disable(netdev);
 
-	/* Disable interrupts */
-	for (qidx = 0; qidx < qs->cq_cnt; qidx++)
-		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
-	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+	/* Disable RBDR & QS error interrupts */
+	for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
 		nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
+		nicvf_clear_intr(nic, NICVF_INTR_RBDR, qidx);
+	}
 	nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
+	nicvf_clear_intr(nic, NICVF_INTR_QS_ERR, 0);
 
 	/* Wait for pending IRQ handlers to finish */
 	for (irq = 0; irq < nic->num_vec; irq++)
@@ -912,11 +914,16 @@ int nicvf_stop(struct net_device *netdev)
 		cq_poll = nic->napi[qidx];
 		if (!cq_poll)
 			continue;
+		nic->napi[qidx] = NULL;
 		napi_synchronize(&cq_poll->napi);
+		/* CQ intr is enabled while napi_complete,
+		 * so disable it now
+		 */
+		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
+		nicvf_clear_intr(nic, NICVF_INTR_CQ, qidx);
 		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 		kfree(cq_poll);
-		nic->napi[qidx] = NULL;
 	}
 
 	/* Free resources */
