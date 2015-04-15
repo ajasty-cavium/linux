@@ -913,7 +913,6 @@ static int its_alloc_tables(struct its_node *its)
 			goto out_free;
 		}
 
-
 		its->tables[i] = base;
 
 retry_baser:
@@ -936,9 +935,9 @@ retry_baser:
 			break;
 		}
 
-        val |= ((max_ittsize / psz) - 1) & 0xffUL;
-		writeq_relaxed(val, its->base + GITS_BASER + i * 8);
+		val |= ((max_ittsize / psz) - 1) & 0xffUL;
 
+		writeq_relaxed(val, its->base + GITS_BASER + i * 8);
 		tmp = readq_relaxed(its->base + GITS_BASER + i * 8);
 
 		if ((val ^ tmp) & GITS_BASER_SHAREABILITY_MASK) {
@@ -968,9 +967,10 @@ retry_baser:
 			}
 		}
 
-        /* skip comparing cacheability feilds as they are implemenations
-         * defined.
-         */
+		/*
+		 * Skip comparing cacheability fields as they are
+		 * implementation defined.
+		 */
 		val = val << 5;
 		tmp = tmp << 5;
 

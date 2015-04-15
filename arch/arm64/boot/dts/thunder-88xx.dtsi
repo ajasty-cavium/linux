@@ -897,7 +897,6 @@
 					<3 0x11 0 0x00aa>,
 					<3 0x12 0 0x4105>,
 					<3 0x13 0 0x8a08>;
-
 		};
 		sgmii12: sgmii12 {
 			qlm-mode = "1,sgmii";
