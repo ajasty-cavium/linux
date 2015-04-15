@@ -160,7 +160,6 @@ config ARCH_THUNDER
 	select VFIO
 	select VFIO_PCI
 	select PCI_HOST_GENERIC
-	select THUNDERX_GTI if NUMA
 
 menu   "Cavium ThunderX errata"
 
