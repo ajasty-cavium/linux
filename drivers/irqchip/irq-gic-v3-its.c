@@ -66,6 +66,7 @@ struct its_device {
 	struct its_node		*its;
 	struct its_collection	*collection;
 	void			*itt;
+	void			*itt1;
 	unsigned long		*lpi_map;
 	int			lpi_base;
 	int			nr_lpis;
@@ -80,6 +81,42 @@ static struct rdists *gic_rdists;
 
 #define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
 #define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
+
+#if defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+static struct its_node *get_its_other_node(struct its_node *its)
+{
+	struct its_node *its_other;
+
+	if (!list_empty(&its_nodes)) {
+		list_for_each_entry(its_other, &its_nodes, entry) {
+			if (its_other->phys_base  !=  its->phys_base)
+				break;
+		}
+		return its_other;
+	}
+	WARN_ON("error failed to get other node\n");
+	return NULL;
+}
+
+static int get_node_cpus(struct its_node *its, int *cpu, int *other_cpu)
+{
+	if (cpu)
+		*cpu = cpumask_first(cpumask_of_node(its->node_id));
+
+	if (other_cpu)
+		*other_cpu = cpumask_first(cpumask_of_node(!its->node_id));
+	return 0;
+}
+#else
+static struct its_node *get_its_other_node(struct its_node *its)
+{
+	return NULL;
+}
+static int get_node_cpus(struct its_node *its, int *cpu, int *other_cpu)
+{
+	return 0;
+}
+#endif /* CONFIG_THUNDERX_PASS1_ERRATA_23144 */
 
 /*
  * ITS command descriptors - parameters to be encoded in a command
@@ -430,6 +467,16 @@ void its_send_inv(struct its_device *dev, u32 event_id)
 	desc.its_inv_cmd.event_id = event_id;
 
 	its_send_single_command(dev->its, its_build_inv_cmd, &desc);
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		int cpu, other_cpu;
+		struct its_node *other_its;
+
+		get_node_cpus(dev->its, &cpu, &other_cpu);
+		other_its = get_its_other_node(dev->its);
+		dev->collection = &other_its->collections[other_cpu];
+		its_send_single_command(other_its, its_build_inv_cmd, &desc);
+		dev->collection = &dev->its->collections[cpu];
+	}
 }
 EXPORT_SYMBOL(its_send_inv);
 
@@ -441,6 +488,20 @@ void its_send_mapd(struct its_device *dev, int valid)
 	desc.its_mapd_cmd.valid = !!valid;
 
 	its_send_single_command(dev->its, its_build_mapd_cmd, &desc);
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		int cpu, other_cpu;
+		struct its_node *other_its;
+		void *itt_tmp;
+
+		get_node_cpus(dev->its, &cpu, &other_cpu);
+		other_its = get_its_other_node(dev->its);
+		itt_tmp = dev->itt;
+		dev->itt = dev->itt1;
+		dev->collection = &other_its->collections[other_cpu];
+		its_send_single_command(other_its, its_build_mapd_cmd, &desc);
+		dev->collection = &dev->its->collections[cpu];
+		dev->itt = itt_tmp;
+	}
 }
 EXPORT_SYMBOL(its_send_mapd);
 
@@ -465,6 +526,16 @@ void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
 	desc.its_mapvi_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_mapvi_cmd, &desc);
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		int cpu, other_cpu;
+		struct its_node *other_its;
+
+		get_node_cpus(dev->its, &cpu, &other_cpu);
+		other_its = get_its_other_node(dev->its);
+		dev->collection = &other_its->collections[other_cpu];
+		its_send_single_command(other_its, its_build_mapvi_cmd, &desc);
+		dev->collection = &dev->its->collections[cpu];
+	}
 }
 EXPORT_SYMBOL(its_send_mapvi);
 
@@ -489,6 +560,16 @@ void its_send_discard(struct its_device *dev, u32 id)
 	desc.its_discard_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_discard_cmd, &desc);
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		int cpu, other_cpu;
+		struct its_node *other_its;
+
+		get_node_cpus(dev->its, &cpu, &other_cpu);
+		other_its = get_its_other_node(dev->its);
+		dev->collection = &other_its->collections[other_cpu];
+		its_send_single_command(other_its, its_build_inv_cmd, &desc);
+		dev->collection = &dev->its->collections[cpu];
+	}
 }
 EXPORT_SYMBOL(its_send_discard);
 
@@ -594,18 +675,29 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	if(!its_dev)
 		return IRQ_SET_MASK_OK;
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
-	u32 node = (its_dev->its->phys_base >> 44) & 0x3;
-	if (!cpumask_intersects(mask_val, cpumask_of_node(node))) {
-		pr_debug("Affinity not Set to CPU %d, not belongs to same NODE %d\n",
-				cpu, node);
-		return IRQ_SET_MASK_OK;
-	}
-	cpu = cpumask_any_and(mask_val, cpumask_of_node(node));
-#endif
-
 	if (cpu >= nr_cpu_ids)
 		return -EINVAL;
+
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		struct msi_msg msg;
+		u64 addr;
+		u32 vec_nr;
+		u32  node = its_dev->its->node_id;
+
+		if (!cpumask_intersects(mask_val, cpumask_of_node(node))) {
+			its_mask_irq(d);
+			its_dev->its = get_its_other_node(its_dev->its);
+			its_dev->collection = &its_dev->its->collections[cpu];
+			its_mask_irq(d);
+			vec_nr = its_msi_get_entry_nr(d->msi_desc);
+			addr = its_dev->its->phys_base + GITS_TRANSLATER;
+			msg.address_lo		= (u32)addr;
+			msg.address_hi		= (u32)(addr >> 32);
+			msg.data		= vec_nr;
+			write_msi_msg(d->irq, &msg);
+			its_unmask_irq(d);
+		}
+	}
 
 	target_col = &its_dev->its->collections[cpu];
 	if (IS_ENABLED(CONFIG_PCI_MSI) && d->msi_desc)
@@ -996,11 +1088,12 @@ static void its_cpu_init_collection(void)
 	list_for_each_entry(its, &its_nodes, entry) {
 		u64 target;
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
 		/* avoid cross node core and its mapping*/
-		if (((its->phys_base >> 44) & 0x3) != MPIDR_AFFINITY_LEVEL(read_cpuid_mpidr(), 2))
+		if ((its->node_id) !=
+				MPIDR_AFFINITY_LEVEL(read_cpuid_mpidr(), 2))
 			continue;
-#endif
+	}
 		/*
 		 * We now have to bind each collection to its target
 		 * redistributor.
@@ -1085,13 +1178,21 @@ struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	list_add(&dev->entry, &its->its_device_list);
 	raw_spin_unlock(&its->lock);
 
-#if defined(CONFIG_NUMA) && defined(CONFIG_THUNDERX_PASS1_ERRATA_23144)
-	/* Bind the device to the first possible CPU of same NODE*/
-	cpu = cpumask_first(cpumask_of_node((its->phys_base >> 44) & 0x3));
-#else
-	/* Bind the device to the first possible CPU */
-	cpu = cpumask_first(cpu_online_mask);
-#endif
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+		dev->itt1 = kmalloc(sz, GFP_KERNEL);
+		if (!dev->itt1) {
+			kfree(dev);
+			kfree(itt);
+			kfree(lpi_map);
+			return NULL;
+		}
+		/* Bind the device to the first possible CPU of same NODE */
+		get_node_cpus(its, &cpu, NULL);
+	} else {
+		/* Bind the device to the first possible CPU */
+		cpu = cpumask_first(cpu_online_mask);
+	}
+
 	dev->collection = &its->collections[cpu];
 
 	/* Map device to its ITT */
@@ -1107,6 +1208,8 @@ void its_free_device(struct its_device *its_dev)
 	list_del(&its_dev->entry);
 	raw_spin_unlock(&its_dev->its->lock);
 	kfree(its_dev->itt);
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144))
+		kfree(its_dev->itt1);
 	kfree(its_dev);
 }
 EXPORT_SYMBOL(its_free_device);
@@ -1175,6 +1278,10 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 	err = its_alloc_device_irq(its_dev, vec_nr, &hwirq, &irq);
 	if (err)
 		return err;
+
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144))
+		/* Set the default affinity to cpus of the node */
+		irq_set_affinity(irq, cpumask_of_node(its->node_id));
 
 	irq_set_msi_desc(irq, desc);
 	irq_set_handler_data(irq, its_dev);
@@ -1249,6 +1356,9 @@ static struct its_node *its_probe(unsigned long phys_base, unsigned long size)
 	its->base = its_base;
 	its->phys_base = phys_base;
 	its->ite_size = ((readl_relaxed(its_base + GITS_TYPER) >> 4) & 0xf) + 1;
+
+	/* node_id suppose come from DT or ACPI table */
+	its->node_id = (its->phys_base >> 44) & 0x3;
 
 	its->cmd_base = kzalloc(ITS_CMD_QUEUE_SZ, GFP_KERNEL);
 	if (!its->cmd_base) {

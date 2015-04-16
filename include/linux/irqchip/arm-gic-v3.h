@@ -381,6 +381,7 @@ struct its_node {
 	struct list_head	its_device_list;
 	u64			flags;
 	u32			ite_size;
+	u32			node_id;
 };
 
 static inline void gic_write_eoir(u64 irq)
