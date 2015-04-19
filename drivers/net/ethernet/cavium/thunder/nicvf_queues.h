@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #ifndef NICVF_QUEUES_H
@@ -81,12 +80,12 @@
 #define MAX_RCV_BUF_COUNT	(1ULL << (RBDR_SIZE6 + 13))
 #define RBDR_THRESH		(RCV_BUF_COUNT / 2)
 #define DMA_BUFFER_LEN		2048 /* In multiples of 128bytes */
-#define RCV_FRAG_LEN		(SKB_DATA_ALIGN(DMA_BUFFER_LEN + NET_SKB_PAD) +\
-				SKB_DATA_ALIGN(sizeof(struct skb_shared_info))+\
-				(NICVF_RCV_BUF_ALIGN_BYTES * 2))
+#define RCV_FRAG_LEN	(SKB_DATA_ALIGN(DMA_BUFFER_LEN + NET_SKB_PAD) + \
+			 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)) + \
+			 (NICVF_RCV_BUF_ALIGN_BYTES * 2))
 #define RCV_DATA_OFFSET		NICVF_RCV_BUF_ALIGN_BYTES
 
-#define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
+#define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) * \
 				 MAX_CQE_PER_PKT_XMIT)
 #define RQ_CQ_DROP		((CMP_QUEUE_LEN - MAX_CQES_FOR_TX) / 256)
 
@@ -107,12 +106,12 @@
 	(NICVF_ALIGNED_ADDR(X, NICVF_RCV_BUF_ALIGN_BYTES) - X)
 
 /* Queue enable/disable */
-#define NICVF_SQ_EN            (1ULL << 19)
+#define NICVF_SQ_EN		BIT_ULL(19)
 
 /* Queue reset */
-#define NICVF_CQ_RESET		(1ULL << 41)
-#define NICVF_SQ_RESET		(1ULL << 17)
-#define NICVF_RBDR_RESET	(1ULL << 43)
+#define NICVF_CQ_RESET		BIT_ULL(41)
+#define NICVF_SQ_RESET		BIT_ULL(17)
+#define NICVF_RBDR_RESET	BIT_ULL(43)
 
 enum CQ_RX_ERRLVL_E {
 	CQ_ERRLVL_MAC,
@@ -335,9 +334,9 @@ struct queue_set {
 		(&(((union cq_desc_t *)((RING)->desc))[idx]))
 
 /* CQ status bits */
-#define	CQ_WR_FULL	(1 << 26)
-#define	CQ_WR_DISABLE	(1 << 25)
-#define	CQ_WR_FAULT	(1 << 24)
+#define	CQ_WR_FULL	BIT(26)
+#define	CQ_WR_DISABLE	BIT(25)
+#define	CQ_WR_FAULT	BIT(24)
 #define	CQ_CQE_COUNT	(0xFFFF << 0)
 
 #define	CQ_ERR_MASK	(CQ_WR_FULL | CQ_WR_DISABLE | CQ_WR_FAULT)

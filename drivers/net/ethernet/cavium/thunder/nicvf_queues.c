@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #include <linux/pci.h>
@@ -1167,7 +1166,7 @@ doorbell:
 	return 1;
 
 append_fail:
-	nic_dbg(&nic->pdev->dev, "Not enough SQ descriptors to xmit pkt\n");
+	netdev_dbg(nic->netdev, "Not enough SQ descriptors to xmit pkt\n");
 	return 0;
 }
 
@@ -1194,8 +1193,8 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 	rb_lens = (void *)cqe_rx + (3 * sizeof(u64));
 	rb_ptrs = (void *)cqe_rx + (6 * sizeof(u64));
 
-	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
-		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
+	netdev_dbg(nic->netdev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
+		   __func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
@@ -1243,29 +1242,29 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val |= (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val |= (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val |= (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to enable interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_ENA_W1S, reg_val);
@@ -1279,29 +1278,29 @@ void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val |= (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val |= (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val |= (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to disable interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_ENA_W1C, reg_val);
@@ -1315,29 +1314,29 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val = (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val = (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val = (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to clear interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_INT, reg_val);
@@ -1354,29 +1353,29 @@ int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		mask = ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		mask = ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		mask = ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		mask = NICVF_INTR_PKT_DROP_MASK;
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		mask = NICVF_INTR_TCP_TIMER_MASK;
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		mask = NICVF_INTR_MBOX_MASK;
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		mask = NICVF_INTR_QS_ERR_MASK;
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to check interrupt enable: unknown type\n");
-	break;
+		break;
 	}
 
 	return (reg_val & mask);
@@ -1428,109 +1427,109 @@ int nicvf_check_cqe_rx_errs(struct nicvf *nic,
 	switch (cqe_rx->err_level) {
 	case CQ_ERRLVL_MAC:
 		stats->rx.errlvl.mac_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L2:
 		stats->rx.errlvl.l2_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L3:
 		stats->rx.errlvl.l3_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L4:
 		stats->rx.errlvl.l4_errs++;
-	break;
+		break;
 	}
 
 	switch (cqe_rx->err_opcode) {
 	case CQ_RX_ERROP_RE_PARTIAL:
 		stats->rx.errop.partial_pkts++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_JABBER:
 		stats->rx.errop.jabber_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_FCS:
 		stats->rx.errop.fcs_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_TERMINATE:
 		stats->rx.errop.terminate_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_RX_CTL:
 		stats->rx.errop.bgx_rx_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_PREL2_ERR:
 		stats->rx.errop.prel2_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_FRAGMENT:
 		stats->rx.errop.l2_frags++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_OVERRUN:
 		stats->rx.errop.l2_overruns++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PFCS:
 		stats->rx.errop.l2_pfcs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PUNY:
 		stats->rx.errop.l2_puny++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_MAL:
 		stats->rx.errop.l2_hdr_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_OVERSIZE:
 		stats->rx.errop.l2_oversize++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_UNDERSIZE:
 		stats->rx.errop.l2_undersize++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_LENMISM:
 		stats->rx.errop.l2_len_mismatch++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PCLP:
 		stats->rx.errop.l2_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_NOT:
 		stats->rx.errop.non_ip++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_CSUM_ERR:
 		stats->rx.errop.ip_csum_err++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_MAL:
 		stats->rx.errop.ip_hdr_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_MALD:
 		stats->rx.errop.ip_payload_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_HOP:
 		stats->rx.errop.ip_hop_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L3_ICRC:
 		stats->rx.errop.l3_icrc_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L3_PCLP:
 		stats->rx.errop.l3_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_MAL:
 		stats->rx.errop.l4_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_CHK:
 		stats->rx.errop.l4_csum_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_UDP_LEN:
 		stats->rx.errop.udp_len_err++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_PORT:
 		stats->rx.errop.bad_l4_port++;
-	break;
+		break;
 	case CQ_RX_ERROP_TCP_FLAG:
 		stats->rx.errop.bad_tcp_flag++;
-	break;
+		break;
 	case CQ_RX_ERROP_TCP_OFFSET:
 		stats->rx.errop.tcp_offset_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_PCLP:
 		stats->rx.errop.l4_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_RBDR_TRUNC:
 		stats->rx.errop.pkt_truncated++;
-	break;
+		break;
 	}
 
 	return 1;
@@ -1546,46 +1545,45 @@ int nicvf_check_cqe_tx_errs(struct nicvf *nic,
 	case CQ_TX_ERROP_GOOD:
 		stats->tx.good++;
 		return 0;
-	break;
 	case CQ_TX_ERROP_DESC_FAULT:
 		stats->tx.desc_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_HDR_CONS_ERR:
 		stats->tx.hdr_cons_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_SUBDC_ERR:
 		stats->tx.subdesc_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_IMM_SIZE_OFLOW:
 		stats->tx.imm_size_oflow++;
-	break;
+		break;
 	case CQ_TX_ERROP_DATA_SEQUENCE_ERR:
 		stats->tx.data_seq_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_MEM_SEQUENCE_ERR:
 		stats->tx.mem_seq_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_LOCK_VIOL:
 		stats->tx.lock_viol++;
-	break;
+		break;
 	case CQ_TX_ERROP_DATA_FAULT:
 		stats->tx.data_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_TSTMP_CONFLICT:
 		stats->tx.tstmp_conflict++;
-	break;
+		break;
 	case CQ_TX_ERROP_TSTMP_TIMEOUT:
 		stats->tx.tstmp_timeout++;
-	break;
+		break;
 	case CQ_TX_ERROP_MEM_FAULT:
 		stats->tx.mem_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_CK_OVERLAP:
 		stats->tx.csum_overlap++;
-	break;
+		break;
 	case CQ_TX_ERROP_CK_OFLOW:
 		stats->tx.csum_overflow++;
-	break;
+		break;
 	}
 
 	return 1;

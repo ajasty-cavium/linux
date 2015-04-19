@@ -1,16 +1,14 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/of.h>
 
@@ -27,12 +25,10 @@ struct nicpf {
 	u8			rev_id;
 	u8			node;
 	unsigned int		flags;
-	u16			total_vf_cnt;   /* Total num of VF supported */
 	u8			num_vf_en;      /* No of VF enabled */
 	bool			vf_enabled[MAX_NUM_VFS_SUPPORTED];
 	void __iomem		*reg_base;       /* Register start address */
 	struct pkind_cfg	pkind;
-	u8			bgx_cnt;
 #define	NIC_SET_VF_LMAC_MAP(bgx, lmac)	(((bgx & 0xF) << 4) | (lmac & 0xF))
 #define	NIC_GET_BGX_FROM_VF_LMAC_MAP(map)	((map >> 4) & 0xF)
 #define	NIC_GET_LMAC_FROM_VF_LMAC_MAP(map)	(map & 0xF)
@@ -54,16 +50,6 @@ struct nicpf {
 	bool			irq_allocated[NIC_PF_MSIX_VECTORS];
 };
 
-static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg);
-#ifdef VNIC_RSS_SUPPORT
-static void nic_send_rss_size(struct nicpf *nic, int vf);
-static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg);
-#endif
-static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic, u8 sq_idx);
-static int nic_update_hw_frs(struct nicpf *nic, int new_frs, int vf);
-static int nic_rcv_queue_sw_sync(struct nicpf *nic);
-static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx);
-
 /* Supported devices */
 static const struct pci_device_id nic_id_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_CAVIUM, PCI_DEVICE_ID_THUNDER_NIC_PF) },
@@ -75,6 +61,15 @@ MODULE_DESCRIPTION("Cavium Thunder NIC Physical Function Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, nic_id_table);
+
+/* The Cavium ThunderX network controller can *only* be found in SoCs
+ * containing the ThunderX ARM64 CPU implementation.  All accesses to the device
+ * registers on this platform are implicitly strongly ordered with respect
+ * to memory accesses. So writeq_relaxed() and readq_relaxed() are safe to use
+ * with no memory barriers in this driver.  The readq()/writeq() functions add
+ * explicit ordering operation which in this case are redundant, and only
+ * add overhead.
+ */
 
 /* Register read/write APIs */
 static void nic_reg_write(struct nicpf *nic, u64 offset, u64 val)
@@ -91,13 +86,13 @@ static u64 nic_reg_read(struct nicpf *nic, u64 offset)
 static void nic_enable_mbx_intr(struct nicpf *nic)
 {
 	/* Enable mailbox interrupt for all 128 VFs */
-	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S, ~0x00ull);
-	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + sizeof(u64), ~0x00ull);
+	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S, ~0ull);
+	nic_reg_write(nic, NIC_PF_MAILBOX_ENA_W1S + sizeof(u64), ~0ull);
 }
 
 static void nic_clear_mbx_intr(struct nicpf *nic, int vf, int mbx_reg)
 {
-	nic_reg_write(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3), (1ULL << vf));
+	nic_reg_write(nic, NIC_PF_MAILBOX_INT + (mbx_reg << 3), BIT_ULL(vf));
 }
 
 static u64 nic_get_mbx_addr(int vf)
@@ -111,22 +106,22 @@ static u64 nic_get_mbx_addr(int vf)
  */
 static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 {
-	u64 *msg;
-	void __iomem *mbx_addr;
-
-	msg = (u64 *)mbx;
-	mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
+	void __iomem *mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
+	u64 *msg = (u64 *)mbx;
 
 	/* In first revision HW, mbox interrupt is triggerred
 	 * when PF writes to MBOX(1), in next revisions when
 	 * PF writes to MBOX(0)
 	 */
 	if (nic->rev_id == 0) {
-		writeq_relaxed(*(msg), mbx_addr);
-		writeq_relaxed(*(msg + 1), mbx_addr + 8);
+		/* see the comment for nic_reg_write()/nic_reg_read()
+		 * functions above
+		 */
+		writeq_relaxed(msg[0], mbx_addr);
+		writeq_relaxed(msg[1], mbx_addr + 8);
 	} else {
-		writeq_relaxed(*(msg + 1), mbx_addr + 8);
-		writeq_relaxed(*(msg), mbx_addr);
+		writeq_relaxed(msg[1], mbx_addr + 8);
+		writeq_relaxed(msg[0], mbx_addr);
 	}
 
 	return 0;
@@ -169,8 +164,7 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 		start_mac = be64_to_cpu(start_mac);
 		next_mac  = start_mac;
 		/* get range length for given range */
-		mac_range = be32_to_cpup((u32 *)(np_ptr + range +
-					ETH_ALEN));
+		mac_range = be32_to_cpup((u32 *)(np_ptr + range + ETH_ALEN));
 		for (i = 0; i < mac_range && i < MAX_NUM_VFS_SUPPORTED; i++) {
 #ifdef __BIG_ENDIAN
 			nic->mac[mac_count++] =
@@ -228,125 +222,6 @@ static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 
 	mbx.msg = NIC_MBOX_MSG_NACK;
 	nic_send_msg_to_vf(nic, vf, &mbx);
-}
-
-/* Interrupt handler to handle mailbox messages from VFs */
-static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
-{
-	struct nic_mbx mbx = {};
-	u64 *mbx_data;
-	u64 mbx_addr;
-	u64 reg_addr;
-	u64 mac_addr;
-	int bgx, lmac;
-	int i;
-	int ret = 0;
-
-	nic->mbx_lock[vf] = true;
-
-	mbx_addr = nic_get_mbx_addr(vf);
-	mbx_data = (u64 *)&mbx;
-
-	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
-		*mbx_data = nic_reg_read(nic, mbx_addr);
-		mbx_data++;
-		mbx_addr += sizeof(u64);
-	}
-
-	nic_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
-		__func__, mbx.msg, vf);
-	switch (mbx.msg) {
-	case NIC_MBOX_MSG_READY:
-		nic_mbx_send_ready(nic, vf);
-		nic->link[vf] = 0;
-		nic->duplex[vf] = 0;
-		nic->speed[vf] = 0;
-		ret = 1;
-		break;
-	case NIC_MBOX_MSG_QS_CFG:
-		reg_addr = NIC_PF_QSET_0_127_CFG |
-			   (mbx.data.qs.num << NIC_QS_ID_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
-		break;
-	case NIC_MBOX_MSG_RQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
-		break;
-	case NIC_MBOX_MSG_RQ_BP_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_BP_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
-		break;
-	case NIC_MBOX_MSG_RQ_SW_SYNC:
-		ret = nic_rcv_queue_sw_sync(nic);
-		break;
-	case NIC_MBOX_MSG_RQ_DROP_CFG:
-		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
-		break;
-	case NIC_MBOX_MSG_SQ_CFG:
-		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
-			   (mbx.data.sq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.sq.sq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
-		nic_tx_channel_cfg(nic, mbx.data.qs.num, mbx.data.sq.sq_num);
-		break;
-	case NIC_MBOX_MSG_SET_MAC:
-		lmac = mbx.data.mac.vf_id;
-		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
-		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
-#ifdef __BIG_ENDIAN
-		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) << 16;
-#else
-		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) >> 16;
-#endif
-		ether_addr_copy((u8 *)&nic->mac[vf],
-				(u8 *)&mac_addr);
-		break;
-	case NIC_MBOX_MSG_SET_MAX_FRS:
-		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
-					mbx.data.frs.vf_id);
-		break;
-	case NIC_MBOX_MSG_CPI_CFG:
-		nic_config_cpi(nic, &mbx.data.cpi_cfg);
-		break;
-#ifdef VNIC_RSS_SUPPORT
-	case NIC_MBOX_MSG_RSS_SIZE:
-		nic_send_rss_size(nic, vf);
-		goto unlock;
-	case NIC_MBOX_MSG_RSS_CFG:
-	case NIC_MBOX_MSG_RSS_CFG_CONT:
-		nic_config_rss(nic, &mbx.data.rss_cfg);
-		break;
-#endif
-	case NIC_MBOX_MSG_CFG_DONE:
-		/* Last message of VF config msg sequence */
-		nic->vf_enabled[vf] = true;
-		goto unlock;
-	case NIC_MBOX_MSG_SHUTDOWN:
-		/* First msg in VF teardown sequence */
-		nic->vf_enabled[vf] = false;
-		break;
-	case NIC_MBOX_MSG_BGX_STATS:
-		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
-		goto unlock;
-	default:
-		dev_err(&nic->pdev->dev,
-			"Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg);
-		break;
-	}
-
-	if (!ret)
-		nic_mbx_send_ack(nic, vf);
-	else if (mbx.msg != NIC_MBOX_MSG_READY)
-		nic_mbx_send_nack(nic, vf);
-unlock:
-	nic->mbx_lock[vf] = false;
 }
 
 /* Flush all in flight receive packets to memory and
@@ -434,7 +309,8 @@ static void nic_set_tx_pkt_pad(struct nicpf *nic, int size)
  */
 static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 {
-	int bgx, bgx_count, next_bgx_lmac = 0;
+	unsigned bgx_map = bgx_get_map(nic->node);
+	int bgx, next_bgx_lmac = 0;
 	int lmac, lmac_cnt = 0;
 	u64 lmac_credit;
 
@@ -444,11 +320,9 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 		return;
 	}
 
-	bgx_get_count(nic->node, &bgx_count);
 	for (bgx = 0; bgx < NIC_MAX_BGX; bgx++) {
-		if (!(bgx_count & (1 << bgx)))
+		if (!(bgx_map & (1 << bgx)))
 			continue;
-		nic->bgx_cnt++;
 		lmac_cnt = bgx_get_lmac_count(nic->node, bgx);
 		for (lmac = 0; lmac < lmac_cnt; lmac++)
 			nic->vf_lmac_map[next_bgx_lmac++] =
@@ -474,7 +348,7 @@ static void nic_init_hw(struct nicpf *nic)
 	int i;
 	u64 reg;
 
-	/* Reset NIC, incase if driver is repeatedly inserted and removed */
+	/* Reset NIC, in case the driver is repeatedly inserted and removed */
 	nic_reg_write(nic, NIC_PF_SOFT_RESET, 1);
 
 	/* Enable NIC HW block */
@@ -676,16 +550,134 @@ static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic, u8 sq_idx)
 	nic_reg_write(nic, NIC_PF_TL2_0_63_PRI | (tl2 << 3), 0x00);
 }
 
+/* Interrupt handler to handle mailbox messages from VFs */
+static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
+{
+	struct nic_mbx mbx = {};
+	u64 *mbx_data;
+	u64 mbx_addr;
+	u64 reg_addr;
+	u64 mac_addr;
+	int bgx, lmac;
+	int i;
+	int ret = 0;
+
+	nic->mbx_lock[vf] = true;
+
+	mbx_addr = nic_get_mbx_addr(vf);
+	mbx_data = (u64 *)&mbx;
+
+	for (i = 0; i < NIC_PF_VF_MAILBOX_SIZE; i++) {
+		*mbx_data = nic_reg_read(nic, mbx_addr);
+		mbx_data++;
+		mbx_addr += sizeof(u64);
+	}
+
+	dev_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
+		__func__, mbx.msg, vf);
+	switch (mbx.msg) {
+	case NIC_MBOX_MSG_READY:
+		nic_mbx_send_ready(nic, vf);
+		nic->link[vf] = 0;
+		nic->duplex[vf] = 0;
+		nic->speed[vf] = 0;
+		ret = 1;
+		break;
+	case NIC_MBOX_MSG_QS_CFG:
+		reg_addr = NIC_PF_QSET_0_127_CFG |
+			   (mbx.data.qs.num << NIC_QS_ID_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
+		break;
+	case NIC_MBOX_MSG_RQ_CFG:
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG |
+			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+		break;
+	case NIC_MBOX_MSG_RQ_BP_CFG:
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_BP_CFG |
+			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+		break;
+	case NIC_MBOX_MSG_RQ_SW_SYNC:
+		ret = nic_rcv_queue_sw_sync(nic);
+		break;
+	case NIC_MBOX_MSG_RQ_DROP_CFG:
+		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
+			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+		break;
+	case NIC_MBOX_MSG_SQ_CFG:
+		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
+			   (mbx.data.sq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.data.sq.sq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
+		nic_tx_channel_cfg(nic, mbx.data.qs.num, mbx.data.sq.sq_num);
+		break;
+	case NIC_MBOX_MSG_SET_MAC:
+		lmac = mbx.data.mac.vf_id;
+		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
+		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
+#ifdef __BIG_ENDIAN
+		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) << 16;
+#else
+		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) >> 16;
+#endif
+		ether_addr_copy((u8 *)&nic->mac[vf], (u8 *)&mac_addr);
+		break;
+	case NIC_MBOX_MSG_SET_MAX_FRS:
+		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
+					mbx.data.frs.vf_id);
+		break;
+	case NIC_MBOX_MSG_CPI_CFG:
+		nic_config_cpi(nic, &mbx.data.cpi_cfg);
+		break;
+#ifdef VNIC_RSS_SUPPORT
+	case NIC_MBOX_MSG_RSS_SIZE:
+		nic_send_rss_size(nic, vf);
+		goto unlock;
+	case NIC_MBOX_MSG_RSS_CFG:
+	case NIC_MBOX_MSG_RSS_CFG_CONT:
+		nic_config_rss(nic, &mbx.data.rss_cfg);
+		break;
+#endif
+	case NIC_MBOX_MSG_CFG_DONE:
+		/* Last message of VF config msg sequence */
+		nic->vf_enabled[vf] = true;
+		goto unlock;
+	case NIC_MBOX_MSG_SHUTDOWN:
+		/* First msg in VF teardown sequence */
+		nic->vf_enabled[vf] = false;
+		break;
+	case NIC_MBOX_MSG_BGX_STATS:
+		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
+		goto unlock;
+	default:
+		dev_err(&nic->pdev->dev,
+			"Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg);
+		break;
+	}
+
+	if (!ret)
+		nic_mbx_send_ack(nic, vf);
+	else if (mbx.msg != NIC_MBOX_MSG_READY)
+		nic_mbx_send_nack(nic, vf);
+unlock:
+	nic->mbx_lock[vf] = false;
+}
+
 static void nic_mbx_intr_handler (struct nicpf *nic, int mbx)
 {
 	u64 intr;
 	u8  vf, vf_per_mbx_reg = 64;
 
 	intr = nic_reg_read(nic, NIC_PF_MAILBOX_INT + (mbx << 3));
-	nic_dbg(&nic->pdev->dev, "PF interrupt Mbox%d 0x%llx\n", mbx, intr);
+	dev_dbg(&nic->pdev->dev, "PF interrupt Mbox%d 0x%llx\n", mbx, intr);
 	for (vf = 0; vf < vf_per_mbx_reg; vf++) {
 		if (intr & (1ULL << vf)) {
-			nic_dbg(&nic->pdev->dev, "Intr from VF %d\n",
+			dev_dbg(&nic->pdev->dev, "Intr from VF %d\n",
 				vf + (mbx * vf_per_mbx_reg));
 			if ((vf + (mbx * vf_per_mbx_reg)) > nic->num_vf_en)
 				break;
@@ -753,14 +745,14 @@ static int nic_register_interrupts(struct nicpf *nic)
 
 	/* Register mailbox interrupt handlers */
 	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX0].vector,
-			  nic_mbx0_intr_handler, 0 , "NIC Mbox0", nic);
+			  nic_mbx0_intr_handler, 0, "NIC Mbox0", nic);
 	if (ret)
 		goto fail;
 	else
 		nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = true;
 
 	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX1].vector,
-			  nic_mbx1_intr_handler, 0 , "NIC Mbox1", nic);
+			  nic_mbx1_intr_handler, 0, "NIC Mbox1", nic);
 	if (ret)
 		goto fail;
 	else
@@ -808,8 +800,9 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 	}
 
 	nic->num_vf_en = 0;
-	if (num_vfs_requested > MAX_NUM_VFS_SUPPORTED)
-		return -EPERM;
+	if (num_vfs_requested > MAX_NUM_VFS_SUPPORTED ||
+	    num_vfs_requested < 0)
+		return -EINVAL;
 
 	if (num_vfs_requested) {
 		err = pci_enable_sriov(pdev, num_vfs_requested);
@@ -827,7 +820,8 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 
 static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
 {
-	int    pos = 0;
+	int pos = 0;
+	u16 total_vf_cnt;
 
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
 	if (!pos) {
@@ -835,18 +829,18 @@ static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
 		return 0;
 	}
 
-	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF),
-			     &nic->total_vf_cnt);
-	if (nic->total_vf_cnt < nic->num_vf_en)
-		nic->num_vf_en = nic->total_vf_cnt;
+	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF), &total_vf_cnt);
+	if (total_vf_cnt < nic->num_vf_en)
+		nic->num_vf_en = total_vf_cnt;
 
-	if (nic->total_vf_cnt && pci_enable_sriov(pdev, nic->num_vf_en)) {
+	if (total_vf_cnt && pci_enable_sriov(pdev, nic->num_vf_en)) {
 		dev_err(&pdev->dev, "SRIOV enable failed, num VF is %d\n",
 			nic->num_vf_en);
 		nic->num_vf_en = 0;
 		return 0;
 	}
-	dev_info(&pdev->dev, "SRIOV enabled, numer of VF available %d\n",
+
+	dev_info(&pdev->dev, "SRIOV enabled, number of VF available %d\n",
 		 nic->num_vf_en);
 
 	nic->flags |= NIC_SRIOV_ENABLED;
@@ -915,7 +909,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Failed to enable PCI device\n");
-		goto exit;
+		return err;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -932,7 +926,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	err = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(48));
 	if (err) {
-		dev_err(dev, "unable to get 48-bit DMA for consistent allocations\n");
+		dev_err(dev, "Unable to get 48-bit DMA for consistent allocations\n");
 		goto err_release_regions;
 	}
 
@@ -953,7 +947,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic_set_lmac_vf_mapping(nic);
 
 	if (!nic_get_mac_addresses(nic))
-		dev_info(&pdev->dev, " Mac node not present in dts\n");
+		dev_info(dev, " Mac node not present in dts\n");
 
 	/* Initialize hardware */
 	nic_init_hw(nic);
@@ -962,31 +956,36 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->rss_ind_tbl_size = NIC_MAX_RSS_IDR_TBL_SIZE;
 
 	/* Register interrupts */
-	if (nic_register_interrupts(nic))
+	err = nic_register_interrupts(nic);
+	if (err)
 		goto err_release_regions;
 
 	/* Configure SRIOV */
 	if (!nic_sriov_init(pdev, nic))
-		goto err_release_regions;
+		goto err_unregister_interrupts;
 
 	if (nic->flags & NIC_TNS_ENABLED)
-		goto exit;
+		return 0;
 
 	/* Register a physical link status poll fn() */
 	nic->check_link = alloc_workqueue("check_link_status",
 					  WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
-	if (!nic->check_link)
-		return -ENOMEM;
+	if (!nic->check_link) {
+		err = -ENOMEM;
+		goto err_unregister_interrupts;
+	}
+
 	INIT_DELAYED_WORK(&nic->dwork, nic_poll_for_link);
 	queue_delayed_work(nic->check_link, &nic->dwork, 0);
 
-	goto exit;
+	return 0;
 
+err_unregister_interrupts:
+	nic_unregister_interrupts(nic);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
-exit:
 	return err;
 }
 

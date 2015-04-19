@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #ifndef NIC_H
@@ -33,8 +32,8 @@
 #define	NIC_TNS_MODE			1
 
 /* NIC priv flags */
-#define	NIC_SRIOV_ENABLED		(1 << 0)
-#define	NIC_TNS_ENABLED			(1 << 1)
+#define	NIC_SRIOV_ENABLED		BIT(0)
+#define	NIC_TNS_ENABLED			BIT(1)
 
 /* VNIC HW optimiation features */
 #define VNIC_RSS_SUPPORT
@@ -101,10 +100,10 @@
 #define	NICVF_INTR_CQ_MASK		(0xFF << NICVF_INTR_CQ_SHIFT)
 #define	NICVF_INTR_SQ_MASK		(0xFF << NICVF_INTR_SQ_SHIFT)
 #define	NICVF_INTR_RBDR_MASK		(0x03 << NICVF_INTR_RBDR_SHIFT)
-#define	NICVF_INTR_PKT_DROP_MASK	(1 << NICVF_INTR_PKT_DROP_SHIFT)
-#define	NICVF_INTR_TCP_TIMER_MASK	(1 << NICVF_INTR_TCP_TIMER_SHIFT)
-#define	NICVF_INTR_MBOX_MASK		(1 << NICVF_INTR_MBOX_SHIFT)
-#define	NICVF_INTR_QS_ERR_MASK		(1 << NICVF_INTR_QS_ERR_SHIFT)
+#define	NICVF_INTR_PKT_DROP_MASK	BIT(NICVF_INTR_PKT_DROP_SHIFT)
+#define	NICVF_INTR_TCP_TIMER_MASK	BIT(NICVF_INTR_TCP_TIMER_SHIFT)
+#define	NICVF_INTR_MBOX_MASK		BIT(NICVF_INTR_MBOX_SHIFT)
+#define	NICVF_INTR_QS_ERR_MASK		BIT(NICVF_INTR_QS_ERR_SHIFT)
 
 /* MSI-X interrupts */
 #define	NIC_PF_MSIX_VECTORS		10
@@ -143,15 +142,15 @@ struct nicvf_cq_poll {
 #ifdef VNIC_RSS_SUPPORT
 struct nicvf_rss_info {
 	bool enable;
-#define	RSS_L2_EXTENDED_HASH_ENA	(1 << 0)
-#define	RSS_IP_HASH_ENA			(1 << 1)
-#define	RSS_TCP_HASH_ENA		(1 << 2)
-#define	RSS_TCP_SYN_DIS			(1 << 3)
-#define	RSS_UDP_HASH_ENA		(1 << 4)
-#define RSS_L4_EXTENDED_HASH_ENA	(1 << 5)
-#define	RSS_ROCE_ENA			(1 << 6)
-#define	RSS_L3_BI_DIRECTION_ENA		(1 << 7)
-#define	RSS_L4_BI_DIRECTION_ENA		(1 << 8)
+#define	RSS_L2_EXTENDED_HASH_ENA	BIT(0)
+#define	RSS_IP_HASH_ENA			BIT(1)
+#define	RSS_TCP_HASH_ENA		BIT(2)
+#define	RSS_TCP_SYN_DIS			BIT(3)
+#define	RSS_UDP_HASH_ENA		BIT(4)
+#define RSS_L4_EXTENDED_HASH_ENA	BIT(5)
+#define	RSS_ROCE_ENA			BIT(6)
+#define	RSS_L3_BI_DIRECTION_ENA		BIT(7)
+#define	RSS_L4_BI_DIRECTION_ENA		BIT(8)
 	u64 cfg;
 	u8  hash_bits;
 	u16 rss_size;
@@ -437,15 +436,5 @@ void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 void nicvf_update_stats(struct nicvf *nic);
 void nicvf_update_lmac_stats(struct nicvf *nic);
-
-/* Debug */
-#undef	NIC_DEBUG
-
-#ifdef	NIC_DEBUG
-#define	nic_dbg(dev, fmt, arg...) \
-		dev_info(dev, fmt, ##arg)
-#else
-#define	nic_dbg(dev, fmt, arg...) do {} while (0)
-#endif
 
 #endif /* NIC_H */

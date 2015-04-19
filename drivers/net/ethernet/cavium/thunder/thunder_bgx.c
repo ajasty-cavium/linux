@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -52,7 +51,7 @@ struct bgx {
 } bgx;
 
 struct bgx *bgx_vnic[MAX_BGX_THUNDER];
-static int lmac_count = 0; /* Total no of LMACs in system */
+static int lmac_count; /* Total no of LMACs in system */
 
 static int bgx_xaui_check_link(struct lmac *lmac);
 
@@ -67,6 +66,15 @@ MODULE_DESCRIPTION("Cavium Thunder BGX/MAC Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
+
+/* The Cavium ThunderX network controller can *only* be found in SoCs
+ * containing the ThunderX ARM64 CPU implementation.  All accesses to the device
+ * registers on this platform are implicitly strongly ordered with respect
+ * to memory accesses. So writeq_relaxed() and readq_relaxed() are safe to use
+ * with no memory barriers in this driver.  The readq()/writeq() functions add
+ * explicit ordering operation which in this case are redundant, and only
+ * add overhead.
+ */
 
 /* Register read/write APIs */
 static u64 bgx_reg_read(struct bgx *bgx, u8 lmac, u64 offset)
@@ -89,7 +97,7 @@ static void bgx_reg_modify(struct bgx *bgx, u8 lmac,
 {
 	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-        writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
+	writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
 }
 
 static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
@@ -111,19 +119,19 @@ static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
 }
 
 /* Return number of BGX present in HW */
-void bgx_get_count(int node, int *bgx_count)
+unsigned bgx_get_map(int node)
 {
 	int i;
-	struct bgx *bgx;
+	unsigned map = 0;
 
-	*bgx_count = 0;
 	for (i = 0; i < MAX_BGX_PER_CN88XX; i++) {
-		bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + i];
-		if (bgx)
-			*bgx_count |= (1 << i);
+		if (bgx_vnic[(node * MAX_BGX_PER_CN88XX) + i])
+			map |= (1 << i);
 	}
+
+	return map;
 }
-EXPORT_SYMBOL(bgx_get_count);
+EXPORT_SYMBOL(bgx_get_map);
 
 /* Return number of LMAC configured for this BGX */
 int bgx_get_lmac_count(int node, int bgx_idx)
@@ -236,10 +244,10 @@ void bgx_lmac_handler(struct net_device *netdev)
 	if (!phydev->link && lmac->last_link)
 		link_changed = -1;
 
-	if (phydev->link
-	    && (lmac->last_duplex != phydev->duplex
-		|| lmac->last_link != phydev->link
-		|| lmac->last_speed != phydev->speed)) {
+	if (phydev->link &&
+	    (lmac->last_duplex != phydev->duplex ||
+	     lmac->last_link != phydev->link ||
+	     lmac->last_speed != phydev->speed)) {
 			link_changed = 1;
 	}
 
@@ -681,7 +689,7 @@ void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 
 	lmac = &bgx->lmac[lmacid];
 	if (lmac->check_link) {
-		/*Destroy work Queue */
+		/* Destroy work queue */
 		cancel_delayed_work(&lmac->dwork);
 		flush_workqueue(lmac->check_link);
 		destroy_workqueue(lmac->check_link);
@@ -807,14 +815,14 @@ static void bgx_get_qlm_mode(struct bgx *bgx)
 
 	/* Read LMAC0 type to figure out QLM mode
 	 * This is configured by low level firmware
-	 **/
+	 */
 	lmac_type = bgx_reg_read(bgx, 0, BGX_CMRX_CFG);
 	lmac_type = (lmac_type >> 8) & 0x07;
 
 	train_en = bgx_reg_read(bgx, 0, BGX_SPUX_BR_PMD_CRTL) &
 				SPU_PMD_CRTL_TRAIN_EN;
 
-	switch(lmac_type) {
+	switch (lmac_type) {
 	case BGX_MODE_SGMII:
 		bgx->qlm_mode = QLM_MODE_SGMII;
 		dev_info(dev, "BGX%d QLM mode: SGMII\n", bgx->bgx_id);
@@ -909,7 +917,7 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 		return AE_OK;
 	}
 
-	if(strncmp(string.pointer, bgx_sel, 4))
+	if (strncmp(string.pointer, bgx_sel, 4))
 		return AE_OK;
 
 	acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, 1,
@@ -918,6 +926,7 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 	kfree(string.pointer);
 	return AE_CTRL_TERMINATE;
 }
+
 static int
 bgx_init_acpi_phy(struct bgx *bgx)
 {
