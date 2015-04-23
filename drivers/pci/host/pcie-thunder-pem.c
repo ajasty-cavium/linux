@@ -19,6 +19,7 @@
 
 #define THUNDER_SLI_S2M_REG_ACC_BASE	0x874001000000ull
 
+#define THUNDER_GIC			0x801000000000ull
 #define THUNDER_GICD_SETSPI_NSR		0x801000000040ull
 #define THUNDER_GICD_CLRSPI_NSR		0x801000000048ull
 
@@ -26,6 +27,12 @@
 
 #define PEM_CTL_STATUS	0x000
 #define PEM_RD_CFG	0x030
+#define P2N_BAR0_START	0x080
+#define P2N_BAR1_START	0x088
+#define P2N_BAR2_START	0x090
+#define BAR_CTL		0x0a8
+#define BAR2_MASK	0x0b0
+#define BAR1_INDEX	0x100
 #define PEM_CFG		0x410
 #define PEM_ON		0x420
 
@@ -381,6 +388,25 @@ static int thunder_pem_pci_probe(struct pci_dev *pdev,
 	for (i = 0; i < 16; i++) {
 		regval = slix_s2m_reg_val(pem->sli, CTYPE_MEMORY, true, true, true, i + 0x10);
 		writeq(regval, pem->sli_s2m + 0x10 * ((0x40 * pem->sli) + (0x20 + i)));
+	}
+
+	writeq(0, pem->bar0 + P2N_BAR0_START);
+	writeq(0, pem->bar0 + P2N_BAR1_START);
+	writeq(0, pem->bar0 + P2N_BAR2_START);
+
+	regval = 0x10;	/* BAR_CTL[BAR1_SIZ] = 1 (64MB) */
+	regval |= 0x8;	/* BAR_CTL[BAR2_ENB] = 1 */
+	writeq(regval, pem->bar0 + BAR_CTL);
+
+	/* 1st 4MB region -> GIC registers so 32-bit MSI can reach the GIC. */
+	regval = (THUNDER_GIC + (((u64)pem->node) << 44)) >> 18;
+	/* BAR1_INDEX[ADDR_V] = 1 */
+	regval |= 1;
+	writeq(regval, pem->bar0 + BAR1_INDEX);
+	/* Remaining regions linear mapping to physical address space */
+	for (i = 1; i < 16; i++) {
+		regval = (i << 4) | 1;
+		writeq(regval, pem->bar0 + BAR1_INDEX + 8 * i);
 	}
 
 	pem->bus = pci_create_root_bus(&pdev->dev, primary_bus, &thunder_pem_ops, pem, &resources);
