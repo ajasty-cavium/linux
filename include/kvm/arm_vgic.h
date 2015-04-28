@@ -370,6 +370,10 @@ void kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu);
 int kvm_vgic_inject_irq(struct kvm *kvm, int cpuid, unsigned int irq_num,
 			bool level);
 void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+int vgic_v3_icc_read_iar(struct kvm_vcpu *vcpu);
+void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg);
+#endif
 int kvm_vgic_vcpu_pending_irq(struct kvm_vcpu *vcpu);
 bool vgic_handle_mmio(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		      struct kvm_exit_mmio *mmio);

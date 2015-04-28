@@ -186,6 +186,43 @@ static bool access_gic_sgi(struct kvm_vcpu *vcpu,
 	return true;
 }
 
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+static bool access_gic_icc_grp_en(struct kvm_vcpu *vcpu,
+               const struct sys_reg_params *p,
+               const struct sys_reg_desc *r)
+{
+    return true;
+}
+
+static bool access_gic_icc_iar(struct kvm_vcpu *vcpu,
+               const struct sys_reg_params *p,
+               const struct sys_reg_desc *r)
+{
+	if (p->is_write)
+		return ignore_write(vcpu, p);
+
+	*vcpu_reg(vcpu, p->Rt) = 0UL;
+	*vcpu_reg(vcpu, p->Rt) = vgic_v3_icc_read_iar(vcpu);
+
+    return true;
+}
+
+static bool access_gic_icc_eoir(struct kvm_vcpu *vcpu,
+               const struct sys_reg_params *p,
+               const struct sys_reg_desc *r)
+{
+	u64 val;
+
+	if (!p->is_write)
+		return read_from_write_only(vcpu, p);
+
+	val = *vcpu_reg(vcpu, p->Rt);
+	vgic_v3_icc_write_eoir(vcpu, val);
+
+    return true;
+}
+#endif
+
 static bool trap_raz_wi(struct kvm_vcpu *vcpu,
 			const struct sys_reg_params *p,
 			const struct sys_reg_desc *r)
@@ -458,10 +495,22 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	/* ICC_SGI1R_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1011), Op2(0b101),
 	  access_gic_sgi },
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+	/* ICC_IAR1_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b000),
+	  access_gic_icc_iar },
+	/* ICC_EOIR1_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b001),
+	  access_gic_icc_eoir },
+#endif
 	/* ICC_SRE_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b101),
 	  trap_raz_wi },
-
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+	/* ICC_GRPEN1_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b111),
+	  access_gic_icc_grp_en },
+#endif
 	/* CONTEXTIDR_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1101), CRm(0b0000), Op2(0b001),
 	  access_vm_reg, reset_val, CONTEXTIDR_EL1, 0 },

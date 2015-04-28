@@ -17,6 +17,7 @@
  */
 
 #include <linux/cpu.h>
+#include <linux/delay.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
 #include <linux/interrupt.h>
@@ -1044,6 +1045,46 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 	return true;
 }
 
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
+{
+	struct vgic_lr vlr;
+	int lr;
+	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+
+        for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+
+
+        if(vlr.state == LR_STATE_PENDING || vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
+            vlr.state &= ~LR_STATE_PENDING;
+            vlr.state |= LR_STATE_ACTIVE;
+		    vgic_set_lr(vcpu, lr, vlr);
+            vcpu->arch.hcr_el2 |= HCR_VI;
+            return vlr.irq;
+        }
+    }
+    vcpu->arch.hcr_el2 &= ~HCR_VI;
+    return 1023;
+}
+
+void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
+{
+    struct vgic_lr vlr;
+	int lr;
+
+    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+
+        if(vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE)) {
+            vlr.state &= ~LR_STATE_ACTIVE;
+		    vgic_set_lr(vcpu, lr, vlr);
+            break;
+        }
+    }
+}
+#endif
+
 static bool vgic_queue_hwirq(struct kvm_vcpu *vcpu, int irq)
 {
 	if (!vgic_can_sample_irq(vcpu, irq))
@@ -1132,6 +1173,7 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 
 	kvm_debug("STATUS = %08x\n", status);
 
+#ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
 	if (status & INT_STATUS_EOI) {
 		/*
 		 * Some level interrupts have been EOIed. Clear their
@@ -1142,7 +1184,17 @@ static bool vgic_process_maintenance(struct kvm_vcpu *vcpu)
 		int lr;
 
 		for_each_set_bit(lr, eisr_ptr, vgic->nr_lr) {
+#else
+	if (1) {
+		int lr;
+
+		for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+#endif
 			struct vgic_lr vlr = vgic_get_lr(vcpu, lr);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+			if (vlr.state != LR_EOI_INT)
+				continue;
+#endif
 			WARN_ON(vgic_irq_is_edge(vcpu, vlr.irq));
 
 			vgic_irq_clear_queued(vcpu, vlr.irq);
@@ -1194,33 +1246,55 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	u64 elrsr;
-	unsigned long *elrsr_ptr;
 	int lr, pending;
 	bool level_pending;
 	int lr_irq;
+#ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
+	u64 elrsr;
+	unsigned long *elrsr_ptr;
+#endif
 
 	level_pending = vgic_process_maintenance(vcpu);
+#ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
 	elrsr = vgic_get_elrsr(vcpu);
 	elrsr_ptr = u64_to_bitmask(&elrsr);
 
 	/* Clear mappings for empty LRs */
 	for_each_set_bit(lr, elrsr_ptr, vgic->nr_lr) {
+#else
+	for (lr=0;lr<VGIC_V3_MAX_LRS; lr++) {
+#endif
 		struct vgic_lr vlr;
+
+		vlr = vgic_get_lr(vcpu, lr);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+		if(vlr.state) {
+			pending = 1;
+			continue;
+		}
+#endif
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
 
-		vlr = vgic_get_lr(vcpu, lr);
 
 		BUG_ON(vlr.irq >= dist->nr_irqs);
 		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
 	}
 
+#ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
 	/* Check if we still have something up our sleeve... */
 	pending = find_first_zero_bit(elrsr_ptr, vgic->nr_lr);
-	if (level_pending || pending < vgic->nr_lr)
+#endif
+	if (level_pending || pending < vgic->nr_lr) {
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+        vcpu->arch.hcr_el2 |= HCR_VI;
+    }
+    else {
+        vcpu->arch.hcr_el2 &= ~HCR_VI;
+#endif
+    }
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
@@ -1304,6 +1378,11 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 
 	spin_lock_irqsave(&dist->lock, flag);
 
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+        /* avoid race conditions */
+        if(irq_num == 38)
+            mdelay(2);
+#endif
 	vcpu = kvm_get_vcpu(kvm, cpuid);
 	edge_triggered = vgic_irq_is_edge(vcpu, irq_num);
 	level_triggered = !edge_triggered;

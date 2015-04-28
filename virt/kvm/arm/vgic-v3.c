@@ -184,7 +184,11 @@ static void vgic_v3_enable(struct kvm_vcpu *vcpu)
 		vgic_v3->vgic_sre = 0;
 
 	/* Get the show on the road... */
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+	vgic_v3->vgic_hcr = ICH_HCR_EN | ICH_HCR_TALL0 | ICH_HCR_TALL1;
+#else
 	vgic_v3->vgic_hcr = ICH_HCR_EN;
+#endif
 }
 
 static const struct vgic_ops vgic_v3_ops = {

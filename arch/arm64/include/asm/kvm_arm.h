@@ -75,9 +75,15 @@
  * SWIO:	Turn set/way invalidates into set/way clean+invalidate
  */
 //#define HCR_GUEST_FLAGS (HCR_TSC | HCR_TSW | HCR_TWE | HCR_TWI | HCR_VM | 
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+#define HCR_GUEST_FLAGS (HCR_TSC | HCR_TSW | HCR_VM | \
+			 HCR_TVM | HCR_BSU_IS | HCR_FB | HCR_TAC | \
+			 HCR_AMO | HCR_SWIO | HCR_TIDCP | HCR_RW | HCR_VI)
+#else
 #define HCR_GUEST_FLAGS (HCR_TSC | HCR_TSW | HCR_VM | \
 			 HCR_TVM | HCR_BSU_IS | HCR_FB | HCR_TAC | \
 			 HCR_AMO | HCR_SWIO | HCR_TIDCP | HCR_RW)
+#endif
 #define HCR_VIRT_EXCP_MASK (HCR_VA | HCR_VI | HCR_VF)
 #define HCR_INT_OVERRIDE   (HCR_FMO | HCR_IMO)
 

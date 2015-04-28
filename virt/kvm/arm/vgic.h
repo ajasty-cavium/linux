@@ -66,6 +66,10 @@ void vgic_set_vmcr(struct kvm_vcpu *vcpu, struct vgic_vmcr *vmcr);
 bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq);
 void vgic_unqueue_irqs(struct kvm_vcpu *vcpu);
 
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+int vgic_get_pending_irq(struct kvm_vcpu *vcpu);
+void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq);
+#endif
 void vgic_reg_access(struct kvm_exit_mmio *mmio, u32 *reg,
 		     phys_addr_t offset, int mode);
 bool handle_mmio_raz_wi(struct kvm_vcpu *vcpu, struct kvm_exit_mmio *mmio,

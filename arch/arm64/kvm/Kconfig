@@ -31,6 +31,13 @@ config KVM
 
 	  If unsure, say N.
 
+config THUNDERX_PASS1_ERRATA_23331
+	bool "Thunderx_pass1_errata_23331"
+	def_bool y
+	help
+	 Emulates LR registers in software and avoids using hardware
+	 implemenattion of VCPU interface.
+
 config KVM_ARM_HOST
 	bool
 	---help---
