@@ -58,7 +58,7 @@ static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 	dmem->unalign_base = dma_zalloc_coherent(&nic->pdev->dev, dmem->size,
 						&dmem->dma, GFP_KERNEL);
 	if (!dmem->unalign_base)
-		return -1;
+		return -ENOMEM;
 
 	/* Align memory address for 'align_bytes' */
 	dmem->phys_base = NICVF_ALIGNED_ADDR((u64)dmem->dma, align_bytes);
@@ -164,14 +164,13 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	int idx;
 	u64 *rbuf;
 	struct rbdr_entry_t *desc;
+	int err;
 
-	if (nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
-				   sizeof(struct rbdr_entry_t),
-				   NICVF_RCV_BUF_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for rcv buffer ring\n");
-		return -ENOMEM;
-	}
+	err = nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
+				     sizeof(struct rbdr_entry_t),
+				     NICVF_RCV_BUF_ALIGN_BYTES);
+	if (err)
+		return err;
 
 	rbdr->desc = rbdr->dmem.base;
 	/* Buffer size has to be in multiples of 128 bytes */
@@ -181,9 +180,10 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 
 	nic->rb_page = NULL;
 	for (idx = 0; idx < ring_len; idx++) {
-		if (nicvf_alloc_rcv_buffer(nic, GFP_KERNEL,
-					   RCV_FRAG_LEN, &rbuf))
-			return -ENOMEM;
+		err = nicvf_alloc_rcv_buffer(nic, GFP_KERNEL, RCV_FRAG_LEN,
+					     &rbuf);
+		if (err)
+			return err;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
 		desc->buf_addr = virt_to_phys(rbuf) >> NICVF_RCV_BUF_ALIGN;
@@ -323,13 +323,13 @@ void nicvf_rbdr_task(unsigned long data)
 static int nicvf_init_cmp_queue(struct nicvf *nic,
 				struct cmp_queue *cq, int q_len)
 {
-	if (nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len,
-				   CMP_QUEUE_DESC_SIZE,
-				   NICVF_CQ_BASE_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for completion queue\n");
-		return -ENOMEM;
-	}
+	int err;
+
+	err = nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len, CMP_QUEUE_DESC_SIZE,
+				     NICVF_CQ_BASE_ALIGN_BYTES);
+	if (err)
+		return err;
+
 	cq->desc = cq->dmem.base;
 	cq->thresh = CMP_QUEUE_CQE_THRESH;
 	nic->cq_coalesce_usecs = (CMP_QUEUE_TIMER_THRESH * 0.05) - 1;
@@ -351,13 +351,12 @@ static void nicvf_free_cmp_queue(struct nicvf *nic, struct cmp_queue *cq)
 static int nicvf_init_snd_queue(struct nicvf *nic,
 				struct snd_queue *sq, int q_len)
 {
-	if (nicvf_alloc_q_desc_mem(nic, &sq->dmem, q_len,
-				   SND_QUEUE_DESC_SIZE,
-				   NICVF_SQ_BASE_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for send queue\n");
-		return -ENOMEM;
-	}
+	int err;
+
+	err = nicvf_alloc_q_desc_mem(nic, &sq->dmem, q_len, SND_QUEUE_DESC_SIZE,
+				     NICVF_SQ_BASE_ALIGN_BYTES);
+	if (err)
+		return err;
 
 	sq->desc = sq->dmem.base;
 	sq->skbuff = kcalloc(q_len, sizeof(u64), GFP_ATOMIC);

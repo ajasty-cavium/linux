@@ -104,7 +104,7 @@ static u64 nic_get_mbx_addr(int vf)
  * @vf: vf to which this message to be sent
  * @mbx: Message to be sent
  */
-static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
+static void nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 {
 	void __iomem *mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
 	u64 *msg = (u64 *)mbx;
@@ -123,8 +123,6 @@ static int nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 		writeq_relaxed(msg[1], mbx_addr + 8);
 		writeq_relaxed(msg[0], mbx_addr);
 	}
-
-	return 0;
 }
 
 /* Function to read MAC addresses from DTS.
@@ -141,17 +139,17 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 	/* Check if MAC ID list is present in DTS */
 	np = of_find_node_by_name(NULL, "ethernet-macs");
 	if (!np)
-		return 0;
+		return -ENODEV;
 
 	/* Check if MAC ID list is available for this node (NUMA) */
 	sprintf(node, "node%d", nic->node);
 	np_child = of_get_child_by_name(np, node);
 	if (!np_child)
-		return 0;
+		return -ENODEV;
 
 	np_ptr = (u8 *)of_get_property(np_child, "mac", &nplen);
 	if (!np_ptr)
-		return 0;
+		return -ENODEV;
 
 	for (range = 0; range < nplen; range = range + next_range_off) {
 		/* get first mac into cpu format */
@@ -177,7 +175,7 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 		}
 	}
 
-	return 1;
+	return 0;
 }
 
 /* Responds to VF's READY message with VF's
@@ -719,11 +717,11 @@ static int nic_enable_msix(struct nicpf *nic)
 		dev_err(&nic->pdev->dev,
 			"Request for #%d msix vectors failed\n",
 			   nic->num_vec);
-		return 0;
+		return ret;
 	}
 
 	nic->msix_enabled = 1;
-	return 1;
+	return 0;
 }
 
 static void nic_disable_msix(struct nicpf *nic)
@@ -740,27 +738,29 @@ static int nic_register_interrupts(struct nicpf *nic)
 	int irq, ret = 0;
 
 	/* Enable MSI-X */
-	if (!nic_enable_msix(nic))
-		return 1;
+	ret = nic_enable_msix(nic);
+	if (ret)
+		return ret;
 
 	/* Register mailbox interrupt handlers */
 	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX0].vector,
 			  nic_mbx0_intr_handler, 0, "NIC Mbox0", nic);
 	if (ret)
 		goto fail;
-	else
-		nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = true;
+
+	nic->irq_allocated[NIC_PF_INTR_ID_MBOX0] = true;
 
 	ret = request_irq(nic->msix_entries[NIC_PF_INTR_ID_MBOX1].vector,
 			  nic_mbx1_intr_handler, 0, "NIC Mbox1", nic);
 	if (ret)
 		goto fail;
-	else
-		nic->irq_allocated[NIC_PF_INTR_ID_MBOX1] = true;
+
+	nic->irq_allocated[NIC_PF_INTR_ID_MBOX1] = true;
 
 	/* Enable mailbox interrupt */
 	nic_enable_mbx_intr(nic);
 	return 0;
+
 fail:
 	dev_err(&nic->pdev->dev, "Request irq failed\n");
 	for (irq = 0; irq < nic->num_vec; irq++) {
@@ -768,7 +768,7 @@ fail:
 			free_irq(nic->msix_entries[irq].vector, nic);
 		nic->irq_allocated[irq] = false;
 	}
-	return 1;
+	return ret;
 }
 
 static void nic_unregister_interrupts(struct nicpf *nic)
@@ -821,30 +821,35 @@ int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
 {
 	int pos = 0;
+	int err;
 	u16 total_vf_cnt;
 
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
 	if (!pos) {
 		dev_err(&pdev->dev, "SRIOV capability is not found in PCIe config space\n");
-		return 0;
+		return -ENODEV;
 	}
 
 	pci_read_config_word(pdev, (pos + PCI_SRIOV_TOTAL_VF), &total_vf_cnt);
 	if (total_vf_cnt < nic->num_vf_en)
 		nic->num_vf_en = total_vf_cnt;
 
-	if (total_vf_cnt && pci_enable_sriov(pdev, nic->num_vf_en)) {
+	if (!total_vf_cnt)
+		return 0;
+
+	err = pci_enable_sriov(pdev, nic->num_vf_en);
+	if (err) {
 		dev_err(&pdev->dev, "SRIOV enable failed, num VF is %d\n",
 			nic->num_vf_en);
 		nic->num_vf_en = 0;
-		return 0;
+		return err;
 	}
 
 	dev_info(&pdev->dev, "SRIOV enabled, number of VF available %d\n",
 		 nic->num_vf_en);
 
 	nic->flags |= NIC_SRIOV_ENABLED;
-	return 1;
+	return 0;
 }
 
 /* Poll for BGX LMAC link status and update corresponding VF
@@ -909,6 +914,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Failed to enable PCI device\n");
+		pci_set_drvdata(pdev, NULL);
 		return err;
 	}
 
@@ -946,8 +952,9 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->flags &= ~NIC_TNS_ENABLED;
 	nic_set_lmac_vf_mapping(nic);
 
-	if (!nic_get_mac_addresses(nic))
-		dev_info(dev, " Mac node not present in dts\n");
+	err = nic_get_mac_addresses(nic);
+	if (err)
+		dev_info(dev, "Mac node not present in dts\n");
 
 	/* Initialize hardware */
 	nic_init_hw(nic);
@@ -961,7 +968,8 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_release_regions;
 
 	/* Configure SRIOV */
-	if (!nic_sriov_init(pdev, nic))
+	err = nic_sriov_init(pdev, nic);
+	if (err)
 		goto err_unregister_interrupts;
 
 	if (nic->flags & NIC_TNS_ENABLED)
@@ -972,7 +980,7 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 					  WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!nic->check_link) {
 		err = -ENOMEM;
-		goto err_unregister_interrupts;
+		goto err_disable_sriov;
 	}
 
 	INIT_DELAYED_WORK(&nic->dwork, nic_poll_for_link);
@@ -980,12 +988,16 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	return 0;
 
+err_disable_sriov:
+	if (nic->flags & NIC_SRIOV_ENABLED)
+		pci_disable_sriov(pdev);
 err_unregister_interrupts:
 	nic_unregister_interrupts(nic);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
 	return err;
 }
 
@@ -1004,10 +1016,9 @@ static void nic_remove(struct pci_dev *pdev)
 	}
 
 	nic_unregister_interrupts(nic);
-	pci_set_drvdata(pdev, NULL);
-
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
 }
 
 static struct pci_driver nic_driver = {
