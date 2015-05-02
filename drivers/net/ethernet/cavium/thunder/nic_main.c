@@ -341,10 +341,14 @@ static void nic_set_lmac_vf_mapping(struct nicpf *nic)
 	}
 }
 
+#define TNS_PORT0_BLOCK 6
+#define TNS_PORT1_BLOCK 7
+#define BGX0_BLOCK 8
+#define BGX1_BLOCK 9
+
 static void nic_init_hw(struct nicpf *nic)
 {
 	int i;
-	u64 reg;
 
 	/* Reset NIC, in case the driver is repeatedly inserted and removed */
 	nic_reg_write(nic, NIC_PF_SOFT_RESET, 1);
@@ -354,25 +358,27 @@ static void nic_init_hw(struct nicpf *nic)
 
 	/* Enable backpressure */
 	nic_reg_write(nic, NIC_PF_BP_CFG, (1ULL << 6) | 0x03);
-	nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG, (1ULL << 63) | 0x08);
-	nic_reg_write(nic,
-		      NIC_PF_INTF_0_1_BP_CFG + (1 << 8), (1ULL << 63) | 0x09);
 
 	if (nic->flags & NIC_TNS_ENABLED) {
-		reg = NIC_TNS_MODE << 7;
-		reg |= 0x06;
-		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, reg);
-		reg &= ~0xFull;
-		reg |= 0x07;
-		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), reg);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG,
+			      (NIC_TNS_MODE << 7) | TNS_PORT0_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8),
+			      (NIC_TNS_MODE << 7) | TNS_PORT1_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG,
+			      (1ULL << 63) | TNS_PORT0_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG + (1 << 8),
+			      (1ULL << 63) | TNS_PORT1_BLOCK);
+
 	} else {
 		/* Disable TNS mode on both interfaces */
-		reg = NIC_TNS_BYPASS_MODE << 7;
-		reg |= 0x08; /* Block identifier */
-		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG, reg);
-		reg &= ~0xFull;
-		reg |= 0x09;
-		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8), reg);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG,
+			      (NIC_TNS_BYPASS_MODE << 7) | BGX0_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_SEND_CFG | (1 << 8),
+			      (NIC_TNS_BYPASS_MODE << 7) | BGX1_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG,
+			      (1ULL << 63) | BGX0_BLOCK);
+		nic_reg_write(nic, NIC_PF_INTF_0_1_BP_CFG + (1 << 8),
+			      (1ULL << 63) | BGX1_BLOCK);
 	}
 
 	/* PKIND configuration */
