@@ -1348,6 +1348,7 @@ static void nicvf_remove(struct pci_dev *pdev)
 	nic = netdev_priv(netdev);
 	unregister_netdev(netdev);
 
+	nicvf_unregister_interrupts(nic);
 	pci_set_drvdata(pdev, NULL);
 
 	if (nic->reg_base)
