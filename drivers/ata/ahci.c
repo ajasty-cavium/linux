@@ -42,6 +42,7 @@
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/gfp.h>
+#include <linux/msi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>
@@ -1202,6 +1203,71 @@ static inline void ahci_gtf_filter_workaround(struct ata_host *host)
 {}
 #endif
 
+static struct msi_desc *msix_get_desc(struct pci_dev *dev, u16 entry)
+{
+	struct msi_desc *desc;
+
+	list_for_each_entry(desc, &dev->msi_list, list) {
+		if (desc->msi_attrib.entry_nr == entry)
+			return desc;
+	}
+
+	return NULL;
+}
+
+/*
+ * MSI-X support is needed for host controller that only have MSI-X
+ * support implemented, but no MSI or intx. For now, function
+ * ahci_init_msix() only implements single MSI-X support, but not
+ * multiple MSI-X per-port interrupts.
+ */
+static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
+			  struct ahci_host_priv *hpriv)
+{
+	struct msi_desc *desc;
+	int rc, nvec;
+	struct msix_entry entry = {};
+
+	/* Do not init MSI-X if MSI is disabled for the device */
+	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
+		return -ENODEV;
+
+	nvec = pci_msix_vec_count(pdev);
+	if (nvec < 0)
+		return nvec;
+
+	if (!nvec) {
+		rc = -ENODEV;
+		goto fail;
+	}
+
+	/*
+	 * There can exist more than one vector (e.g. for error
+	 * detection or hdd hotplug). Then the first vector is used,
+	 * all others are ignored. Only enable the first entry here
+	 * (entry.entry = 0).
+	 */
+	rc = pci_enable_msix_exact(pdev, &entry, 1);
+	if (rc < 0)
+		goto fail;
+
+	desc = msix_get_desc(pdev, 0);	/* first entry */
+	if (!desc) {
+		rc = -EINVAL;
+		goto fail;
+	}
+
+	hpriv->irq = desc->irq;
+
+	return 1;
+fail:
+	dev_err(&pdev->dev,
+		"failed to enable MSI-X with error %d, # of vectors: %d\n",
+		rc, nvec);
+
+	return rc;
+}
+
 static int ahci_init_msi(struct pci_dev *pdev, unsigned int n_ports,
 			struct ahci_host_priv *hpriv)
 {
@@ -1258,6 +1324,17 @@ static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 	int nvec;
 
 	nvec = ahci_init_msi(pdev, n_ports, hpriv);
+	if (nvec >= 0)
+		return nvec;
+
+	/*
+	 * Only setup single mode MSI-X as a last resort if MSI fails:
+	 * Initialize MSI-X after MSI and only if that fails, continue
+	 * with intx interrupts on failure. Thus, MSI-X code is not
+	 * executed if a device offers MSI and its initialization does
+	 * not fail.
+	 */
+	nvec = ahci_init_msix(pdev, n_ports, hpriv);
 	if (nvec >= 0)
 		return nvec;
 
