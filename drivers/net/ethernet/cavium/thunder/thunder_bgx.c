@@ -680,12 +680,6 @@ void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 	u64 cmrx_cfg;
 
 	lmac = &bgx->lmac[lmacid];
-	if (lmac->check_link) {
-		/*Destroy work Queue */
-		cancel_delayed_work(&lmac->dwork);
-		flush_workqueue(lmac->check_link);
-		destroy_workqueue(lmac->check_link);
-	}
 
 	cmrx_cfg = bgx_reg_read(bgx, lmacid, BGX_CMRX_CFG);
 	cmrx_cfg &= ~(1 << 15);

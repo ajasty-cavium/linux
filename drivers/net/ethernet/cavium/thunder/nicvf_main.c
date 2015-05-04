@@ -1341,18 +1341,12 @@ static void nicvf_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct nicvf *nic;
-	int sleep = 10;
 
 	if (!netdev)
 		return;
 
 	nic = netdev_priv(netdev);
 	unregister_netdev(netdev);
-
-	if (nic->link_up)
-		msleep(sleep);
-
-	nicvf_unregister_interrupts(nic);
 
 	pci_set_drvdata(pdev, NULL);
 

@@ -143,7 +143,7 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 		/* get range length for given range */
 		mac_range = be32_to_cpup((u32 *)(np_ptr + range +
 					ETH_ALEN));
-		for (i = 0; i < mac_range && i < MAX_NUM_VFS_SUPPORTED; i++) {
+		for (i = 0; i < mac_range; i++) {
 #ifdef __BIG_ENDIAN
 			nic->mac[mac_count++] =
 				cpu_to_be64(next_mac) << 16;
@@ -926,9 +926,6 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->flags &= ~NIC_TNS_ENABLED;
 	nic_set_lmac_vf_mapping(nic);
 
-	if (!nic_get_mac_addresses(nic))
-		dev_info(&pdev->dev, " Mac node not present in dts\n");
-
 	/* Initialize hardware */
 	nic_init_hw(nic);
 
@@ -942,6 +939,9 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Configure SRIOV */
 	if (!nic_sriov_init(pdev, nic))
 		goto err_unmap_resources;
+
+	if (!nic_get_mac_addresses(nic))
+		dev_info(&pdev->dev, " Mac node not present in dts\n");
 
 	if (nic->flags & NIC_TNS_ENABLED)
 		goto exit;
@@ -977,17 +977,11 @@ static void nic_remove(struct pci_dev *pdev)
 
 	nic = netdev_priv(netdev);
 
+	nic_unregister_interrupts(nic);
+
 	if (nic->flags & NIC_SRIOV_ENABLED)
 		pci_disable_sriov(pdev);
 
-	if (nic->check_link) {
-		/* Destroy work Queue */
-		cancel_delayed_work(&nic->dwork);
-		flush_workqueue(nic->check_link);
-		destroy_workqueue(nic->check_link);
-	}
-
-	nic_unregister_interrupts(nic);
 	pci_set_drvdata(pdev, NULL);
 
 	if (nic->reg_base)
