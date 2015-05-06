@@ -234,7 +234,7 @@ struct nicvf {
 	u8			tns_mode;
 	u16			mtu;
 	struct queue_set	*qs;
-	u64			reg_base;
+	void __iomem		*reg_base;
 	bool			link_up;
 	u8			duplex;
 	u32			speed;

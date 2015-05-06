@@ -46,7 +46,7 @@ struct bgx {
 	int                     lmac_type;
 	int                     lane_to_sds;
 	int			use_training;
-	u64			reg_base;
+	void __iomem		*reg_base;
 	struct pci_dev		*pdev;
 } bgx;
 
@@ -79,29 +79,26 @@ MODULE_DEVICE_TABLE(pci, bgx_id_table);
 /* Register read/write APIs */
 static u64 bgx_reg_read(struct bgx *bgx, u8 lmac, u64 offset)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-	return readq_relaxed((void *)addr);
+	return readq_relaxed(addr);
 }
 
-static void bgx_reg_write(struct bgx *bgx, u8 lmac,
-			  u64 offset, u64 val)
+static void bgx_reg_write(struct bgx *bgx, u8 lmac, u64 offset, u64 val)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-	writeq_relaxed(val, (void *)addr);
+	writeq_relaxed(val, addr);
 }
 
-static void bgx_reg_modify(struct bgx *bgx, u8 lmac,
-			   u64 offset, u64 val)
+static void bgx_reg_modify(struct bgx *bgx, u8 lmac, u64 offset, u64 val)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-	writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
+	writeq_relaxed(val | readq_relaxed(addr), addr);
 }
 
-static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
-			u64 reg, u64 mask, bool zero)
+static int bgx_poll_reg(struct bgx *bgx, u8 lmac, u64 reg, u64 mask, bool zero)
 {
 	int timeout = 100;
 	u64 reg_val;
@@ -297,21 +294,19 @@ EXPORT_SYMBOL(bgx_get_tx_stats);
 
 static void bgx_flush_dmac_addrs(struct bgx *bgx, int lmac)
 {
-	u64 dmac = 0x00;
-	u64 offset, addr;
+	u64 offset;
 
 	while (bgx->lmac[lmac].dmac > 0) {
-		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) +
-			(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
-		addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
-		writeq_relaxed(dmac, (void *)addr);
+		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(u64)) +
+			(lmac * MAX_DMAC_PER_LMAC * sizeof(u64));
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + offset, 0);
 		bgx->lmac[lmac].dmac--;
 	}
 }
 
 void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac)
 {
-	u64 offset, addr;
+	u64 offset;
 	struct bgx *bgx;
 
 #ifdef BGX_IN_PROMISCUOUS_MODE
@@ -339,10 +334,9 @@ void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac)
 	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE)
 		bgx->lmac[lmac].dmac = 1;
 
-	offset = (bgx->lmac[lmac].dmac * sizeof(dmac)) +
-		(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
-	addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
-	writeq_relaxed(dmac, (void *)addr);
+	offset = (bgx->lmac[lmac].dmac * sizeof(u64)) +
+		(lmac * MAX_DMAC_PER_LMAC * sizeof(u64));
+	bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + offset, dmac);
 	bgx->lmac[lmac].dmac++;
 
 	bgx_reg_write(bgx, lmac, BGX_CMRX_RX_DMAC_CTL,
@@ -614,7 +608,7 @@ static void bgx_poll_for_link(struct work_struct *work)
 	queue_delayed_work(lmac->check_link, &lmac->dwork, HZ * 2);
 }
 
-static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
+static int bgx_lmac_enable(struct bgx *bgx, u8 lmacid)
 {
 	u64 dmac_bcast = (1ULL << 48) - 1;
 	struct lmac *lmac;
@@ -1017,7 +1011,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP configuration registers */
-	bgx->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	bgx->reg_base = pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!bgx->reg_base) {
 		dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
 		err = -ENOMEM;
@@ -1048,7 +1042,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 err_enable:
 	if (bgx->reg_base)
-		iounmap((void *)bgx->reg_base);
+		iounmap(bgx->reg_base);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
@@ -1073,7 +1067,7 @@ static void bgx_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 
 	if (bgx->reg_base)
-		iounmap((void *)bgx->reg_base);
+		iounmap(bgx->reg_base);
 
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);

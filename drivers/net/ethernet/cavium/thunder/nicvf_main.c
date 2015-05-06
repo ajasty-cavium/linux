@@ -85,47 +85,40 @@ static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 /* Register read/write APIs */
 void nicvf_reg_write(struct nicvf *nic, u64 offset, u64 val)
 {
-	u64 addr = nic->reg_base + offset;
-
-	writeq_relaxed(val, (void *)addr);
+	writeq_relaxed(val, nic->reg_base + offset);
 }
 
 u64 nicvf_reg_read(struct nicvf *nic, u64 offset)
 {
-	u64 addr = nic->reg_base + offset;
-
-	return readq_relaxed((void *)addr);
+	return readq_relaxed(nic->reg_base + offset);
 }
 
 void nicvf_queue_reg_write(struct nicvf *nic, u64 offset,
 			   u64 qidx, u64 val)
 {
-	u64 addr = nic->reg_base + offset;
+	void __iomem *addr = nic->reg_base + offset;
 
-	writeq_relaxed(val, (void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
+	writeq_relaxed(val, addr + (qidx << NIC_Q_NUM_SHIFT));
 }
 
 u64 nicvf_queue_reg_read(struct nicvf *nic, u64 offset, u64 qidx)
 {
-	u64 addr = nic->reg_base + offset;
+	void __iomem *addr = nic->reg_base + offset;
 
-	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
+	return readq_relaxed(addr + (qidx << NIC_Q_NUM_SHIFT));
 }
 
 int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
 	int timeout = NIC_MBOX_MSG_TIMEOUT;
 	int sleep = 10;
-	u64 *msg;
-	u64 mbx_addr;
+	u64 *msg = (u64 *)mbx;
 
 	nic->pf_acked = false;
 	nic->pf_nacked = false;
-	msg = (u64 *)mbx;
-	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_1;
 
-	writeq_relaxed(*(msg), (void *)mbx_addr);
-	writeq_relaxed(*(msg + 1), (void *)(mbx_addr + 8));
+	nicvf_reg_write(nic, NIC_VF_PF_MAILBOX_0_1 + 0, msg[0]);
+	nicvf_reg_write(nic, NIC_VF_PF_MAILBOX_0_1 + 8, msg[1]);
 
 	/* Wait for previous message to be acked, timeout 2sec */
 	while (!nic->pf_acked) {
@@ -1269,7 +1262,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->pdev = pdev;
 
 	/* MAP VF's configuration registers */
-	nic->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	nic->reg_base = pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
 	if (!nic->reg_base) {
 		dev_err(dev, "Cannot map config register space, aborting\n");
 		err = -ENOMEM;
@@ -1313,7 +1306,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 err_unmap_resources:
 	if (nic->reg_base)
-		iounmap((void *)nic->reg_base);
+		iounmap(nic->reg_base);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
@@ -1337,7 +1330,7 @@ static void nicvf_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 
 	if (nic->reg_base)
-		iounmap((void *)nic->reg_base);
+		iounmap(nic->reg_base);
 
 	/* Free Qset */
 	kfree(nic->qs);
