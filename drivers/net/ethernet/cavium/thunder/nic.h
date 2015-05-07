@@ -263,41 +263,6 @@ struct nicvf {
 	bool			irq_allocated[NIC_VF_MSIX_VECTORS];
 } ____cacheline_aligned_in_smp;
 
-struct nicpf {
-	struct net_device	*netdev;
-	struct pci_dev		*pdev;
-	u8			rev_id;
-#define NIC_NODE_ID_MASK	0x300000000000
-#define NIC_NODE_ID(x)		((x & NODE_ID_MASK) >> 44)
-	u8			node;
-	unsigned int		flags;
-	u16			total_vf_cnt;   /* Total num of VF supported */
-	u8			num_vf_en;      /* No of VF enabled */
-	bool			vf_enabled[MAX_NUM_VFS_SUPPORTED];
-	u64			reg_base;       /* Register start address */
-	struct pkind_cfg	pkind;
-	u8			bgx_cnt;
-#define	NIC_SET_VF_LMAC_MAP(bgx, lmac)	(((bgx & 0xF) << 4) | (lmac & 0xF))
-#define	NIC_GET_BGX_FROM_VF_LMAC_MAP(map)	((map >> 4) & 0xF)
-#define	NIC_GET_LMAC_FROM_VF_LMAC_MAP(map)	(map & 0xF)
-	u8			vf_lmac_map[MAX_LMAC];
-	struct delayed_work     dwork;
-	struct workqueue_struct *check_link;
-	u8			link[MAX_LMAC];
-	u8			duplex[MAX_LMAC];
-	u32			speed[MAX_LMAC];
-	u16			cpi_base[MAX_NUM_VFS_SUPPORTED];
-	u16			rss_ind_tbl_size;
-	u64			mac[MAX_NUM_VFS_SUPPORTED];
-	bool			mbx_lock[MAX_NUM_VFS_SUPPORTED];
-
-	/* MSI-X */
-	bool			msix_enabled;
-	u8			num_vec;
-	struct msix_entry	msix_entries[NIC_PF_MSIX_VECTORS];
-	bool			irq_allocated[NIC_PF_MSIX_VECTORS];
-} ____cacheline_aligned_in_smp;
-
 /* PF <--> VF Mailbox communication
  * Eight 64bit registers are shared between PF and VF.
  * Separate set for each VF.
