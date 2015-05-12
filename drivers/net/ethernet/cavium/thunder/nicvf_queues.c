@@ -18,6 +18,7 @@
 #include "nicvf_queues.h"
 
 struct rbuf_info {
+	struct page *page;
 	void	*data;
 	u64	offset;
 };
@@ -82,21 +83,40 @@ static void nicvf_free_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem)
  * into RBDR ring, so save buffer address at the start of fragment and
  * align the start address to a cache aligned address
  */
-static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic,
-					 u64 buf_len, u64 **rbuf)
+static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic, gfp_t gfp,
+					 u32 buf_len, u64 **rbuf)
 {
 	u64 data;
 	struct rbuf_info *rinfo;
+	int order = get_order(buf_len);
 
-	/* SKB is built after packet is received */
-	data = (u64)netdev_alloc_frag(buf_len);
-	if (!data) {
-		netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
-		return -ENOMEM;
+	/* Check if request can be accomodated in previous allocated page */
+	if (nic->rb_page) {
+		if ((nic->rb_page_offset + buf_len + buf_len) >
+		    (PAGE_SIZE << order)) {
+			nic->rb_page = NULL;
+		} else {
+			nic->rb_page_offset += buf_len;
+			get_page(nic->rb_page);
+		}
 	}
+
+	/* Allocate a new page */
+	if (!nic->rb_page) {
+		nic->rb_page = alloc_pages(gfp | __GFP_COMP, order);
+		if (!nic->rb_page) {
+			netdev_err(nic->netdev, "Failed to allocate new rcv buffer\n");
+			return -ENOMEM;
+		}
+		nic->rb_page_offset = 0;
+	}
+
+	data = (u64)page_address(nic->rb_page) + nic->rb_page_offset;
 
 	/* Align buffer addr to cache line i.e 128 bytes */
 	rinfo = (struct rbuf_info *)(data + NICVF_RCV_BUF_ALIGN_LEN(data));
+	/* Save page address for reference updation */
+	rinfo->page = nic->rb_page;
 	/* Store start address for later retrieval */
 	rinfo->data = (void *)data;
 	/* Store alignment offset */
@@ -110,7 +130,8 @@ static inline int nicvf_alloc_rcv_buffer(struct nicvf *nic,
 }
 
 /* Retrieve actual buffer start address and build skb for received packet */
-static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, u64 rb_ptr)
+static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic,
+					   u64 rb_ptr, int len)
 {
 	struct sk_buff *skb;
 	struct rbuf_info *rinfo;
@@ -122,9 +143,10 @@ static struct sk_buff *nicvf_rb_ptr_to_skb(struct nicvf *nic, u64 rb_ptr)
 	/* Now build an skb to give to stack */
 	skb = build_skb(rinfo->data, RCV_FRAG_LEN);
 	if (!skb) {
-		put_page(virt_to_head_page(rinfo->data));
+		put_page(rinfo->page);
 		return NULL;
 	}
+
 	/* Set correct skb->data */
 	skb_reserve(skb, rinfo->offset + NICVF_RCV_BUF_ALIGN_BYTES);
 
@@ -154,8 +176,10 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	rbdr->enable = true;
 	rbdr->thresh = RBDR_THRESH;
 
+	nic->rb_page = NULL;
 	for (idx = 0; idx < ring_len; idx++) {
-		if (nicvf_alloc_rcv_buffer(nic, RCV_FRAG_LEN, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, GFP_KERNEL,
+					   RCV_FRAG_LEN, &rbuf))
 			return -ENOMEM;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
@@ -187,7 +211,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 		desc = GET_RBDR_DESC(rbdr, head);
 		buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
 		rinfo = GET_RBUF_INFO((u64)phys_to_virt(buf_addr));
-		put_page(virt_to_head_page(rinfo->data));
+		put_page(rinfo->page);
 		head++;
 		head &= (rbdr->dmem.q_len - 1);
 	}
@@ -195,18 +219,16 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 	desc = GET_RBDR_DESC(rbdr, tail);
 	buf_addr = desc->buf_addr << NICVF_RCV_BUF_ALIGN;
 	rinfo = GET_RBUF_INFO((u64)phys_to_virt(buf_addr));
-	put_page(virt_to_head_page(rinfo->data));
+	put_page(rinfo->page);
 
 	/* Free RBDR ring */
 	nicvf_free_q_desc_mem(nic, &rbdr->dmem);
 }
 
 /* Refill receive buffer descriptors with new buffers.
- * This runs in softirq context .
  */
-void nicvf_refill_rbdr(unsigned long data)
+void nicvf_refill_rbdr(struct nicvf *nic, gfp_t gfp)
 {
-	struct nicvf *nic = (struct nicvf *)data;
 	struct queue_set *qs = nic->qs;
 	int rbdr_idx = qs->rbdr_cnt;
 	int tail, qcount;
@@ -214,6 +236,7 @@ void nicvf_refill_rbdr(unsigned long data)
 	struct rbdr *rbdr;
 	struct rbdr_entry_t *desc;
 	u64 *rbuf;
+	int new_rb = 0;
 
 refill:
 	if (!rbdr_idx)
@@ -227,9 +250,11 @@ refill:
 	/* Get no of desc's to be refilled */
 	qcount = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_STATUS0, rbdr_idx);
 	qcount &= 0x7FFFF;
-
-	/* Get no of desc's to be refilled */
-	refill_rb_cnt = qs->rbdr_len - qcount - 1;
+	/* Doorbell can be ringed with a max of ring size minus 1 */
+	if (qcount >= (qs->rbdr_len - 1))
+		goto next_rbdr;
+	else
+		refill_rb_cnt = qs->rbdr_len - qcount - 1;
 
 	/* Start filling descs from tail */
 	tail = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_TAIL, rbdr_idx) >> 3;
@@ -237,23 +262,58 @@ refill:
 		tail++;
 		tail &= (rbdr->dmem.q_len - 1);
 
-		if (nicvf_alloc_rcv_buffer(nic, RCV_FRAG_LEN, &rbuf))
+		if (nicvf_alloc_rcv_buffer(nic, gfp, RCV_FRAG_LEN, &rbuf))
 			break;
 
 		desc = GET_RBDR_DESC(rbdr, tail);
 		desc->buf_addr = virt_to_phys(rbuf) >> NICVF_RCV_BUF_ALIGN;
 		refill_rb_cnt--;
+		new_rb++;
 	}
+
+	/* make sure all memory stores are done before ringing doorbell */
+	smp_wmb();
+
+	/* Check if buffer allocation failed */
+	if (refill_rb_cnt)
+		nic->rb_alloc_fail = true;
+	else
+		nic->rb_alloc_fail = false;
+
 	/* Notify HW */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_DOOR,
-			      rbdr_idx, qs->rbdr_len - qcount - 1);
+			      rbdr_idx, new_rb);
 next_rbdr:
+	/* Re-enable RBDR interrupts only if buffer allocation is success */
+	if (!nic->rb_alloc_fail && rbdr->enable)
+		nicvf_enable_intr(nic, NICVF_INTR_RBDR, rbdr_idx);
+
 	if (rbdr_idx)
 		goto refill;
+}
 
-	/* Re-enable RBDR interrupts */
-	for (rbdr_idx = 0; rbdr_idx < qs->rbdr_cnt; rbdr_idx++)
-		nicvf_enable_intr(nic, NICVF_INTR_RBDR, rbdr_idx);
+/* Alloc rcv buffers in non-atomic mode for better success */
+void nicvf_rbdr_work(struct work_struct *work)
+{
+	struct nicvf *nic = container_of(work, struct nicvf, rbdr_work.work);
+
+	nicvf_refill_rbdr(nic, GFP_KERNEL);
+	if (nic->rb_alloc_fail)
+		schedule_delayed_work(&nic->rbdr_work, msecs_to_jiffies(10));
+	else
+		nic->rb_work_scheduled = false;
+}
+
+/* In Softirq context, alloc rcv buffers in atomic mode */
+void nicvf_rbdr_task(unsigned long data)
+{
+	struct nicvf *nic = (struct nicvf *)data;
+
+	nicvf_refill_rbdr(nic, GFP_ATOMIC);
+	if (nic->rb_alloc_fail) {
+		nic->rb_work_scheduled = true;
+		schedule_delayed_work(&nic->rbdr_work, msecs_to_jiffies(10));
+	}
 }
 
 /* Initialize completion queue */
@@ -1003,14 +1063,16 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 		if (!frag) {
 			/* First fragment */
 			skb = nicvf_rb_ptr_to_skb(nic,
-						  *rb_ptrs - cqe_rx->align_pad);
+						  *rb_ptrs - cqe_rx->align_pad,
+						  payload_len);
 			if (!skb)
 				return NULL;
 			skb_reserve(skb, cqe_rx->align_pad);
 			skb_put(skb, payload_len);
 		} else {
 			/* Add fragments */
-			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs);
+			skb_frag = nicvf_rb_ptr_to_skb(nic, *rb_ptrs,
+						       payload_len);
 			if (!skb_frag) {
 				dev_kfree_skb(skb);
 				return NULL;

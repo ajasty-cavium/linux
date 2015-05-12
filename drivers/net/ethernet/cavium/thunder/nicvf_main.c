@@ -683,11 +683,13 @@ static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
 	rbdr_intr = (intr & NICVF_INTR_RBDR_MASK) >> NICVF_INTR_RBDR_SHIFT;
 	if (rbdr_intr) {
 		/* Disable RBDR interrupt and schedule softirq */
-		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++)
+		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
+			if (!nicvf_is_intr_enabled(nic, NICVF_INTR_RBDR, qidx))
+				continue;
 			nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
-
-		clear_intr |= (rbdr_intr << NICVF_INTR_RBDR_SHIFT);
-		tasklet_hi_schedule(&nic->rbdr_task);
+			tasklet_hi_schedule(&nic->rbdr_task);
+			clear_intr |= ((1 << qidx) << NICVF_INTR_RBDR_SHIFT);
+		}
 	}
 
 	/* Clear interrupts */
@@ -909,6 +911,8 @@ int nicvf_stop(struct net_device *netdev)
 
 	tasklet_kill(&nic->rbdr_task);
 	tasklet_kill(&nic->qs_err_task);
+	if (nic->rb_work_scheduled)
+		cancel_delayed_work_sync(&nic->rbdr_work);
 
 	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
 		cq_poll = nic->napi[qidx];
@@ -980,8 +984,9 @@ int nicvf_open(struct net_device *netdev)
 		     (unsigned long)nic);
 
 	/* Init RBDR tasklet which will refill RBDR */
-	tasklet_init(&nic->rbdr_task, nicvf_refill_rbdr,
+	tasklet_init(&nic->rbdr_task, nicvf_rbdr_task,
 		     (unsigned long)nic);
+	INIT_DELAYED_WORK(&nic->rbdr_work, nicvf_rbdr_work);
 
 	/* Configure CPI alorithm */
 	nic->cpi_alg = cpi_alg;

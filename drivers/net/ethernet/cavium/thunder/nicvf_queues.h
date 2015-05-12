@@ -83,7 +83,7 @@
 #define DMA_BUFFER_LEN		2048 /* In multiples of 128bytes */
 #define RCV_FRAG_LEN		(SKB_DATA_ALIGN(DMA_BUFFER_LEN + NET_SKB_PAD) +\
 				SKB_DATA_ALIGN(sizeof(struct skb_shared_info))+\
-				NICVF_RCV_BUF_ALIGN_BYTES)
+				(NICVF_RCV_BUF_ALIGN_BYTES * 2))
 #define RCV_DATA_OFFSET		NICVF_RCV_BUF_ALIGN_BYTES
 
 #define MAX_CQES_FOR_TX		((SND_QUEUE_LEN / MIN_SQ_DESC_PER_PKT_XMIT) *\
@@ -256,7 +256,7 @@ struct rbdr {
 	bool		enable;
 	u32		dma_size;
 	u32		frag_len;
-	u32		thresh;      /* Threshold level for interrupt */
+	u32		thresh;		/* Threshold level for interrupt */
 	void		*desc;
 	u32		head;
 	u32		tail;
@@ -350,7 +350,8 @@ void nicvf_sq_free_used_descs(struct net_device *netdev,
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb);
 
 struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx);
-void nicvf_refill_rbdr(unsigned long data);
+void nicvf_rbdr_task(unsigned long data);
+void nicvf_rbdr_work(struct work_struct *work);
 
 void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx);
 void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx);

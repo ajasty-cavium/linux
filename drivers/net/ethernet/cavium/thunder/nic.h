@@ -238,6 +238,11 @@ struct nicvf {
 	bool			link_up;
 	u8			duplex;
 	u32			speed;
+	struct page		*rb_page;
+	u32			rb_page_offset;
+	bool			rb_alloc_fail;
+	bool			rb_work_scheduled;
+	struct delayed_work	rbdr_work;
 	struct tasklet_struct	rbdr_task;
 	struct tasklet_struct	qs_err_task;
 	struct tasklet_struct	cq_task;
