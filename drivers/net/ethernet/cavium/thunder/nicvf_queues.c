@@ -519,7 +519,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 #ifdef CONFIG_RPS
 	cq = &qs->cq[qidx];
 	/* Set RPS CPU map */
-	cpumask_copy(rps_mask, cpu_online_mask);
+	cpumask_copy(rps_mask, cpumask_of_node(nic->node));
 	cpumask_clear_cpu(cpumask_first(&cq->affinity_mask), rps_mask);
 
 	rxqueue = nic->netdev->_rx + qidx;
