@@ -40,7 +40,6 @@ struct nicpf {
 	u32			speed[MAX_LMAC];
 	u16			cpi_base[MAX_NUM_VFS_SUPPORTED];
 	u16			rss_ind_tbl_size;
-	u64			mac[MAX_NUM_VFS_SUPPORTED];
 	bool			mbx_lock[MAX_NUM_VFS_SUPPORTED];
 
 	/* MSI-X */
@@ -125,59 +124,6 @@ static void nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
 	}
 }
 
-/* Function to read MAC addresses from DTS.
- * If not found random MACs will be used by VF interface
- */
-static int nic_get_mac_addresses(struct nicpf *nic)
-{
-	struct device_node *np, *np_child;
-	u32  nplen;
-	u8  *np_ptr = NULL, node[10], next_range_off = 10;
-	u32  i, mac_count = 0, range, mac_range;
-	u64  start_mac = 0, next_mac  = 0;
-
-	/* Check if MAC ID list is present in DTS */
-	np = of_find_node_by_name(NULL, "ethernet-macs");
-	if (!np)
-		return -ENODEV;
-
-	/* Check if MAC ID list is available for this node (NUMA) */
-	sprintf(node, "node%d", nic->node);
-	np_child = of_get_child_by_name(np, node);
-	if (!np_child)
-		return -ENODEV;
-
-	np_ptr = (u8 *)of_get_property(np_child, "mac", &nplen);
-	if (!np_ptr)
-		return -ENODEV;
-
-	for (range = 0; range < nplen; range = range + next_range_off) {
-		/* get first mac into cpu format */
-		memcpy(&start_mac, np_ptr + range, 8);
-#ifdef __BIG_ENDIAN
-		start_mac = start_mac >> 16; /* MACADDR is only 48bits */
-#else
-		start_mac = start_mac << 16;
-#endif
-		start_mac = be64_to_cpu(start_mac);
-		next_mac  = start_mac;
-		/* get range length for given range */
-		mac_range = be32_to_cpup((u32 *)(np_ptr + range + ETH_ALEN));
-		for (i = 0; i < mac_range && i < MAX_NUM_VFS_SUPPORTED; i++) {
-#ifdef __BIG_ENDIAN
-			nic->mac[mac_count++] =
-				cpu_to_be64(next_mac) << 16;
-#else
-			nic->mac[mac_count++] =
-				cpu_to_be64(next_mac) >> 16;
-#endif
-			next_mac++;
-		}
-	}
-
-	return 0;
-}
-
 /* Responds to VF's READY message with VF's
  * ID, node, MAC address e.t.c
  * @vf: VF which sent READY message
@@ -185,6 +131,8 @@ static int nic_get_mac_addresses(struct nicpf *nic)
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 {
 	struct nic_mbx mbx = {};
+	int bgx_idx, lmac;
+	const char *mac;
 
 	mbx.msg = NIC_MBOX_MSG_READY;
 	mbx.data.nic_cfg.vf_id = vf;
@@ -193,8 +141,14 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_MODE;
 	else
 		mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
-	ether_addr_copy((u8 *)&mbx.data.nic_cfg.mac_addr,
-			(u8 *)&nic->mac[vf]);
+
+	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+
+	mac = bgx_get_lmac_mac(nic->node, bgx_idx, lmac);
+	if (mac)
+		ether_addr_copy((u8 *)&mbx.data.nic_cfg.mac_addr, mac);
+
 	mbx.data.nic_cfg.node_id = nic->node;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
@@ -629,7 +583,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #else
 		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) >> 16;
 #endif
-		ether_addr_copy((u8 *)&nic->mac[vf], (u8 *)&mac_addr);
+		bgx_set_lmac_mac(nic->node, bgx, lmac, (u8 *)&mac_addr);
 		break;
 	case NIC_MBOX_MSG_SET_MAX_FRS:
 		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
@@ -957,10 +911,6 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* By default set NIC in TNS bypass mode */
 	nic->flags &= ~NIC_TNS_ENABLED;
 	nic_set_lmac_vf_mapping(nic);
-
-	err = nic_get_mac_addresses(nic);
-	if (err)
-		dev_info(dev, "Mac node not present in dts\n");
 
 	/* Initialize hardware */
 	nic_init_hw(nic);

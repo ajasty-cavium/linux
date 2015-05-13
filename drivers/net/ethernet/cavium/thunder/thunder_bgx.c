@@ -10,10 +10,12 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/acpi.h>
+#include <linux/of_net.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -25,6 +27,7 @@
 struct lmac {
 	struct bgx		*bgx;
 	int			dmac;
+	unsigned char		mac[ETH_ALEN];
 	bool			link_up;
 	int			lmacid; /* ID within BGX */
 	int			lmacid_bd; /* ID on board */
@@ -160,6 +163,28 @@ void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status)
 	link->speed = lmac->last_speed;
 }
 EXPORT_SYMBOL(bgx_get_lmac_link_state);
+
+const char *bgx_get_lmac_mac(int node, int bgx_idx, int lmacid)
+{
+	struct bgx *bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+
+	if (bgx)
+		return bgx->lmac[lmacid].mac;
+
+	return NULL;
+}
+EXPORT_SYMBOL(bgx_get_lmac_mac);
+
+void bgx_set_lmac_mac(int node, int bgx_idx, int lmacid, const char *mac)
+{
+	struct bgx *bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+
+	if (!bgx)
+		return;
+
+	ether_addr_copy(bgx->lmac[lmacid].mac, mac);
+}
+EXPORT_SYMBOL(bgx_set_lmac_mac);
 
 static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
@@ -921,42 +946,35 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 	return AE_CTRL_TERMINATE;
 }
 
-static int
-bgx_init_acpi_phy(struct bgx *bgx)
+static void
+bgx_init_acpi(struct bgx *bgx)
 {
 	acpi_get_devices(NULL, bgx_acpi_match_id, bgx, (void **)NULL);
-	return 0;
 }
 
 #else
-static int
-bgx_init_acpi_phy(struct bgx *bgx)
+static void
+bgx_init_acpi(struct bgx *bgx)
 {
-	return -ENODEV;
 }
 #endif
 
-#ifdef CONFIG_OF_MDIO
-static int
-bgx_init_of_phy(struct bgx *bgx)
+static void bgx_init_of(struct bgx *bgx, struct device_node *np)
 {
-	struct device_node *np;
 	struct device_node *np_child;
 	u8 lmac = 0;
-	char bgx_sel[5];
-
-	/* Get BGX node from DT */
-	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
-	np = of_find_node_by_name(NULL, bgx_sel);
-	if (!np)
-		return -ENODEV;
 
 	for_each_child_of_node(np, np_child) {
-		struct device_node *phy_np = of_parse_phandle(np_child,
-							      "phy-handle", 0);
-		if (!phy_np)
-			continue;
-		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+		struct device_node *phy_np;
+		const char *mac;
+
+		phy_np = of_parse_phandle(np_child, "phy-handle", 0);
+		if (phy_np)
+			bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+
+		mac = of_get_mac_address(np_child);
+		if (mac)
+			ether_addr_copy(bgx->lmac[lmac].mac, mac);
 
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &bgx->pdev->dev);
 		bgx->lmac[lmac].lmacid = lmac;
@@ -964,24 +982,6 @@ bgx_init_of_phy(struct bgx *bgx)
 		if (lmac == MAX_LMAC_PER_BGX)
 			break;
 	}
-	return 0;
-}
-#else
-static int
-bgx_init_of_phy(struct bgx *bgx)
-{
-	return -ENODEV;
-}
-#endif
-
-static int bgx_init_phy(struct bgx *bgx)
-{
-	int err = bgx_init_of_phy(bgx);
-
-	if (err != -ENODEV)
-		return err;
-
-	return bgx_init_acpi_phy(bgx);
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -989,6 +989,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct bgx *bgx = NULL;
+	struct device_node *np;
+	char bgx_sel[5];
 	u8 lmac;
 
 	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
@@ -1023,9 +1025,13 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx_vnic[bgx->bgx_id] = bgx;
 	bgx_get_qlm_mode(bgx);
 
-	err = bgx_init_phy(bgx);
-	if (err)
-		goto err_enable;
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np = of_find_node_by_name(NULL, bgx_sel);
+	if (np) {
+		bgx_init_of(bgx, np);
+	} else {
+		bgx_init_acpi(bgx);
+	}
 
 	bgx_init_hw(bgx);
 
