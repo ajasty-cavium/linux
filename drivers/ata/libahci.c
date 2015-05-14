@@ -1830,7 +1830,7 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 {
 	struct ata_host *host = dev_instance;
 	struct ahci_host_priv *hpriv;
-	unsigned int i, handled = 0;
+	unsigned int i, handled = IRQ_NONE;
 	void __iomem *mmio;
 	u32 irq_stat, irq_masked;
 
@@ -1843,7 +1843,7 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 	irq_stat = readl(mmio + HOST_IRQ_STAT);
 redo:
 	if (!irq_stat)
-		return IRQ_NONE;
+		goto out;
 
 	irq_masked = irq_stat & hpriv->port_map;
 
@@ -1890,7 +1890,7 @@ redo:
 	spin_unlock(&host->lock);
 
 	goto redo;
-
+out:
 	VPRINTK("EXIT\n");
 
 	return IRQ_RETVAL(handled);
