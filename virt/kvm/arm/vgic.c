@@ -334,6 +334,9 @@ static int vgic_dist_irq_is_pending(struct kvm_vcpu *vcpu, int irq)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 
+	if (irq >= VGIC_LPI_BASE)
+		irq = irq - VGIC_LPI_BASE + 1 + vcpu->kvm->arch.vgic.nr_irqs;
+
 	return vgic_bitmap_get_irq_val(&dist->irq_pending, vcpu->vcpu_id, irq);
 }
 
@@ -341,12 +344,18 @@ void vgic_dist_irq_set_pending(struct kvm_vcpu *vcpu, int irq)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
 
+	if (irq >= VGIC_LPI_BASE)
+		irq = irq - VGIC_LPI_BASE + 1 + vcpu->kvm->arch.vgic.nr_irqs;
+
 	vgic_bitmap_set_irq_val(&dist->irq_pending, vcpu->vcpu_id, irq, 1);
 }
 
 void vgic_dist_irq_clear_pending(struct kvm_vcpu *vcpu, int irq)
 {
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
+
+	if (irq >= VGIC_LPI_BASE)
+		irq = irq - VGIC_LPI_BASE + 1 + vcpu->kvm->arch.vgic.nr_irqs;
 
 	vgic_bitmap_set_irq_val(&dist->irq_pending, vcpu->vcpu_id, irq, 0);
 }
@@ -1637,7 +1646,7 @@ int vgic_init_common_maps(struct kvm *kvm)
 
 	ret  = vgic_init_bitmap(&dist->irq_enabled, nr_cpus, nr_irqs);
 	ret |= vgic_init_bitmap(&dist->irq_level, nr_cpus, nr_irqs);
-	ret |= vgic_init_bitmap(&dist->irq_pending, nr_cpus, nr_irqs);
+	ret |= vgic_init_bitmap(&dist->irq_pending, nr_cpus, nr_irqs + nr_lpis);
 	ret |= vgic_init_bitmap(&dist->irq_soft_pend, nr_cpus, nr_irqs);
 	ret |= vgic_init_bitmap(&dist->irq_queued, nr_cpus, nr_irqs);
 	ret |= vgic_init_bitmap(&dist->irq_cfg, nr_cpus, nr_irqs);
