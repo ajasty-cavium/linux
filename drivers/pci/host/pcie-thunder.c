@@ -59,6 +59,8 @@ struct thunder_pcie {
 
 int thunder_pem_requester_id(struct pci_dev *dev);
 
+static atomic_t thunder_pcie_ecam_probed;
+
 static int pci_requester_id_ecam(struct pci_dev *dev)
 {
 	return (((pci_domain_nr(dev->bus) >> 2) << 19) |
@@ -112,6 +114,13 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 {
 	struct resource *res;
 	int resno;
+
+	/* If the ECAM is not yet probed, we must be in a virtual
+	 * machine.  In that case, don't mark things as
+	 * IORESOURCE_PCI_FIXED
+	 */
+	if (atomic_read(&thunder_pcie_ecam_probed) == 0)
+		return;
 
 	for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
 		dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
@@ -568,6 +577,8 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	int ret = 0;
 	int primary_bus = 0;
 	LIST_HEAD(res);
+
+	atomic_set(&thunder_pcie_ecam_probed, 1);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
