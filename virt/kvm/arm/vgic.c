@@ -1274,11 +1274,18 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 		}
 #endif
 
+
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
 
+		BUG_ON(vlr.irq >= dist->nr_irqs &&
+			vlr.irq < VGIC_LPI_BASE &&
+			vlr.irq >= dist->nr_lpis);
+		if (vlr.irq >= VGIC_LPI_BASE)
+			lr_irq = vlr.irq - VGIC_LPI_BASE + 1 + dist->nr_irqs;
+		else
+			lr_irq = vlr.irq;
 
-		BUG_ON(vlr.irq >= dist->nr_irqs);
 		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
 	}
 
