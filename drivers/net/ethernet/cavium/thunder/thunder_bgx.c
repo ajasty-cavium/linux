@@ -993,7 +993,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	char bgx_sel[5];
 	u8 lmac;
 
-	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
+	bgx = devm_kzalloc(dev, sizeof(*bgx), GFP_KERNEL);
 	if (!bgx)
 		return -ENOMEM;
 	bgx->pdev = pdev;
@@ -1003,7 +1003,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Failed to enable PCI device\n");
-		goto exit;
+		pci_set_drvdata(pdev, NULL);
+		return err;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -1013,7 +1014,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP configuration registers */
-	bgx->reg_base = pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	bgx->reg_base = pcim_iomap(pdev, PCI_CFG_REG_BAR_NUM, 0);
 	if (!bgx->reg_base) {
 		dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
 		err = -ENOMEM;
@@ -1046,16 +1047,14 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	return 0;
+
 err_enable:
-	if (bgx->reg_base)
-		iounmap(bgx->reg_base);
+	bgx_vnic[bgx->bgx_id] = NULL;
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
-exit:
-	bgx_vnic[bgx->bgx_id] = NULL;
-	kfree(bgx);
+	pci_set_drvdata(pdev, NULL);
 	return err;
 }
 
@@ -1064,20 +1063,14 @@ static void bgx_remove(struct pci_dev *pdev)
 	struct bgx *bgx = pci_get_drvdata(pdev);
 	u8 lmac;
 
-	if (!bgx)
-		return;
 	/* Disable all LMACs */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
 		bgx_lmac_disable(bgx, lmac);
 
-	pci_set_drvdata(pdev, NULL);
-
-	if (bgx->reg_base)
-		iounmap(bgx->reg_base);
-
+	bgx_vnic[bgx->bgx_id] = NULL;
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
-	kfree(bgx);
+	pci_set_drvdata(pdev, NULL);
 }
 
 static struct pci_driver bgx_driver = {

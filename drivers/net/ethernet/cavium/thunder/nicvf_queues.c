@@ -780,7 +780,7 @@ int nicvf_set_qset_resources(struct nicvf *nic)
 {
 	struct queue_set *qs;
 
-	qs = kzalloc(sizeof(*qs), GFP_ATOMIC);
+	qs = devm_kzalloc(&nic->pdev->dev, sizeof(*qs), GFP_KERNEL);
 	if (!qs)
 		return -ENOMEM;
 	nic->qs = qs;

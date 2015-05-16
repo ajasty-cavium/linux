@@ -1224,7 +1224,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Failed to enable PCI device\n");
-		goto exit;
+		return err;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -1262,27 +1262,27 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	nic->pdev = pdev;
 
 	/* MAP VF's configuration registers */
-	nic->reg_base = pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	nic->reg_base = pcim_iomap(pdev, PCI_CFG_REG_BAR_NUM, 0);
 	if (!nic->reg_base) {
 		dev_err(dev, "Cannot map config register space, aborting\n");
 		err = -ENOMEM;
-		goto err_release_regions;
+		goto err_free_netdev;
 	}
 
 	err = nicvf_set_qset_resources(nic);
 	if (err)
-		goto err_unmap_resources;
+		goto err_free_netdev;
 
 	qs = nic->qs;
 
 	err = nicvf_set_real_num_queues(netdev, qs->sq_cnt, qs->rq_cnt);
 	if (err)
-		goto err_unmap_resources;
+		goto err_free_netdev;
 
 	/* Check if PF is alive and get MAC address for this VF */
 	err = nicvf_register_misc_interrupt(nic);
 	if (err)
-		goto err_unmap_resources;
+		goto err_free_netdev;
 
 	netdev->features |= (NETIF_F_RXCSUM | NETIF_F_IP_CSUM | NETIF_F_SG |
 			     NETIF_F_TSO | NETIF_F_GRO);
@@ -1295,49 +1295,38 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = register_netdev(netdev);
 	if (err) {
 		dev_err(dev, "Failed to register netdevice\n");
-		goto err_unmap_resources;
+		goto err_unregister_interrupts;
 	}
 
 	nic->msg_enable = debug;
 
 	nicvf_set_ethtool_ops(netdev);
 
-	goto exit;
+	return 0;
 
-err_unmap_resources:
-	if (nic->reg_base)
-		iounmap(nic->reg_base);
+err_unregister_interrupts:
+	nicvf_unregister_interrupts(nic);
+err_free_netdev:
+	pci_set_drvdata(pdev, NULL);
+	free_netdev(netdev);
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
-exit:
 	return err;
 }
 
 static void nicvf_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
-	struct nicvf *nic;
+	struct nicvf *nic = netdev_priv(netdev);
 
-	if (!netdev)
-		return;
-
-	nic = netdev_priv(netdev);
 	unregister_netdev(netdev);
-
 	nicvf_unregister_interrupts(nic);
 	pci_set_drvdata(pdev, NULL);
-
-	if (nic->reg_base)
-		iounmap(nic->reg_base);
-
-	/* Free Qset */
-	kfree(nic->qs);
-
+	free_netdev(netdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
-	free_netdev(netdev);
 }
 
 static struct pci_driver nicvf_driver = {
