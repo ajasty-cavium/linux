@@ -693,9 +693,20 @@ static void nic_disable_msix(struct nicpf *nic)
 	}
 }
 
+static void nic_free_all_interrupts(struct nicpf *nic)
+{
+	int irq;
+
+	for (irq = 0; irq < nic->num_vec; irq++) {
+		if (nic->irq_allocated[irq])
+			free_irq(nic->msix_entries[irq].vector, nic);
+		nic->irq_allocated[irq] = false;
+	}
+}
+
 static int nic_register_interrupts(struct nicpf *nic)
 {
-	int irq, ret = 0;
+	int ret;
 
 	/* Enable MSI-X */
 	ret = nic_enable_msix(nic);
@@ -723,26 +734,13 @@ static int nic_register_interrupts(struct nicpf *nic)
 
 fail:
 	dev_err(&nic->pdev->dev, "Request irq failed\n");
-	for (irq = 0; irq < nic->num_vec; irq++) {
-		if (nic->irq_allocated[irq])
-			free_irq(nic->msix_entries[irq].vector, nic);
-		nic->irq_allocated[irq] = false;
-	}
+	nic_free_all_interrupts(nic);
 	return ret;
 }
 
 static void nic_unregister_interrupts(struct nicpf *nic)
 {
-	int irq;
-
-	/* Free registered interrupts */
-	for (irq = 0; irq < nic->num_vec; irq++) {
-		if (nic->irq_allocated[irq])
-			free_irq(nic->msix_entries[irq].vector, nic);
-		nic->irq_allocated[irq] = false;
-	}
-
-	/* Disable MSI-X */
+	nic_free_all_interrupts(nic);
 	nic_disable_msix(nic);
 }
 
