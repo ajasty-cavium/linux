@@ -108,7 +108,7 @@ u64 nicvf_queue_reg_read(struct nicvf *nic, u64 offset, u64 qidx)
 	return readq_relaxed(addr + (qidx << NIC_Q_NUM_SHIFT));
 }
 
-int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
+int nicvf_send_msg_to_pf(struct nicvf *nic, union nic_mbx *mbx)
 {
 	int timeout = NIC_MBOX_MSG_TIMEOUT;
 	int sleep = 10;
@@ -131,7 +131,7 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 		if (!timeout) {
 			netdev_err(nic->netdev,
 				   "PF didn't ack to mbox msg %d from VF%d\n",
-				   (mbx->msg & 0xFF), nic->vf_id);
+				   (mbx->msg.msg & 0xFF), nic->vf_id);
 			return -EBUSY;
 		}
 	}
@@ -143,9 +143,9 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 */
 static int nicvf_check_pf_ready(struct nicvf *nic)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_READY;
+	mbx.msg.msg = NIC_MBOX_MSG_READY;
 	if (nicvf_send_msg_to_pf(nic, &mbx)) {
 		netdev_err(nic->netdev,
 			   "PF didn't respond to READY msg\n");
@@ -157,7 +157,7 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 
 static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	u64 *mbx_data;
 	u64 mbx_addr;
 	int i;
@@ -171,15 +171,15 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		mbx_addr += sizeof(u64);
 	}
 
-	netdev_dbg(nic->netdev, "Mbox message from PF, msg 0x%x\n", mbx.msg);
-	switch (mbx.msg) {
+	netdev_dbg(nic->netdev, "Mbox message: msg: 0x%x\n", mbx.msg.msg);
+	switch (mbx.msg.msg) {
 	case NIC_MBOX_MSG_READY:
 		nic->pf_acked = true;
-		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
-		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
-		nic->node = mbx.data.nic_cfg.node_id;
+		nic->vf_id = mbx.nic_cfg.vf_id & 0x7F;
+		nic->tns_mode = mbx.nic_cfg.tns_mode & 0x7F;
+		nic->node = mbx.nic_cfg.node_id;
 		ether_addr_copy(nic->netdev->dev_addr,
-				(u8 *)&mbx.data.nic_cfg.mac_addr);
+				(u8 *)&mbx.nic_cfg.mac_addr);
 		nic->link_up = false;
 		nic->duplex = 0;
 		nic->speed = 0;
@@ -192,19 +192,19 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		break;
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_MBOX_MSG_RSS_SIZE:
-		nic->rss_info.rss_size = mbx.data.rss_size.ind_tbl_size;
+		nic->rss_info.rss_size = mbx.rss_size.ind_tbl_size;
 		nic->pf_acked = true;
 		break;
 #endif
 	case NIC_MBOX_MSG_BGX_STATS:
-		nicvf_read_bgx_stats(nic, &mbx.data.bgx_stats);
+		nicvf_read_bgx_stats(nic, &mbx.bgx_stats);
 		nic->pf_acked = true;
 		break;
 	case NIC_MBOX_MSG_BGX_LINK_CHANGE:
 		nic->pf_acked = true;
-		nic->link_up = mbx.data.link_status.link_up;
-		nic->duplex = mbx.data.link_status.duplex;
-		nic->speed = mbx.data.link_status.speed;
+		nic->link_up = mbx.link_status.link_up;
+		nic->duplex = mbx.link_status.duplex;
+		nic->speed = mbx.link_status.speed;
 		if (nic->link_up) {
 			netdev_info(nic->netdev, "%s: Link is Up %d Mbps %s\n",
 				    nic->netdev->name, nic->speed,
@@ -221,7 +221,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		break;
 	default:
 		netdev_err(nic->netdev,
-			   "Invalid message from PF, msg 0x%x\n", mbx.msg);
+			   "Invalid message from PF, msg 0x%x\n", mbx.msg.msg);
 		break;
 	}
 	nicvf_clear_intr(nic, NICVF_INTR_MBOX, 0);
@@ -229,13 +229,13 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 
 static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	int i;
 
-	mbx.msg = NIC_MBOX_MSG_SET_MAC;
-	mbx.data.mac.vf_id = nic->vf_id;
+	mbx.mac.msg = NIC_MBOX_MSG_SET_MAC;
+	mbx.mac.vf_id = nic->vf_id;
 	for (i = 0; i < ETH_ALEN; i++)
-		mbx.data.mac.addr = (mbx.data.mac.addr << 8) |
+		mbx.mac.addr = (mbx.mac.addr << 8) |
 				     netdev->dev_addr[i];
 
 	return nicvf_send_msg_to_pf(nic, &mbx);
@@ -243,12 +243,12 @@ static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 
 void nicvf_config_cpi(struct nicvf *nic)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_CPI_CFG;
-	mbx.data.cpi_cfg.vf_id = nic->vf_id;
-	mbx.data.cpi_cfg.cpi_alg = nic->cpi_alg;
-	mbx.data.cpi_cfg.rq_cnt = nic->qs->rq_cnt;
+	mbx.cpi_cfg.msg = NIC_MBOX_MSG_CPI_CFG;
+	mbx.cpi_cfg.vf_id = nic->vf_id;
+	mbx.cpi_cfg.cpi_alg = nic->cpi_alg;
+	mbx.cpi_cfg.rq_cnt = nic->qs->rq_cnt;
 
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
@@ -256,35 +256,35 @@ void nicvf_config_cpi(struct nicvf *nic)
 #ifdef	VNIC_RSS_SUPPORT
 void nicvf_get_rss_size(struct nicvf *nic)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_RSS_SIZE;
-	mbx.data.rss_size.vf_id = nic->vf_id;
+	mbx.rss_size.msg = NIC_MBOX_MSG_RSS_SIZE;
+	mbx.rss_size.vf_id = nic->vf_id;
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
 
 void nicvf_config_rss(struct nicvf *nic)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	struct nicvf_rss_info *rss = &nic->rss_info;
 	int ind_tbl_len = rss->rss_size;
 	int i, nextq = 0;
 
-	mbx.data.rss_cfg.vf_id = nic->vf_id;
-	mbx.data.rss_cfg.hash_bits = rss->hash_bits;
+	mbx.rss_cfg.vf_id = nic->vf_id;
+	mbx.rss_cfg.hash_bits = rss->hash_bits;
 	while (ind_tbl_len) {
-		mbx.data.rss_cfg.tbl_offset = nextq;
-		mbx.data.rss_cfg.tbl_len = min(ind_tbl_len,
+		mbx.rss_cfg.tbl_offset = nextq;
+		mbx.rss_cfg.tbl_len = min(ind_tbl_len,
 					       RSS_IND_TBL_LEN_PER_MBX_MSG);
-		mbx.msg = mbx.data.rss_cfg.tbl_offset ?
+		mbx.rss_cfg.msg = mbx.rss_cfg.tbl_offset ?
 			  NIC_MBOX_MSG_RSS_CFG_CONT : NIC_MBOX_MSG_RSS_CFG;
 
-		for (i = 0; i < mbx.data.rss_cfg.tbl_len; i++)
-			mbx.data.rss_cfg.ind_tbl[i] = rss->ind_tbl[nextq++];
+		for (i = 0; i < mbx.rss_cfg.tbl_len; i++)
+			mbx.rss_cfg.ind_tbl[i] = rss->ind_tbl[nextq++];
 
 		nicvf_send_msg_to_pf(nic, &mbx);
 
-		ind_tbl_len -= mbx.data.rss_cfg.tbl_len;
+		ind_tbl_len -= mbx.rss_cfg.tbl_len;
 	}
 }
 
@@ -873,9 +873,9 @@ int nicvf_stop(struct net_device *netdev)
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_SHUTDOWN;
+	mbx.msg.msg = NIC_MBOX_MSG_SHUTDOWN;
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	netif_carrier_off(netdev);
@@ -1027,11 +1027,11 @@ napi_del:
 
 static int nicvf_update_hw_max_frs(struct nicvf *nic, int mtu)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_SET_MAX_FRS;
-	mbx.data.frs.max_frs = mtu;
-	mbx.data.frs.vf_id = nic->vf_id;
+	mbx.frs.msg = NIC_MBOX_MSG_SET_MAX_FRS;
+	mbx.frs.max_frs = mtu;
+	mbx.frs.vf_id = nic->vf_id;
 
 	return nicvf_send_msg_to_pf(nic, &mbx);
 }
@@ -1082,17 +1082,17 @@ static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx)
 void nicvf_update_lmac_stats(struct nicvf *nic)
 {
 	int stat = 0;
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
 	if (!netif_running(nic->netdev))
 		return;
 
-	mbx.msg = NIC_MBOX_MSG_BGX_STATS;
-	mbx.data.bgx_stats.vf_id = nic->vf_id;
+	mbx.bgx_stats.msg = NIC_MBOX_MSG_BGX_STATS;
+	mbx.bgx_stats.vf_id = nic->vf_id;
 	/* Rx stats */
-	mbx.data.bgx_stats.rx = 1;
+	mbx.bgx_stats.rx = 1;
 	while (stat < BGX_RX_STATS_COUNT) {
-		mbx.data.bgx_stats.idx = stat;
+		mbx.bgx_stats.idx = stat;
 		if (nicvf_send_msg_to_pf(nic, &mbx))
 			return;
 		stat++;
@@ -1101,9 +1101,9 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	stat = 0;
 
 	/* Tx stats */
-	mbx.data.bgx_stats.rx = 0;
+	mbx.bgx_stats.rx = 0;
 	while (stat < BGX_TX_STATS_COUNT) {
-		mbx.data.bgx_stats.idx = stat;
+		mbx.bgx_stats.idx = stat;
 		if (nicvf_send_msg_to_pf(nic, &mbx))
 			return;
 		stat++;

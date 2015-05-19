@@ -103,7 +103,7 @@ static u64 nic_get_mbx_addr(int vf)
  * @vf: vf to which this message to be sent
  * @mbx: Message to be sent
  */
-static void nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
+static void nic_send_msg_to_vf(struct nicpf *nic, int vf, union nic_mbx *mbx)
 {
 	void __iomem *mbx_addr = nic->reg_base + nic_get_mbx_addr(vf);
 	u64 *msg = (u64 *)mbx;
@@ -130,26 +130,26 @@ static void nic_send_msg_to_vf(struct nicpf *nic, int vf, struct nic_mbx *mbx)
  */
 static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	int bgx_idx, lmac;
 	const char *mac;
 
-	mbx.msg = NIC_MBOX_MSG_READY;
-	mbx.data.nic_cfg.vf_id = vf;
+	mbx.nic_cfg.msg = NIC_MBOX_MSG_READY;
+	mbx.nic_cfg.vf_id = vf;
 
 	if (nic->flags & NIC_TNS_ENABLED)
-		mbx.data.nic_cfg.tns_mode = NIC_TNS_MODE;
+		mbx.nic_cfg.tns_mode = NIC_TNS_MODE;
 	else
-		mbx.data.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
+		mbx.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
 
 	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
 
 	mac = bgx_get_lmac_mac(nic->node, bgx_idx, lmac);
 	if (mac)
-		ether_addr_copy((u8 *)&mbx.data.nic_cfg.mac_addr, mac);
+		ether_addr_copy((u8 *)&mbx.nic_cfg.mac_addr, mac);
 
-	mbx.data.nic_cfg.node_id = nic->node;
+	mbx.nic_cfg.node_id = nic->node;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
@@ -158,9 +158,9 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
  */
 static void nic_mbx_send_ack(struct nicpf *nic, int vf)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_ACK;
+	mbx.msg.msg = NIC_MBOX_MSG_ACK;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
@@ -170,9 +170,9 @@ static void nic_mbx_send_ack(struct nicpf *nic, int vf)
  */
 static void nic_mbx_send_nack(struct nicpf *nic, int vf)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
-	mbx.msg = NIC_MBOX_MSG_NACK;
+	mbx.msg.msg = NIC_MBOX_MSG_NACK;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
@@ -202,20 +202,20 @@ static int nic_rcv_queue_sw_sync(struct nicpf *nic)
 static void nic_get_bgx_stats(struct nicpf *nic, struct bgx_stats_msg *bgx)
 {
 	int bgx_idx, lmac;
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
 	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
 	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[bgx->vf_id]);
 
-	mbx.msg = NIC_MBOX_MSG_BGX_STATS;
-	mbx.data.bgx_stats.vf_id = bgx->vf_id;
-	mbx.data.bgx_stats.rx = bgx->rx;
-	mbx.data.bgx_stats.idx = bgx->idx;
+	mbx.bgx_stats.msg = NIC_MBOX_MSG_BGX_STATS;
+	mbx.bgx_stats.vf_id = bgx->vf_id;
+	mbx.bgx_stats.rx = bgx->rx;
+	mbx.bgx_stats.idx = bgx->idx;
 	if (bgx->rx)
-		mbx.data.bgx_stats.stats = bgx_get_rx_stats(nic->node, bgx_idx,
+		mbx.bgx_stats.stats = bgx_get_rx_stats(nic->node, bgx_idx,
 							    lmac, bgx->idx);
 	else
-		mbx.data.bgx_stats.stats = bgx_get_tx_stats(nic->node, bgx_idx,
+		mbx.bgx_stats.stats = bgx_get_tx_stats(nic->node, bgx_idx,
 							    lmac, bgx->idx);
 	nic_send_msg_to_vf(nic, bgx->vf_id, &mbx);
 }
@@ -422,13 +422,13 @@ static void nic_config_cpi(struct nicpf *nic, struct cpi_cfg_msg *cfg)
 /* Responsds to VF with its RSS indirection table size */
 static void nic_send_rss_size(struct nicpf *nic, int vf)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	u64  *msg;
 
 	msg = (u64 *)&mbx;
 
-	mbx.msg = NIC_MBOX_MSG_RSS_SIZE;
-	mbx.data.rss_size.ind_tbl_size = nic->rss_ind_tbl_size;
+	mbx.rss_size.msg = NIC_MBOX_MSG_RSS_SIZE;
+	mbx.rss_size.ind_tbl_size = nic->rss_ind_tbl_size;
 	nic_send_msg_to_vf(nic, vf, &mbx);
 }
 
@@ -511,7 +511,7 @@ static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic, u8 sq_idx)
 /* Interrupt handler to handle mailbox messages from VFs */
 static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	u64 *mbx_data;
 	u64 mbx_addr;
 	u64 reg_addr;
@@ -532,8 +532,8 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	}
 
 	dev_dbg(&nic->pdev->dev, "%s: Mailbox msg %d from VF%d\n",
-		__func__, mbx.msg, vf);
-	switch (mbx.msg) {
+		__func__, mbx.msg.msg, vf);
+	switch (mbx.msg.msg) {
 	case NIC_MBOX_MSG_READY:
 		nic_mbx_send_ready(nic, vf);
 		nic->link[vf] = 0;
@@ -543,54 +543,54 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		break;
 	case NIC_MBOX_MSG_QS_CFG:
 		reg_addr = NIC_PF_QSET_0_127_CFG |
-			   (mbx.data.qs.num << NIC_QS_ID_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.qs.cfg);
+			   (mbx.qs.num << NIC_QS_ID_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.qs.cfg);
 		break;
 	case NIC_MBOX_MSG_RQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+			   (mbx.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.rq.cfg);
 		break;
 	case NIC_MBOX_MSG_RQ_BP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_BP_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+			   (mbx.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.rq.cfg);
 		break;
 	case NIC_MBOX_MSG_RQ_SW_SYNC:
 		ret = nic_rcv_queue_sw_sync(nic);
 		break;
 	case NIC_MBOX_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
-			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
+			   (mbx.rq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.rq.rq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.rq.cfg);
 		break;
 	case NIC_MBOX_MSG_SQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
-			   (mbx.data.sq.qs_num << NIC_QS_ID_SHIFT) |
-			   (mbx.data.sq.sq_num << NIC_Q_NUM_SHIFT);
-		nic_reg_write(nic, reg_addr, mbx.data.sq.cfg);
-		nic_tx_channel_cfg(nic, mbx.data.qs.num, mbx.data.sq.sq_num);
+			   (mbx.sq.qs_num << NIC_QS_ID_SHIFT) |
+			   (mbx.sq.sq_num << NIC_Q_NUM_SHIFT);
+		nic_reg_write(nic, reg_addr, mbx.sq.cfg);
+		nic_tx_channel_cfg(nic, mbx.qs.num, mbx.sq.sq_num);
 		break;
 	case NIC_MBOX_MSG_SET_MAC:
-		lmac = mbx.data.mac.vf_id;
+		lmac = mbx.mac.vf_id;
 		bgx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
 		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[lmac]);
 #ifdef __BIG_ENDIAN
-		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) << 16;
+		mac_addr = cpu_to_be64(mbx.nic_cfg.mac_addr) << 16;
 #else
-		mac_addr = cpu_to_be64(mbx.data.nic_cfg.mac_addr) >> 16;
+		mac_addr = cpu_to_be64(mbx.nic_cfg.mac_addr) >> 16;
 #endif
 		bgx_set_lmac_mac(nic->node, bgx, lmac, (u8 *)&mac_addr);
 		break;
 	case NIC_MBOX_MSG_SET_MAX_FRS:
-		ret = nic_update_hw_frs(nic, mbx.data.frs.max_frs,
-					mbx.data.frs.vf_id);
+		ret = nic_update_hw_frs(nic, mbx.frs.max_frs,
+					mbx.frs.vf_id);
 		break;
 	case NIC_MBOX_MSG_CPI_CFG:
-		nic_config_cpi(nic, &mbx.data.cpi_cfg);
+		nic_config_cpi(nic, &mbx.cpi_cfg);
 		break;
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_MBOX_MSG_RSS_SIZE:
@@ -598,7 +598,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		goto unlock;
 	case NIC_MBOX_MSG_RSS_CFG:
 	case NIC_MBOX_MSG_RSS_CFG_CONT:
-		nic_config_rss(nic, &mbx.data.rss_cfg);
+		nic_config_rss(nic, &mbx.rss_cfg);
 		break;
 #endif
 	case NIC_MBOX_MSG_CFG_DONE:
@@ -610,17 +610,17 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic->vf_enabled[vf] = false;
 		break;
 	case NIC_MBOX_MSG_BGX_STATS:
-		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
+		nic_get_bgx_stats(nic, &mbx.bgx_stats);
 		goto unlock;
 	default:
 		dev_err(&nic->pdev->dev,
-			"Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg);
+			"Invalid msg from VF%d, msg 0x%x\n", vf, mbx.msg.msg);
 		break;
 	}
 
 	if (!ret)
 		nic_mbx_send_ack(nic, vf);
-	else if (mbx.msg != NIC_MBOX_MSG_READY)
+	else if (mbx.msg.msg != NIC_MBOX_MSG_READY)
 		nic_mbx_send_nack(nic, vf);
 unlock:
 	nic->mbx_lock[vf] = false;
@@ -816,14 +816,14 @@ static int nic_sriov_init(struct pci_dev *pdev, struct nicpf *nic)
  */
 static void nic_poll_for_link(struct work_struct *work)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	struct nicpf *nic;
 	struct bgx_link_status link;
 	u8 vf, bgx, lmac;
 
 	nic = container_of(work, struct nicpf, dwork.work);
 
-	mbx.msg = NIC_MBOX_MSG_BGX_LINK_CHANGE;
+	mbx.link_status.msg = NIC_MBOX_MSG_BGX_LINK_CHANGE;
 
 	for (vf = 0; vf < nic->num_vf_en; vf++) {
 		/* Poll only if VF is UP */
@@ -846,9 +846,9 @@ static void nic_poll_for_link(struct work_struct *work)
 			nic->speed[vf] = link.speed;
 
 			/* Send a mbox message to VF with current link status */
-			mbx.data.link_status.link_up = link.link_up;
-			mbx.data.link_status.duplex = link.duplex;
-			mbx.data.link_status.speed = link.speed;
+			mbx.link_status.link_up = link.link_up;
+			mbx.link_status.duplex = link.duplex;
+			mbx.link_status.speed = link.speed;
 			nic_send_msg_to_vf(nic, vf, &mbx);
 		}
 	}
@@ -860,6 +860,8 @@ static int nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct device *dev = &pdev->dev;
 	struct nicpf *nic;
 	int    err;
+
+	BUILD_BUG_ON(sizeof(union nic_mbx) > 16);
 
 	nic = devm_kzalloc(dev, sizeof(*nic), GFP_KERNEL);
 	if (!nic)

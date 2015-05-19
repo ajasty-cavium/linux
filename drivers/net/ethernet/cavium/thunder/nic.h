@@ -304,114 +304,107 @@ struct nicvf {
 #define NIC_MBOX_MSG_SHUTDOWN		0x13	/* VF is being shutdown */
 
 struct nic_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    tns_mode;
 	u8    node_id;
-	u8    unused0;
-	u16   unused1;
 	u64   mac_addr;
-} __packed;
+};
 
 /* Qset configuration */
 struct qs_cfg_msg {
+	u8    msg;
 	u8    num;
-	u8    unused0;
-	u32   unused1;
 	u64   cfg;
-} __packed;
+};
 
 /* Receive queue configuration */
 struct rq_cfg_msg {
+	u8    msg;
 	u8    qs_num;
 	u8    rq_num;
-	u32   unused0;
 	u64   cfg;
-} __packed;
+};
 
 /* Send queue configuration */
 struct sq_cfg_msg {
+	u8    msg;
 	u8    qs_num;
 	u8    sq_num;
-	u32   unused0;
 	u64   cfg;
-} __packed;
+};
 
 /* Set VF's MAC address */
 struct set_mac_msg {
+	u8    msg;
 	u8    vf_id;
-	u8    unused0;
-	u32   unused1;
 	u64   addr;
-} __packed;
+};
 
 /* Set Maximum frame size */
 struct set_frs_msg {
+	u8    msg;
 	u8    vf_id;
 	u16   max_frs;
 };
 
 /* Set CPI algorithm type */
 struct cpi_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    rq_cnt;
 	u8    cpi_alg;
 };
 
-#ifdef VNIC_RSS_SUPPORT
 /* Get RSS table size */
 struct rss_sz_msg {
+	u8    msg;
 	u8    vf_id;
 	u16   ind_tbl_size;
 };
 
 /* Set RSS configuration */
 struct rss_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    hash_bits;
 	u8    tbl_len;
 	u8    tbl_offset;
-	u16   unused0;
 #define RSS_IND_TBL_LEN_PER_MBX_MSG	8
 	u8    ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
-} __packed;
-#endif
+};
 
 struct bgx_stats_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    rx;
 	u8    idx;
-	u8    unused0;
-	u16   unused1;
 	u64   stats;
-} __packed;
+};
 
 /* Physical interface link status */
 struct bgx_link_status {
+	u8    msg;
 	u8    link_up;
 	u8    duplex;
 	u32   speed;
 };
 
 /* 128 bit shared memory between PF and each VF */
-struct nic_mbx {
-	u8    msg;
-	u8    unused;
-	union	{
-		struct nic_cfg_msg	nic_cfg;
-		struct qs_cfg_msg	qs;
-		struct rq_cfg_msg	rq;
-		struct sq_cfg_msg	sq;
-		struct set_mac_msg	mac;
-		struct set_frs_msg	frs;
-		struct cpi_cfg_msg	cpi_cfg;
-#ifdef VNIC_RSS_SUPPORT
-		struct rss_sz_msg	rss_size;
-		struct rss_cfg_msg	rss_cfg;
-#endif
-		struct bgx_stats_msg    bgx_stats;
-		struct bgx_link_status  link_status;
-	} data;
-} __packed;
+union nic_mbx {
+	struct { u8 msg; }	msg;
+	struct nic_cfg_msg	nic_cfg;
+	struct qs_cfg_msg	qs;
+	struct rq_cfg_msg	rq;
+	struct sq_cfg_msg	sq;
+	struct set_mac_msg	mac;
+	struct set_frs_msg	frs;
+	struct cpi_cfg_msg	cpi_cfg;
+	struct rss_sz_msg	rss_size;
+	struct rss_cfg_msg	rss_cfg;
+	struct bgx_stats_msg    bgx_stats;
+	struct bgx_link_status  link_status;
+};
 
 #define NIC_NODE_ID_MASK	0x03
 #define NIC_NODE_ID_SHIFT	44
@@ -426,12 +419,10 @@ int nicvf_set_real_num_queues(struct net_device *netdev,
 			      int tx_queues, int rx_queues);
 int nicvf_open(struct net_device *netdev);
 int nicvf_stop(struct net_device *netdev);
-int nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
+int nicvf_send_msg_to_pf(struct nicvf *vf, union nic_mbx *mbx);
 void nicvf_config_cpi(struct nicvf *nic);
-#ifdef VNIC_RSS_SUPPORT
 void nicvf_config_rss(struct nicvf *nic);
 void nicvf_set_rss_key(struct nicvf *nic);
-#endif
 void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 void nicvf_update_stats(struct nicvf *nic);
