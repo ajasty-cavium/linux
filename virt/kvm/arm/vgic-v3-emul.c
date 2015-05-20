@@ -966,26 +966,28 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
 int vgic_v3_icc_read_iar(struct kvm_vcpu *vcpu)
 {
+	unsigned long flags;
     int pending;
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
 
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flags);
 
     pending = vgic_get_pending_irq(vcpu);
 
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flags);
     /* we have some thing to retrun */
     return pending;
 }
 
 void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg)
 {
+	unsigned long flags;
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
-	spin_lock(&dist->lock);
+	spin_lock_irqsave(&dist->lock, flags);
     vgic_clear_pending_irq(vcpu,reg);
-	spin_unlock(&dist->lock);
+	spin_unlock_irqrestore(&dist->lock, flags);
 }
 #endif
 

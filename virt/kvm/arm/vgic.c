@@ -1050,16 +1050,33 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 		vlr.state |= LR_EOI_INT;
 
 	vgic_set_lr(vcpu, lr, vlr);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+        vcpu->arch.hcr_el2 |= HCR_VI;
+#endif
 
 	return true;
 }
 
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+void vgic_check_pending_irq(struct kvm_vcpu *vcpu)
+{
+	struct vgic_lr vlr;
+	int lr;
+
+	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+        	if (vlr.state == LR_STATE_PENDING) {
+			return;
+    		}
+	}
+        vcpu->arch.hcr_el2 &= ~HCR_VI;
+}
+
 int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
 {
 	struct vgic_lr vlr;
 	int lr;
-	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
+	//struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
         for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
@@ -1069,10 +1086,11 @@ int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
             vlr.state &= ~LR_STATE_PENDING;
             vlr.state |= LR_STATE_ACTIVE;
 		    vgic_set_lr(vcpu, lr, vlr);
-            vcpu->arch.hcr_el2 |= HCR_VI;
+		vgic_check_pending_irq(vcpu);
             return vlr.irq;
         }
     }
+
     vcpu->arch.hcr_el2 &= ~HCR_VI;
     return 1023;
 }
@@ -1091,6 +1109,14 @@ void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
             break;
         }
     }
+
+    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+	vlr = vgic_get_lr(vcpu, lr);
+	if (vlr.state & LR_STATE_ACTIVE )
+	    return;
+    }
+    // No active LR. so disable HCR_VI
+    vcpu->arch.hcr_el2 &= ~HCR_VI;
 }
 #endif
 
@@ -1304,13 +1330,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 #endif
 	if (level_pending || pending < vgic->nr_lr) {
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
-#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        vcpu->arch.hcr_el2 |= HCR_VI;
-    }
-    else {
-        vcpu->arch.hcr_el2 &= ~HCR_VI;
-#endif
-    }
+        }
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
