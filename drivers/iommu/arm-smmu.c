@@ -1643,8 +1643,6 @@ static int __arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 
 static int arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 {
-	u32 *stream_id = data;
-
 	/*
 	 * We need a way to describe the ID mappings in FDT.
 	 * Assume Stream ID == Requester ID for now.
@@ -1656,10 +1654,11 @@ static int arm_smmu_get_pci_sid(struct pci_dev *pdev, u16 alias, void *data)
 	 */
 
 	/* include domain number with pci device id */
-	if (acpi_disabled)
-		return __arm_smmu_get_pci_sid(pdev, alias, data);
-
-	return iort_map_pcidev_to_streamid(pdev, alias, stream_id);
+#ifdef CONFIG_ACPI
+	if (!acpi_disabled)
+		return iort_map_pcidev_to_streamid(pdev, alias, data);
+#endif
+	return __arm_smmu_get_pci_sid(pdev, alias, data);
 }
 
 static void __arm_smmu_release_pci_iommudata(void *data)
