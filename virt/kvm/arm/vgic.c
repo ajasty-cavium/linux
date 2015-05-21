@@ -1065,9 +1065,8 @@ void vgic_check_pending_irq(struct kvm_vcpu *vcpu)
 
 	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
-        	if (vlr.state == LR_STATE_PENDING) {
+        	if (vlr.state == LR_STATE_PENDING)
 			return;
-    		}
 	}
         vcpu->arch.hcr_el2 &= ~HCR_VI;
 }
@@ -1281,7 +1280,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 {
 	struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_dist *dist = &vcpu->kvm->arch.vgic;
-	int lr, pending;
+	int lr, pending = 0;
 	bool level_pending;
 	int lr_irq;
 #ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
@@ -1303,12 +1302,11 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 		vlr = vgic_get_lr(vcpu, lr);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-		if(vlr.state) {
-			pending = 1;
-			continue;
-		}
+        if( (vlr.state & LR_STATE_PENDING) || (vlr.state & LR_STATE_ACTIVE)) {
+            pending =1;
+            continue;
+        }
 #endif
-
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
 			continue;
@@ -1327,9 +1325,14 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 #ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
 	/* Check if we still have something up our sleeve... */
 	pending = find_first_zero_bit(elrsr_ptr, vgic->nr_lr);
-#endif
 	if (level_pending || pending < vgic->nr_lr) {
+#else
+	if (level_pending || pending) {
+#endif
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+        	vcpu->arch.hcr_el2 |= HCR_VI;
+#endif
         }
 }
 
@@ -1473,6 +1476,9 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	if (level) {
 		vgic_cpu_irq_set(vcpu, irq_num);
 		set_bit(cpuid, dist->irq_pending_on_cpu);
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+        	vcpu->arch.hcr_el2 |= HCR_VI;
+#endif
 	}
 
 out:
