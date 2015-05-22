@@ -820,30 +820,31 @@ int nicvf_config_data_transfer(struct nicvf *nic, bool enable)
 /* Get a free desc from SQ
  * returns descriptor ponter & descriptor number
  */
-static inline int nicvf_get_sq_desc(struct queue_set *qs, int qnum, void **desc)
+static inline int nicvf_get_sq_desc(struct snd_queue *sq, int desc_cnt)
 {
 	int qentry;
-	struct snd_queue *sq = &qs->sq[qnum];
 
-	if (!atomic_read(&sq->free_cnt))
-		return 0;
-
-	qentry = sq->tail++;
-	atomic_dec(&sq->free_cnt);
-
+	qentry = sq->tail;
+	atomic_sub(desc_cnt, &sq->free_cnt);
+	sq->tail += desc_cnt;
 	sq->tail &= (sq->dmem.q_len - 1);
-	*desc = GET_SQ_DESC(sq, qentry);
+
 	return qentry;
 }
 
 /* Free descriptor back to SQ for future use */
 void nicvf_put_sq_desc(struct snd_queue *sq, int desc_cnt)
 {
-	while (desc_cnt--) {
-		atomic_inc(&sq->free_cnt);
-		sq->head++;
-		sq->head &= (sq->dmem.q_len - 1);
-	}
+	atomic_add(desc_cnt, &sq->free_cnt);
+	sq->head += desc_cnt;
+	sq->head &= (sq->dmem.q_len - 1);
+}
+
+static inline int nicvf_get_nxt_sqentry(struct snd_queue *sq, int qentry)
+{
+	qentry++;
+	qentry &= (sq->dmem.q_len - 1);
+	return qentry;
 }
 
 void nicvf_sq_enable(struct nicvf *nic, struct snd_queue *sq, int qidx)
@@ -911,20 +912,15 @@ static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 /* Add SQ HEADER subdescriptor.
  * First subdescriptor for every send descriptor.
  */
-struct sq_hdr_subdesc *
-nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
-			 int subdesc_cnt, struct sk_buff *skb)
+static inline void
+nicvf_sq_add_hdr_subdesc(struct snd_queue *sq, int qentry,
+			 int subdesc_cnt, struct sk_buff *skb, int len)
 {
-	int qentry, proto;
-	void *desc = NULL;
-	struct snd_queue *sq;
+	int proto;
 	struct sq_hdr_subdesc *hdr;
 
-	sq = &qs->sq[sq_num];
-	qentry = nicvf_get_sq_desc(qs, sq_num, &desc);
+	hdr = (struct sq_hdr_subdesc *)GET_SQ_DESC(sq, qentry);
 	sq->skbuff[qentry] = (u64)skb;
-
-	hdr = (struct sq_hdr_subdesc *)desc;
 
 	memset(hdr, 0, SND_QUEUE_DESC_SIZE);
 	hdr->subdesc_type = SQ_DESC_TYPE_HEADER;
@@ -932,15 +928,17 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 	hdr->post_cqe = 1;
 	/* No of subdescriptors following this */
 	hdr->subdesc_cnt = subdesc_cnt;
-	hdr->tot_len = skb->len;
+	hdr->tot_len = len;
 
 	/* Offload checksum calculation to HW */
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		if (skb->protocol != htons(ETH_P_IP))
-			return hdr;
-		hdr->csum_l3 = 0;
+			return;
+
+		hdr->csum_l3 = 1; /* Enable IP csum calculation */
 		hdr->l3_offset = skb_network_offset(skb);
 		hdr->l4_offset = skb_transport_offset(skb);
+
 		proto = ip_hdr(skb)->protocol;
 		switch (proto) {
 		case IPPROTO_TCP:
@@ -954,57 +952,34 @@ nicvf_sq_add_hdr_subdesc(struct queue_set *qs, int sq_num,
 			break;
 		}
 	}
-
-	return hdr;
 }
 
 /* SQ GATHER subdescriptor
  * Must follow HDR descriptor
  */
-static void nicvf_sq_add_gather_subdesc(struct nicvf *nic, struct queue_set *qs,
-					int sq_num, struct sk_buff *skb)
+static inline void nicvf_sq_add_gather_subdesc(struct snd_queue *sq, int qentry,
+					       int size, u64 data)
 {
-	int i;
-	void *desc = NULL;
 	struct sq_gather_subdesc *gather;
 
-	nicvf_get_sq_desc(qs, sq_num, &desc);
-	gather = (struct sq_gather_subdesc *)desc;
+	qentry &= (sq->dmem.q_len - 1);
+	gather = (struct sq_gather_subdesc *)GET_SQ_DESC(sq, qentry);
 
 	memset(gather, 0, SND_QUEUE_DESC_SIZE);
 	gather->subdesc_type = SQ_DESC_TYPE_GATHER;
-	gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
-	gather->size = skb_is_nonlinear(skb) ? skb_headlen(skb) : skb->len;
-	gather->addr = virt_to_phys(skb->data);
-
-	/* Check for scattered buffer */
-	if (!skb_is_nonlinear(skb))
-		return;
-
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
-		const struct skb_frag_struct *frag;
-
-		frag = &skb_shinfo(skb)->frags[i];
-
-		nicvf_get_sq_desc(qs, sq_num, &desc);
-		gather = (struct sq_gather_subdesc *)desc;
-
-		memset(gather, 0, SND_QUEUE_DESC_SIZE);
-		gather->subdesc_type = SQ_DESC_TYPE_GATHER;
-		gather->ld_type = NIC_SEND_LD_TYPE_E_LDD;
-		gather->size = skb_frag_size(frag);
-		gather->addr = virt_to_phys(skb_frag_address(frag));
-	}
+	gather->ld_type = NIC_SEND_LD_TYPE_E_LDWB;
+	gather->size = size;
+	gather->addr = data;
 }
 
 /* Append an skb to a SQ for packet transfer. */
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 {
+	int i, size;
 	int subdesc_cnt;
-	int sq_num;
+	int sq_num, qentry;
 	struct queue_set *qs = nic->qs;
 	struct snd_queue *sq;
-	struct sq_hdr_subdesc *hdr_desc;
 
 	sq_num = skb_get_queue_mapping(skb);
 	sq = &qs->sq[sq_num];
@@ -1013,12 +988,33 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 	if (subdesc_cnt > atomic_read(&sq->free_cnt))
 		goto append_fail;
 
+	qentry = nicvf_get_sq_desc(sq, subdesc_cnt);
+
 	/* Add SQ header subdesc */
-	hdr_desc = nicvf_sq_add_hdr_subdesc(qs, sq_num, subdesc_cnt - 1, skb);
+	nicvf_sq_add_hdr_subdesc(sq, qentry, subdesc_cnt - 1, skb, skb->len);
 
-	/* Add SQ gather subdesc */
-	nicvf_sq_add_gather_subdesc(nic, qs, sq_num, skb);
+	/* Add SQ gather subdescs */
+	qentry = nicvf_get_nxt_sqentry(sq, qentry);
+	size = skb_is_nonlinear(skb) ? skb_headlen(skb) : skb->len;
+	nicvf_sq_add_gather_subdesc(sq, qentry, size, virt_to_phys(skb->data));
 
+	/* Check for scattered buffer */
+	if (!skb_is_nonlinear(skb))
+		goto doorbell;
+
+	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+		const struct skb_frag_struct *frag;
+
+		frag = &skb_shinfo(skb)->frags[i];
+
+		qentry = nicvf_get_nxt_sqentry(sq, qentry);
+		size = skb_frag_size(frag);
+		nicvf_sq_add_gather_subdesc(sq, qentry, size,
+					    virt_to_phys(
+					    skb_frag_address(frag)));
+	}
+
+doorbell:
 	/* make sure all memory stores are done before ringing doorbell */
 	smp_wmb();
 
