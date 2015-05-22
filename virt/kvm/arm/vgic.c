@@ -1020,7 +1020,7 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 
 	/* Do we have an active interrupt for the same CPUID? */
 	if (lr != LR_EMPTY) {
-            return false;
+		return false;
 #if 0
 		vlr = vgic_get_lr(vcpu, lr);
 		if (vlr.source == sgi_source_id) {
@@ -1051,7 +1051,7 @@ bool vgic_queue_irq(struct kvm_vcpu *vcpu, u8 sgi_source_id, int irq)
 
 	vgic_set_lr(vcpu, lr, vlr);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        vcpu->arch.hcr_el2 |= HCR_VI;
+	vcpu->arch.hcr_el2 |= HCR_VI;
 #endif
 
 	return true;
@@ -1065,57 +1065,56 @@ void vgic_check_pending_irq(struct kvm_vcpu *vcpu)
 
 	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
-        	if (vlr.state == LR_STATE_PENDING)
+		if (vlr.state == LR_STATE_PENDING)
 			return;
 	}
-        vcpu->arch.hcr_el2 &= ~HCR_VI;
+	vcpu->arch.hcr_el2 &= ~HCR_VI;
 }
 
 int  vgic_get_pending_irq(struct kvm_vcpu *vcpu)
 {
 	struct vgic_lr vlr;
 	int lr;
-	//struct vgic_cpu *vgic_cpu = &vcpu->arch.vgic_cpu;
 
-        for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+	for (lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
 
+		if (vlr.state == LR_STATE_PENDING ||
+	 	    vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
+			vlr.state &= ~LR_STATE_PENDING;
+			vlr.state |= LR_STATE_ACTIVE;
+			vgic_set_lr(vcpu, lr, vlr);
+			vgic_check_pending_irq(vcpu);
+			return vlr.irq;
+		}
+	}
 
-        if(vlr.state == LR_STATE_PENDING || vlr.state == (LR_STATE_PENDING | LR_EOI_INT)) {
-            vlr.state &= ~LR_STATE_PENDING;
-            vlr.state |= LR_STATE_ACTIVE;
-		    vgic_set_lr(vcpu, lr, vlr);
-		vgic_check_pending_irq(vcpu);
-            return vlr.irq;
-        }
-    }
-
-    vcpu->arch.hcr_el2 &= ~HCR_VI;
-    return 1023;
+	vcpu->arch.hcr_el2 &= ~HCR_VI;
+	return 1023;
 }
 
 void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
 {
-    struct vgic_lr vlr;
+	struct vgic_lr vlr;
 	int lr;
 
-    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+	for (lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
 
-        if(vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE)) {
-            vlr.state &= ~LR_STATE_ACTIVE;
-		    vgic_set_lr(vcpu, lr, vlr);
-            break;
-        }
-    }
+		if (vlr.irq == irq && (vlr.state & LR_STATE_ACTIVE)) {
+			vlr.state &= ~LR_STATE_ACTIVE;
+			vgic_set_lr(vcpu, lr, vlr);
+			break;
+		}
+	}
 
-    for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
-	vlr = vgic_get_lr(vcpu, lr);
-	if (vlr.state & LR_STATE_ACTIVE )
-	    return;
-    }
-    // No active LR. so disable HCR_VI
-    vcpu->arch.hcr_el2 &= ~HCR_VI;
+	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
+		vlr = vgic_get_lr(vcpu, lr);
+		if (vlr.state & LR_STATE_ACTIVE )
+			return;
+	}
+	/* No active LR. so disable HCR_VI */
+	vcpu->arch.hcr_el2 &= ~HCR_VI;
 }
 #endif
 
@@ -1302,10 +1301,10 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 		vlr = vgic_get_lr(vcpu, lr);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        if( (vlr.state & LR_STATE_PENDING) || (vlr.state & LR_STATE_ACTIVE)) {
-            pending =1;
-            continue;
-        }
+	if ((vlr.state & LR_STATE_PENDING) || (vlr.state & LR_STATE_ACTIVE)) {
+		pending = 1;
+		continue;
+	}
 #endif
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
@@ -1331,9 +1330,9 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 #endif
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        	vcpu->arch.hcr_el2 |= HCR_VI;
+		vcpu->arch.hcr_el2 |= HCR_VI;
 #endif
-        }
+	}
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
@@ -1418,9 +1417,9 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 	spin_lock_irqsave(&dist->lock, flag);
 
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        /* avoid race conditions */
-        if(irq_num == 38)
-            mdelay(2);
+	/* avoid race conditions */
+	if(irq_num == 38)
+		mdelay(2);
 #endif
 	vcpu = kvm_get_vcpu(kvm, cpuid);
 	edge_triggered = vgic_irq_is_edge(vcpu, irq_num);
@@ -1477,7 +1476,7 @@ static bool vgic_update_irq_pending(struct kvm *kvm, int cpuid,
 		vgic_cpu_irq_set(vcpu, irq_num);
 		set_bit(cpuid, dist->irq_pending_on_cpu);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-        	vcpu->arch.hcr_el2 |= HCR_VI;
+		vcpu->arch.hcr_el2 |= HCR_VI;
 #endif
 	}
 

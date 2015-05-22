@@ -967,17 +967,17 @@ void vgic_v3_dispatch_sgi(struct kvm_vcpu *vcpu, u64 reg)
 int vgic_v3_icc_read_iar(struct kvm_vcpu *vcpu)
 {
 	unsigned long flags;
-    int pending;
+	int pending;
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
 
 	spin_lock_irqsave(&dist->lock, flags);
 
-    pending = vgic_get_pending_irq(vcpu);
+	pending = vgic_get_pending_irq(vcpu);
 
 	spin_unlock_irqrestore(&dist->lock, flags);
-    /* we have some thing to retrun */
-    return pending;
+	/* we have some thing to retrun */
+	return pending;
 }
 
 void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg)
@@ -986,7 +986,7 @@ void vgic_v3_icc_write_eoir(struct kvm_vcpu *vcpu, u64 reg)
 	struct kvm *kvm = vcpu->kvm;
 	struct vgic_dist *dist = &kvm->arch.vgic;
 	spin_lock_irqsave(&dist->lock, flags);
-    vgic_clear_pending_irq(vcpu,reg);
+	vgic_clear_pending_irq(vcpu,reg);
 	spin_unlock_irqrestore(&dist->lock, flags);
 }
 #endif
