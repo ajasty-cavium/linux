@@ -11,6 +11,8 @@
 #include <linux/netdevice.h>
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
+#include <net/ip.h>
+#include <net/tso.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -363,6 +365,13 @@ static int nicvf_init_snd_queue(struct nicvf *nic,
 	atomic_set(&sq->free_cnt, q_len - 1);
 	sq->thresh = SND_QUEUE_THRESH;
 
+	/* Preallocate memory for TSO segment's header */
+	sq->tso_hdrs = dma_alloc_coherent(&nic->pdev->dev,
+					  q_len * TSO_HEADER_SIZE,
+					  &sq->tso_hdrs_phys, GFP_KERNEL);
+	if (!sq->tso_hdrs)
+		return -ENOMEM;
+
 	return 0;
 }
 
@@ -372,6 +381,10 @@ static void nicvf_free_snd_queue(struct nicvf *nic, struct snd_queue *sq)
 		return;
 	if (!sq->dmem.base)
 		return;
+
+	if (sq->tso_hdrs)
+		dma_free_coherent(&nic->pdev->dev, sq->dmem.q_len,
+				  sq->tso_hdrs, sq->tso_hdrs_phys);
 
 	kfree(sq->skbuff);
 	nicvf_free_q_desc_mem(nic, &sq->dmem);
@@ -892,14 +905,60 @@ void nicvf_sq_free_used_descs(struct net_device *netdev, struct snd_queue *sq,
 	}
 }
 
+/* Calculate no of SQ subdescriptors needed to transmit all
+ * segments of this TSO packet.
+ * Taken from 'Tilera network driver' with a minor modification.
+ */
+static int nicvf_tso_count_subdescs(struct sk_buff *skb)
+{
+	struct skb_shared_info *sh = skb_shinfo(skb);
+	unsigned int sh_len = skb_transport_offset(skb) + tcp_hdrlen(skb);
+	unsigned int data_len = skb->len - sh_len;
+	unsigned int p_len = sh->gso_size;
+	long f_id = -1;    /* id of the current fragment */
+	long f_size = skb_headlen(skb) - sh_len;  /* current fragment size */
+	long f_used = 0;  /* bytes used from the current fragment */
+	long n;            /* size of the current piece of payload */
+	int num_edescs = 0;
+	int segment;
+
+	for (segment = 0; segment < sh->gso_segs; segment++) {
+		unsigned int p_used = 0;
+
+		/* One edesc for header and for each piece of the payload. */
+		for (num_edescs++; p_used < p_len; num_edescs++) {
+			/* Advance as needed. */
+			while (f_used >= f_size) {
+				f_id++;
+				f_size = skb_frag_size(&sh->frags[f_id]);
+				f_used = 0;
+			}
+
+			/* Use bytes from the current fragment. */
+			n = p_len - p_used;
+			if (n > f_size - f_used)
+				n = f_size - f_used;
+			f_used += n;
+			p_used += n;
+		}
+
+		/* The last segment may be less than gso_size. */
+		data_len -= p_len;
+		if (data_len < p_len)
+			p_len = data_len;
+	}
+
+	/* '+ gso_segs' for SQ_HDR_SUDESCs for each segment */
+	return num_edescs + sh->gso_segs;
+}
+
 /* Get the number of SQ descriptors needed to xmit this skb */
 static int nicvf_sq_subdesc_required(struct nicvf *nic, struct sk_buff *skb)
 {
 	int subdesc_cnt = MIN_SQ_DESC_PER_PKT_XMIT;
 
 	if (skb_shinfo(skb)->gso_size) {
-		subdesc_cnt = skb_shinfo(skb)->gso_size / nic->mtu;
-		subdesc_cnt *= MIN_SQ_DESC_PER_PKT_XMIT;
+		subdesc_cnt = nicvf_tso_count_subdescs(skb);
 		return subdesc_cnt;
 	}
 
@@ -972,6 +1031,74 @@ static inline void nicvf_sq_add_gather_subdesc(struct snd_queue *sq, int qentry,
 	gather->addr = data;
 }
 
+/* Segment a TSO packet into 'gso_size' segments and append
+ * them to SQ for transfer
+ */
+static int nicvf_sq_append_tso(struct nicvf *nic, struct snd_queue *sq,
+			       int qentry, struct sk_buff *skb)
+{
+	struct tso_t tso;
+	int seg_subdescs = 0, desc_cnt = 0;
+	int seg_len, total_len, data_left;
+	int hdr_qentry = qentry;
+	int hdr_len = skb_transport_offset(skb) + tcp_hdrlen(skb);
+
+	tso_start(skb, &tso);
+	total_len = skb->len - hdr_len;
+	while (total_len > 0) {
+		char *hdr;
+
+		/* Save Qentry for adding HDR_SUBDESC at the end */
+		hdr_qentry = qentry;
+
+		data_left = min_t(int, skb_shinfo(skb)->gso_size, total_len);
+		total_len -= data_left;
+
+		/* Add segment's header */
+		qentry = nicvf_get_nxt_sqentry(sq, qentry);
+		hdr = sq->tso_hdrs + qentry * TSO_HEADER_SIZE;
+		tso_build_hdr(skb, hdr, &tso, data_left, total_len == 0);
+		nicvf_sq_add_gather_subdesc(sq, qentry, hdr_len,
+					    sq->tso_hdrs_phys +
+					    qentry * TSO_HEADER_SIZE);
+		/* HDR_SUDESC + GATHER */
+		seg_subdescs = 2;
+		seg_len = hdr_len;
+
+		/* Add segment's payload fragments */
+		while (data_left > 0) {
+			int size;
+
+			size = min_t(int, tso.size, data_left);
+
+			qentry = nicvf_get_nxt_sqentry(sq, qentry);
+			nicvf_sq_add_gather_subdesc(sq, qentry, size,
+						    virt_to_phys(tso.data));
+			seg_subdescs++;
+			seg_len += size;
+
+			data_left -= size;
+			tso_build_data(skb, &tso, size);
+		}
+		nicvf_sq_add_hdr_subdesc(sq, hdr_qentry,
+					 seg_subdescs - 1, skb, seg_len);
+		sq->skbuff[hdr_qentry] = 0;
+		qentry = nicvf_get_nxt_sqentry(sq, qentry);
+
+		desc_cnt += seg_subdescs;
+	}
+	/* Save SKB in the last segment for freeing */
+	sq->skbuff[hdr_qentry] = (u64)skb;
+
+	/* make sure all memory stores are done before ringing doorbell */
+	smp_wmb();
+
+	/* Inform HW to xmit all TSO segments */
+	nicvf_queue_reg_write(nic, NIC_QSET_SQ_0_7_DOOR,
+			      skb_get_queue_mapping(skb), desc_cnt);
+	return 1;
+}
+
 /* Append an skb to a SQ for packet transfer. */
 int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 {
@@ -989,6 +1116,10 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 		goto append_fail;
 
 	qentry = nicvf_get_sq_desc(sq, subdesc_cnt);
+
+	/* Check if its a TSO packet */
+	if (skb_shinfo(skb)->gso_size)
+		return nicvf_sq_append_tso(nic, sq, qentry, skb);
 
 	/* Add SQ header subdesc */
 	nicvf_sq_add_hdr_subdesc(sq, qentry, subdesc_cnt - 1, skb, skb->len);

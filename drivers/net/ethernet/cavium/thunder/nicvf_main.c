@@ -428,11 +428,14 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 		__func__, cqe_tx->sq_qs, cqe_tx->sq_idx,
 		cqe_tx->sqe_ptr, hdr->subdesc_cnt);
 
-	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
-	prefetch(skb);
-	nicvf_check_cqe_tx_errs(nic, cq, cqe_tx);
 	nicvf_put_sq_desc(sq, hdr->subdesc_cnt + 1);
-	dev_consume_skb_any(skb);
+	nicvf_check_cqe_tx_errs(nic, cq, cqe_tx);
+	skb = (struct sk_buff *)sq->skbuff[cqe_tx->sqe_ptr];
+	/* For TSO offloaded packets only one head SKB needs to be freed */
+	if (skb) {
+		prefetch(skb);
+		dev_consume_skb_any(skb);
+	}
 }
 
 static void nicvf_rcv_pkt_handler(struct net_device *netdev,
@@ -1312,7 +1315,7 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_unmap_resources;
 
 	netdev->features |= (NETIF_F_RXCSUM | NETIF_F_IP_CSUM | NETIF_F_SG |
-			     NETIF_F_GSO | NETIF_F_GRO);
+			     NETIF_F_TSO | NETIF_F_GRO);
 	netdev->hw_features = netdev->features;
 
 	netdev->netdev_ops = &nicvf_netdev_ops;

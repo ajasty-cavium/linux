@@ -299,6 +299,12 @@ struct snd_queue {
 	u32		tail;
 	u64		*skbuff;
 	void		*desc;
+
+#define	TSO_HEADER_SIZE	128
+	/* For TSO segment's header */
+	char		*tso_hdrs;
+	dma_addr_t	tso_hdrs_phys;
+
 	cpumask_t	affinity_mask;
 	struct q_desc_mem   dmem;
 	struct rx_tx_queue_stats stats;
