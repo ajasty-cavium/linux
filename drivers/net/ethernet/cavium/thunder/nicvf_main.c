@@ -77,17 +77,17 @@ static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 {
 	if (skb->len <= 64)
 		nic->drv_stats.rx_frames_64++;
-	else if ((skb->len > 64) && (skb->len <= 127))
+	else if (skb->len <= 127)
 		nic->drv_stats.rx_frames_127++;
-	else if ((skb->len > 127) && (skb->len <= 255))
+	else if (skb->len <= 255)
 		nic->drv_stats.rx_frames_255++;
-	else if ((skb->len > 255) && (skb->len <= 511))
+	else if (skb->len <= 511)
 		nic->drv_stats.rx_frames_511++;
-	else if ((skb->len > 511) && (skb->len <= 1023))
+	else if (skb->len <= 1023)
 		nic->drv_stats.rx_frames_1023++;
-	else if ((skb->len > 1023) && (skb->len <= 1518))
+	else if (skb->len <= 1518)
 		nic->drv_stats.rx_frames_1518++;
-	else if (skb->len > 1518)
+	else
 		nic->drv_stats.rx_frames_jumbo++;
 }
 
