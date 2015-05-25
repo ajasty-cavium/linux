@@ -427,7 +427,7 @@ static void nicvf_reclaim_cmp_queue(struct nicvf *nic,
 static void nicvf_reclaim_rbdr(struct nicvf *nic,
 			       struct rbdr *rbdr, int qidx)
 {
-	u64 tmp;
+	u64 tmp, fifo_state;
 	int timeout = 10;
 
 	/* Save head and tail pointers for feeing up buffers */
@@ -437,6 +437,14 @@ static void nicvf_reclaim_rbdr(struct nicvf *nic,
 	rbdr->tail = nicvf_queue_reg_read(nic,
 					  NIC_QSET_RBDR_0_1_TAIL,
 					  qidx) >> 3;
+
+	/* If RBDR FIFO is in 'FAIL' state then do a reset first
+	 * before relaiming.
+	 */
+	fifo_state = nicvf_queue_reg_read(nic, NIC_QSET_RBDR_0_1_STATUS0, qidx);
+	if (((fifo_state >> 62) & 0x03) == 0x3)
+		nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG,
+				      qidx, NICVF_RBDR_RESET);
 
 	/* Disable RBDR */
 	nicvf_queue_reg_write(nic, NIC_QSET_RBDR_0_1_CFG, qidx, 0);
