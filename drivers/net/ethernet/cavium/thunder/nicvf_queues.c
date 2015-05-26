@@ -485,7 +485,7 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 #ifdef CONFIG_RPS
 	struct netdev_rx_queue *rxqueue;
 	struct rps_map *map, *oldmap;
-	cpumask_var_t rps_mask;
+	struct cpumask rps_mask;
 	int i, cpu;
 #endif
 
@@ -540,20 +540,20 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 #ifdef CONFIG_RPS
 	cq = &qs->cq[qidx];
 	/* Set RPS CPU map */
-	cpumask_copy(rps_mask, cpumask_of_node(nic->node));
-	cpumask_clear_cpu(cpumask_first(&cq->affinity_mask), rps_mask);
+	cpumask_copy(&rps_mask, cpumask_of_node(nic->node));
+	cpumask_clear_cpu(cpumask_first(&cq->affinity_mask), &rps_mask);
 
 	rxqueue = nic->netdev->_rx + qidx;
 	oldmap = rcu_dereference(rxqueue->rps_map);
 
 	map = kzalloc(max_t(unsigned int,
-			    RPS_MAP_SIZE(cpumask_weight(rps_mask)),
+			    RPS_MAP_SIZE(cpumask_weight(&rps_mask)),
 			    L1_CACHE_BYTES), GFP_KERNEL);
 	if (!map)
 		return;
 
 	i = 0;
-	for_each_cpu_and(cpu, rps_mask, cpu_online_mask)
+	for_each_cpu_and(cpu, &rps_mask, cpu_online_mask)
 		map->cpus[i++] = cpu;
 	map->len = i;
 
