@@ -18,6 +18,7 @@
 
 #include <asm/errno.h>
 #include <asm/hwcap.h>
+#include <asm/cpu.h>
 
 /*
  * ELF register definitions..
@@ -142,10 +143,16 @@ do {						\
 	clear_thread_flag(TIF_32BIT);		\
 } while (0)
 
-#define ARCH_DLINFO							\
-do {									\
-	NEW_AUX_ENT(AT_SYSINFO_EHDR,					\
-		    (elf_addr_t)current->mm->context.vdso);		\
+
+#define ARCH_DLINFO								\
+do {										\
+	u32 midr;								\
+										\
+	NEW_AUX_ENT(AT_SYSINFO_EHDR,						\
+		    (elf_addr_t)current->mm->context.vdso);			\
+	midr = get_arm64_midr();						\
+	if (midr != -1)								\
+		NEW_AUX_ENT(AT_ARM64_MIDR, (elf_addr_t)(get_arm64_midr()));	\
 } while (0)
 
 #define ARCH_HAS_SETUP_ADDITIONAL_PAGES
@@ -237,10 +244,14 @@ do {						\
 	clear_thread_flag(TIF_AARCH32);		\
 	set_thread_flag(TIF_32BIT);		\
 } while (0)
-#define COMPAT_ILP32_ARCH_DLINFO					\
-do {									\
-	NEW_AUX_ENT(AT_SYSINFO_EHDR,					\
-		    (elf_addr_t)(long)current->mm->context.vdso);	\
+#define COMPAT_ILP32_ARCH_DLINFO						\
+do {										\
+	u32 midr;								\
+	NEW_AUX_ENT(AT_SYSINFO_EHDR,						\
+		    (elf_addr_t)(long)current->mm->context.vdso);		\
+	midr = get_arm64_midr();						\
+	if (midr != -1)								\
+		NEW_AUX_ENT(AT_ARM64_MIDR, (elf_addr_t)(get_arm64_midr()));	\
 } while (0)
 #else
 #define compat_ilp32_elf_check_arch(x) 0

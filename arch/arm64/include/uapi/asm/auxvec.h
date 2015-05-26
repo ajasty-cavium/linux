@@ -19,4 +19,7 @@
 /* vDSO location */
 #define AT_SYSINFO_EHDR	33
 
+/* Machine IDenfier Register (MDIR). */
+#define AT_ARM64_MIDR 38
+
 #endif

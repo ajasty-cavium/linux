@@ -55,5 +55,6 @@ DECLARE_PER_CPU(struct cpuinfo_arm64, cpu_data);
 
 void cpuinfo_store_cpu(void);
 void __init cpuinfo_store_boot_cpu(void);
+u32 get_arm64_midr(void);
 
 #endif /* __ASM_CPU_H */

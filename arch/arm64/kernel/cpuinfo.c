@@ -214,3 +214,22 @@ u64 __attribute_const__ icache_get_ccsidr(void)
 	    : "=r"(ccsidr) : "r"(1L));
 	return ccsidr;
 }
+
+
+u32 get_arm64_midr(void)
+{
+	int i;
+	u32 midr = 0;
+	for_each_online_cpu(i) {
+		struct cpuinfo_arm64 *cpuinfo = &per_cpu(cpu_data, i);
+		int oldmidr = midr;
+
+		midr |= cpuinfo->reg_midr;
+		/* If there are cpus which have a different midr just return -1. */
+		if (oldmidr && oldmidr != midr)
+			return -1;
+	}
+
+	return midr;
+}
+
