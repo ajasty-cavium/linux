@@ -296,6 +296,8 @@ struct nicvf {
 #define	NIC_MBOX_MSG_RQ_SW_SYNC		0x0F	/* Flush inflight pkts to RQ */
 #define	NIC_MBOX_MSG_BGX_STATS		0x10	/* Get stats from BGX */
 #define	NIC_MBOX_MSG_BGX_LINK_CHANGE	0x11	/* BGX:LMAC link status */
+#define NIC_MBOX_MSG_CFG_DONE		0x12	/* VF configuration done */
+#define NIC_MBOX_MSG_SHUTDOWN		0x13	/* VF is being shutdown */
 
 struct nic_cfg_msg {
 	u8    vf_id;

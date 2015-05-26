@@ -284,16 +284,12 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		break;
 	case NIC_MBOX_MSG_RQ_SW_SYNC:
 		ret = nic_rcv_queue_sw_sync(nic);
-		/* Last message of VF teardown msg sequence */
-		nic->vf_enabled[vf] = false;
 		break;
 	case NIC_MBOX_MSG_RQ_DROP_CFG:
 		reg_addr = NIC_PF_QSET_0_127_RQ_0_7_DROP_CFG |
 			   (mbx.data.rq.qs_num << NIC_QS_ID_SHIFT) |
 			   (mbx.data.rq.rq_num << NIC_Q_NUM_SHIFT);
 		nic_reg_write(nic, reg_addr, mbx.data.rq.cfg);
-		/* Last message of VF config msg sequence */
-		nic->vf_enabled[vf] = true;
 		break;
 	case NIC_MBOX_MSG_SQ_CFG:
 		reg_addr = NIC_PF_QSET_0_127_SQ_0_7_CFG |
@@ -330,6 +326,14 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 		nic_config_rss(nic, &mbx.data.rss_cfg);
 		break;
 #endif
+	case NIC_MBOX_MSG_CFG_DONE:
+		/* Last message of VF config msg sequence */
+		nic->vf_enabled[vf] = true;
+		goto unlock;
+	case NIC_MBOX_MSG_SHUTDOWN:
+		/* First msg in VF teardown sequence */
+		nic->vf_enabled[vf] = false;
+		break;
 	case NIC_MBOX_MSG_BGX_STATS:
 		nic_get_bgx_stats(nic, &mbx.data.bgx_stats);
 		goto unlock;

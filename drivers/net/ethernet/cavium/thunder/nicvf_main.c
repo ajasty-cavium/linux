@@ -394,6 +394,7 @@ int nicvf_set_real_num_queues(struct net_device *netdev,
 static int nicvf_init_resources(struct nicvf *nic)
 {
 	int err;
+	u64 mbx_addr = NIC_VF_PF_MAILBOX_0_1;
 
 	/* Enable Qset */
 	nicvf_qset_config(nic, true);
@@ -405,6 +406,12 @@ static int nicvf_init_resources(struct nicvf *nic)
 			   "Failed to alloc/config VF's QSet resources\n");
 		return err;
 	}
+
+	/* Send VF config done msg to PF */
+	nicvf_reg_write(nic, mbx_addr, le64_to_cpu(NIC_MBOX_MSG_CFG_DONE));
+	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
+	nicvf_reg_write(nic, mbx_addr, 1ULL);
+
 	return 0;
 }
 
@@ -896,6 +903,10 @@ int nicvf_stop(struct net_device *netdev)
 	struct nicvf *nic = netdev_priv(netdev);
 	struct queue_set *qs = nic->qs;
 	struct nicvf_cq_poll *cq_poll = NULL;
+	struct nic_mbx mbx = {};
+
+	mbx.msg = NIC_MBOX_MSG_SHUTDOWN;
+	nicvf_send_msg_to_pf(nic, &mbx);
 
 	netif_carrier_off(netdev);
 	netif_tx_disable(netdev);
