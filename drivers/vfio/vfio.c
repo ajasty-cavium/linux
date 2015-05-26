@@ -635,6 +635,34 @@ void *vfio_device_data(struct vfio_device *device)
 }
 EXPORT_SYMBOL_GPL(vfio_device_data);
 
+
+/*
+ * Map device space in to User
+ */
+int vfio_device_map_dev_space(struct vfio_device *dev, unsigned long iova,
+			      unsigned long physaddr, size_t size)
+{
+	struct vfio_iommu_driver  *driver = dev->group->container->iommu_driver;
+
+	if (!driver->ops->map_dev)
+		return -EINVAL;
+
+	return driver->ops->map_dev(dev->group->container->iommu_data,
+				  iova, physaddr, size);
+}
+EXPORT_SYMBOL_GPL(vfio_device_map_dev_space);
+
+void vfio_device_unmap_dev_space(struct vfio_device *dev, unsigned long iova,
+			       size_t size)
+{
+	struct vfio_iommu_driver *driver = dev->group->container->iommu_driver;
+
+	if (driver->ops->map_dev)
+		driver->ops->unmap_dev(dev->group->container->iommu_data,
+				   iova, size);
+}
+EXPORT_SYMBOL_GPL(vfio_device_unmap_dev_space);
+
 /* Given a referenced group, check if it contains the device */
 static bool vfio_dev_present(struct vfio_group *group, struct device *dev)
 {
@@ -1436,6 +1464,7 @@ long vfio_external_check_extension(struct vfio_group *group, unsigned long arg)
 	return vfio_ioctl_check_extension(group->container, arg);
 }
 EXPORT_SYMBOL_GPL(vfio_external_check_extension);
+
 
 /**
  * Module/class support

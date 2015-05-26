@@ -166,6 +166,7 @@ struct vgic_its_device {
 	struct its_device	*pits_dev;
 	struct list_head	pirq_list;
 	struct kvm		*kvm;
+	struct vfio_device	*vfio;
 };
 
 struct vgic_its {

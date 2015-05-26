@@ -86,7 +86,10 @@ struct vfio_iommu_driver_ops {
 					struct iommu_group *group);
 	void		(*detach_group)(void *iommu_data,
 					struct iommu_group *group);
-
+	int		(*map_dev)(void *iommu_data, unsigned long iova,
+					unsigned long phyaddr, size_t size);
+	void		(*unmap_dev)(void *iommu_data, unsigned long iova,
+					size_t size);
 };
 
 extern int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops);
@@ -118,6 +121,12 @@ extern long vfio_external_check_extension(struct vfio_group *group,
 extern struct vfio_device *vfio_device_get_external_user(struct file *filep);
 extern void vfio_device_put_external_user(struct vfio_device *vdev);
 extern struct device *vfio_external_base_device(struct vfio_device *vdev);
+
+extern int vfio_device_map_dev_space(struct vfio_device *dev,
+				unsigned long iova, unsigned long phyaddr,
+				size_t size);
+extern void vfio_device_unmap_dev_space(struct vfio_device *dev,
+					unsigned long iova, size_t size);
 
 struct pci_dev;
 #ifdef CONFIG_EEH

@@ -523,11 +523,13 @@ unwind:
 }
 
 
-static int vfio_iommu_map_dev(struct vfio_iommu *iommu, dma_addr_t iova,
-						phys_addr_t phyaddr, size_t size, int prot)
+static int vfio_iommu_map_dev(void *data, unsigned long  iova,
+			      unsigned long phyaddr, size_t size)
 {
-	struct vfio_domain *d;
+	struct vfio_domain *d = NULL;
 	int ret = 0;
+	int prot = IOMMU_READ | IOMMU_WRITE;
+	struct vfio_iommu *iommu = data;
 
 	list_for_each_entry(d, &iommu->domain_list, next) {
 		ret = iommu_map(d->domain, iova, phyaddr, size, prot);
@@ -542,7 +544,14 @@ unwind:
 	return ret;
 }
 
+static void vfio_iommu_unmap_dev(void *data, unsigned long iova, size_t size)
+{
+	struct vfio_domain *d = NULL;
+	struct vfio_iommu *iommu = data;
 
+	list_for_each_entry_continue_reverse(d, &iommu->domain_list, next)
+		iommu_unmap(d->domain, iova, size);
+}
 
 static int vfio_dma_do_map(struct vfio_iommu *iommu,
 			   struct vfio_iommu_type1_dma_map *map)
@@ -569,11 +578,6 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		prot |= IOMMU_WRITE;
 	if (map->flags & VFIO_DMA_MAP_FLAG_READ)
 		prot |= IOMMU_READ;
-
-	if (map->flags & VFIO_DMA_MAP_FLAG_DEV) {
-		prot = IOMMU_READ | IOMMU_WRITE;
-		return vfio_iommu_map_dev(iommu, vaddr, iova, size, prot);
-	}
 
 	if (!prot || !size || (size | iova | vaddr) & mask)
 		return -EINVAL;
@@ -1003,6 +1007,8 @@ static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.ioctl		= vfio_iommu_type1_ioctl,
 	.attach_group	= vfio_iommu_type1_attach_group,
 	.detach_group	= vfio_iommu_type1_detach_group,
+	.map_dev	= vfio_iommu_map_dev,
+	.unmap_dev	= vfio_iommu_unmap_dev,
 };
 
 static int __init vfio_iommu_type1_init(void)

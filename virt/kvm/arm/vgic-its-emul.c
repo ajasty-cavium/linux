@@ -220,69 +220,17 @@ int its_lpi_create(void)
 int vgic_its_has_attr(struct kvm_device *dev,
 		      struct kvm_device_attr *attr)
 {
-	switch (attr->group) {
-	case KVM_DEV_ARM_VGIC_GRP_ADDR:
-		switch (attr->attr) {
-		case KVM_VGIC_V3_ADDR_TYPE_ITS:
-			return 0;
-		}
-	case KVM_DEV_ARM_VGIC_GRP_ITS_DEVICE:
-		switch (attr->attr) {
-		case KVM_VGIC_ITS_CREATE_DEVICE:
-		case KVM_VGIC_ITS_GET_PHYS_BASE:
-			return 0;
-		}
-	}
 	return -ENXIO;
 }
 
 int vgic_its_set_attr(struct kvm_device *dev,
 		      struct kvm_device_attr *attr)
 {
-	u64 __user *uaddr = (u64 __user *)(long)attr->addr;
-	u64 val;
-	u32 vdev_id;
-	u32 pdev_id;
-
-	switch (attr->group) {
-	case KVM_DEV_ARM_VGIC_GRP_ITS_DEVICE:
-		switch (attr->attr) {
-		case KVM_VGIC_ITS_CREATE_DEVICE:
-
-			if (copy_from_user(&val, uaddr, sizeof(val)))
-				return -EFAULT;
-			vdev_id = (u32)(val >> 32);
-			pdev_id = (u32) val;
-
-			return vgic_its_create_device(dev->kvm,
-					vdev_id, pdev_id);
-		}
-	}
 	return -ENXIO;
 }
 
 int vgic_its_get_attr(struct kvm_device *dev,
 		      struct kvm_device_attr *attr)
 {
-	u64 __user *uaddr = (u64 __user *)(long)attr->addr;
-	u64 val;
-	u32 vdev_id;
-
-	switch (attr->group) {
-	case KVM_DEV_ARM_VGIC_GRP_ITS_DEVICE:
-		switch (attr->attr) {
-		case KVM_VGIC_ITS_GET_PHYS_BASE:
-
-			if (copy_from_user(&val, uaddr, sizeof(val)))
-				return -EFAULT;
-			vdev_id = (u32)val;
-			val = vgic_its_get_phys_base(dev, vdev_id);
-
-			if (copy_to_user(uaddr, &val, sizeof(val)))
-				return -EFAULT;
-			return 0;
-		}
-	}
 	return -ENXIO;
 }
-

@@ -946,6 +946,9 @@ struct kvm_device_attr {
 #define  KVM_DEV_VFIO_GROUP			1
 #define   KVM_DEV_VFIO_GROUP_ADD			1
 #define   KVM_DEV_VFIO_GROUP_DEL			2
+#define  KVM_DEV_VFIO_ITS			3
+#define   KVM_DEV_VFIO_ITS_ADD				1
+#define   KVM_DEV_VFIO_ITS_DEL				2
 
 enum kvm_device_type {
 	KVM_DEV_TYPE_FSL_MPIC_20	= 1,
@@ -963,6 +966,11 @@ enum kvm_device_type {
 	KVM_DEV_TYPE_ARM_VGIC_V3,
 #define KVM_DEV_TYPE_ARM_VGIC_V3	KVM_DEV_TYPE_ARM_VGIC_V3
 	KVM_DEV_TYPE_MAX,
+};
+
+struct kvm_vfio_its {
+	__u32 fd;     /* file descriptor of the VFIO device */
+	__u32 vdev_devfn;
 };
 
 /*

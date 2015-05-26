@@ -31,6 +31,11 @@ struct kvm_vfio {
 	bool noncoherent;
 };
 
+struct vfio_pci_device {
+	struct pci_dev		*pdev;
+};
+
+
 static struct vfio_group *kvm_vfio_group_get_external_user(struct file *filep)
 {
 	struct vfio_group *vfio_group;
@@ -276,12 +281,54 @@ static int kvm_vfio_set_group(struct kvm_device *dev, long attr, u64 arg)
 	return -ENXIO;
 }
 
+#ifdef CONFIG_ARM_GIC_V3
+int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, struct pci_dev *pdev,
+			   struct vfio_device *vfio);
+static int kvm_vfio_set_its(struct kvm_device *dev, long attr, u64 arg)
+{
+	struct kvm_vfio_its vfio_its;
+	unsigned long minsz;
+	struct vfio_device *device;
+	struct vfio_pci_device *vdev;
+
+	minsz = offsetofend(struct kvm_vfio_its , vdev_devfn);
+
+	if (copy_from_user(&vfio_its, (void *)arg, minsz))
+		return -EFAULT;
+
+	device = kvm_vfio_get_vfio_device(vfio_its.fd);
+	if (IS_ERR(device))
+		return PTR_ERR(device);
+
+	switch (attr) {
+	case KVM_DEV_VFIO_ITS_ADD:
+		vdev = vfio_device_data(device);
+		if (vdev == NULL) {
+			kvm_vfio_put_vfio_device(device);
+			return PCI_ERS_RESULT_DISCONNECT;
+		}
+		vgic_its_create_device(dev->kvm, vfio_its.vdev_devfn,
+					vdev->pdev, device);
+		return 0;
+	case KVM_DEV_VFIO_ITS_DEL:
+		kvm_vfio_put_vfio_device(device);
+		return 0;
+	}
+
+	return -ENXIO;
+}
+#endif
+
 static int kvm_vfio_set_attr(struct kvm_device *dev,
 			     struct kvm_device_attr *attr)
 {
 	switch (attr->group) {
 	case KVM_DEV_VFIO_GROUP:
 		return kvm_vfio_set_group(dev, attr->attr, attr->addr);
+#ifdef CONFIG_ARM_GIC_V3
+	case KVM_DEV_VFIO_ITS:
+		return kvm_vfio_set_its(dev, attr->attr, attr->addr);
+#endif
 	}
 
 	return -ENXIO;
@@ -297,8 +344,16 @@ static int kvm_vfio_has_attr(struct kvm_device *dev,
 		case KVM_DEV_VFIO_GROUP_DEL:
 			return 0;
 		}
-
 		break;
+#ifdef CONFIG_ARM_GIC_V3
+	case KVM_DEV_VFIO_ITS:
+		switch (attr->attr) {
+		case KVM_DEV_VFIO_ITS_ADD:
+		case KVM_DEV_VFIO_ITS_DEL:
+			return 0;
+		}
+		break;
+#endif
 	}
 
 	return -ENXIO;

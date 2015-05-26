@@ -7,6 +7,8 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/irqchip/arm-gic-v3.h>
+#include <linux/vfio.h>
+#include <linux/module.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cputype.h>
@@ -19,7 +21,31 @@
 
 
 
+int pci_requester_id(struct pci_dev *dev);
 static DEFINE_SPINLOCK(vits_lock);
+
+static struct its_node *get_its_node(struct pci_dev *pdev)
+{
+	return container_of(pdev->bus->msi, struct its_node, msi_chip);
+
+}
+
+static u64 vgic_its_get_host_translator_addr(struct pci_dev *pdev)
+{
+	if (!pdev)
+		return (unsigned long)NULL;
+
+	return get_its_node(pdev)->phys_base + GITS_TRANSLATER - 0x40;
+}
+
+static u64 vgic_its_get_vm_translator_addr(struct kvm *kvm)
+{
+	if (!kvm)
+		return (unsigned long)NULL;
+
+	return kvm->arch.vgic.vgic_its_base;
+
+}
 
 
 static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
@@ -27,8 +53,6 @@ static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
 	struct vgic_its_device *vits_dev = dev;
 	struct vgic_its_irq *vits_irq;
 	unsigned long flag;
-	struct vgic_its_device *its_dev;
-	struct vgic_its *its;
 
 	spin_lock_irqsave(&vits_lock, flag);
 
@@ -46,25 +70,6 @@ static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
 			vits_irq->virq, 1);
 	spin_unlock_irqrestore(&vits_lock, flag);
 	return IRQ_HANDLED;
-}
-
-static struct its_node *get_its_node(struct pci_dev *pdev)
-{
-	return container_of(pdev->bus->msi, struct its_node, msi_chip);
-
-}
-
-static int get_physical_dev_id(struct vgic_its *its, int vdev_id)
-{
-	struct vgic_its_device *its_dev =  NULL;
-	unsigned long flag;
-
-	list_for_each_entry(its_dev, &(its->its_devices), entry) {
-		if (its_dev->vdev_id == vdev_id)
-			return its_dev->pdev_id;
-	}
-
-	return -1;
 }
 
 struct vgic_its_device *get_vgic_its_dev(struct vgic_its *its, int vdev_id)
@@ -86,15 +91,6 @@ static inline bool is_offset_legal(u64 base, int size, int offset)
 
 static void convert_mapc(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	u16 collection = (u16)(cmd->raw_cmd[2] & 0xffff);
-	u8 valid = (u8)(cmd->raw_cmd[2] >> 63);
-	u32 target_vcpu = (u32)((cmd->raw_cmd[2] >> 16) & 0xffffffff);
-	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
-
-	if (valid)
-		its_cpu->vcollection = collection;
-	else
-		its_cpu->vcollection = -1;
 	/**
 	 * do i need to send a MAPC down?, I don't think that is needed.
 	 **/
@@ -104,11 +100,14 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
 	u8 valid = (u8) (cmd->raw_cmd[2] >> 63);
 	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
-	phys_addr_t itt_address = (phys_addr_t) cmd->raw_cmd[2];
 	u8 size  = (u8) (cmd->raw_cmd[1] & 0x1f);
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
 	u32 pdev_id = vits_dev->pdev_id;
+	void (*unmap_dev)(struct vfio_device *dev, unsigned long iova,
+			size_t size);
+	unsigned long its_size = 0x10000;
+	unsigned long iova;
 
 	size = 1UL <<  (size + 1);
 	if (valid) {
@@ -116,6 +115,13 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 						get_its_node(vits_dev->pdev),
 							pdev_id, size);
 	} else if (vits_dev->pits_dev) {
+		/* unmap ITS_TRANSLATOR from vm space */
+		iova = vgic_its_get_vm_translator_addr(vcpu->kvm);
+		unmap_dev = symbol_get(vfio_device_unmap_dev_space);
+		if (unmap_dev) {
+			unmap_dev(vits_dev->vfio, iova, its_size);
+			symbol_put(vfio_device_unmap_dev_space);
+		}
 		its_free_device(vits_dev->pits_dev);
 		vits_dev->pits_dev = NULL;
 	}
@@ -123,11 +129,6 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 
 static void convert_mapi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
-	u32 ID = (u32) cmd->raw_cmd[1];
-	u16 collection = (u16) cmd->raw_cmd[2];
-	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	u32 pdev_id = get_physical_dev_id(its, vdev_id);
 }
 
 static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -138,7 +139,6 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u16 collection = (u16) cmd->raw_cmd[2];
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
-	u32 pdev_id = vits_dev->pdev_id;
 	u32 pirq = 0, hwirq;
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
@@ -172,11 +172,6 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 
 static void convert_movi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
-	u32 ID = (u32) cmd->raw_cmd[1];
-	u16 collection = (u16) cmd->raw_cmd[2];
-	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	u32 pdev_id = get_physical_dev_id(its, vdev_id);
 }
 
 static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -184,7 +179,6 @@ static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
 	u32 ID = (u32) cmd->raw_cmd[1];
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	u32 pdev_id = get_physical_dev_id(its, vdev_id);
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
 
@@ -203,16 +197,10 @@ static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 
 static void convert_inv(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
-	u32 ID = (u32) cmd->raw_cmd[1];
-	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	u32 pdev_id = get_physical_dev_id(its, vdev_id);
 }
 
 static void convert_movall(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	u32 old_vcpu = (u32) (cmd->raw_cmd[2] >> 16);
-	u32 new_vcpu = (u32) (cmd->raw_cmd[3] >> 16);
 }
 
 static void convert_invall(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -322,28 +310,13 @@ int vgic_its_handle_guest_commands(struct kvm_vcpu *vcpu, u64 cq_base,
 	return 0;
 }
 
-u64 vgic_its_get_phys_base(struct kvm_device *dev, u32 vdev_id)
+int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, struct pci_dev *pdev,
+			   struct vfio_device *vfio)
 {
-	struct vgic_its *its = &dev->kvm->arch.vgic.its;
-	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
-
-	if (!vits_dev)
-		return 0;
-
-	return get_its_node(vits_dev->pdev)->phys_base;
-}
-
-int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id)
-{
-	int domain = (pdev_id >> 16) & 0x3;
-	int bus = (pdev_id >> 8) & 0xff;
-	int func = pdev_id & 0xff;
-	struct pci_dev *pdev;
 	struct vgic_its_device *its_dev;
 	struct vgic_its *its = &kvm->arch.vgic.its;
 	unsigned long flag;
 
-	pdev = pci_get_domain_bus_and_slot(domain, bus, func);
 	if (!pdev)
 		return -ENXIO;
 
@@ -351,14 +324,17 @@ int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, u32 pdev_id)
 	if (!its_dev)
 		return -ENOMEM;
 
-
+	spin_lock_irqsave(&vits_lock, flag);
 	INIT_LIST_HEAD(&(its_dev->pirq_list));
 	INIT_LIST_HEAD(&(its_dev->entry));
 	its_dev->vdev_id = vdev_id;
-	its_dev->pdev_id = pdev_id;
+	its_dev->pdev_id = pci_requester_id(pdev);
 	its_dev->pdev = pdev;
 	its_dev->kvm = kvm;
+	its_dev->vfio = vfio;
 	list_add(&(its_dev->entry), &(its->its_devices));
+	spin_unlock_irqrestore(&vits_lock, flag);
+
 	return 0;
 }
 
@@ -368,6 +344,16 @@ int vgic_its_cpu_init(struct kvm_vcpu *vcpu)
 	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
 	struct its_node *its;
 	int cpu = get_cpu();
+	struct vgic_its_device *vits_dev =  NULL;
+	struct vgic_its *vits = &vcpu->kvm->arch.vgic.its;
+	int (*map_dev)(struct vfio_device *dev, unsigned long iova,
+			unsigned long phyaddr, size_t size);
+	unsigned long its_size = 0x10000;
+	unsigned long iova;
+	phys_addr_t phys_addr;
+	unsigned long flag;
+
+	spin_lock_irqsave(&vits_lock, flag);
 
 	its = list_first_entry_or_null(&its_nodes, struct its_node , entry);
 	if (!its)
@@ -382,6 +368,27 @@ int vgic_its_cpu_init(struct kvm_vcpu *vcpu)
 	its_cpu->ptarget_address = its_get_target_address(its,
 			cpu);
 	put_cpu();
+
+	/* if i am the first vcpu, take some additional responsability
+	 * and add ITS transaltion entry to all iommu groups that belongs to us
+	 */
+
+	if (vcpu->vcpu_id == 0) {
+		list_for_each_entry(vits_dev, &(vits->its_devices), entry) {
+			/* map ITS_TRANSLATOR in to vm space */
+			iova = vgic_its_get_vm_translator_addr(vcpu->kvm);
+			phys_addr = vgic_its_get_host_translator_add(
+								vits_dev->pdev);
+			map_dev = symbol_get(vfio_device_map_dev_space);
+			if (map_dev) {
+				map_dev(vits_dev->vfio, iova,
+					phys_addr, its_size);
+				symbol_put(vfio_device_map_dev_space);
+			}
+		}
+	}
+
+	spin_unlock_irqrestore(&vits_lock, flag);
 	return 0;
 
 }
@@ -416,6 +423,9 @@ void vgic_its_free(struct kvm *kvm)
 					struct vgic_its_device, entry);
 
 	while (vits_dev) {
+		vits_irq = list_first_entry_or_null(
+					&(vits_dev->pirq_list),
+					struct vgic_its_irq, entry);
 		while (vits_irq) {
 			/* Stop the delivery of interrupts */
 			if (vits_dev->pits_dev)
