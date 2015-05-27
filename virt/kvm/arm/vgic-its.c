@@ -377,7 +377,7 @@ int vgic_its_cpu_init(struct kvm_vcpu *vcpu)
 		list_for_each_entry(vits_dev, &(vits->its_devices), entry) {
 			/* map ITS_TRANSLATOR in to vm space */
 			iova = vgic_its_get_vm_translator_addr(vcpu->kvm);
-			phys_addr = vgic_its_get_host_translator_add(
+			phys_addr = vgic_its_get_host_translator_addr(
 								vits_dev->pdev);
 			map_dev = symbol_get(vfio_device_map_dev_space);
 			if (map_dev) {
