@@ -796,8 +796,7 @@ static void nic_unregister_interrupts(struct nicpf *nic)
 
 int nic_sriov_configure(struct pci_dev *pdev, int num_vfs_requested)
 {
-	struct net_device *netdev = pci_get_drvdata(pdev);
-	struct nicpf *nic = netdev_priv(netdev);
+	struct nicpf *nic = pci_get_drvdata(pdev);
 	int err;
 
 	if (nic->num_vf_en == num_vfs_requested)
