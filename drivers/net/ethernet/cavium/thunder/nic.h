@@ -308,7 +308,7 @@ struct nic_cfg_msg {
 	u8    vf_id;
 	u8    tns_mode;
 	u8    node_id;
-	u64   mac_addr;
+	u8    mac_addr[ETH_ALEN];
 };
 
 /* Qset configuration */
@@ -338,7 +338,7 @@ struct sq_cfg_msg {
 struct set_mac_msg {
 	u8    msg;
 	u8    vf_id;
-	u64   addr;
+	u8    mac_addr[ETH_ALEN];
 };
 
 /* Set Maximum frame size */
