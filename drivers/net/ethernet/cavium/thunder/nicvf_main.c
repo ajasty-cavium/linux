@@ -50,10 +50,6 @@ module_param(cpi_alg, int, S_IRUGO);
 MODULE_PARM_DESC(cpi_alg,
 		 "PFC algorithm (0=none, 1=VLAN, 2=VLAN16, 3=IP Diffserv)");
 
-static int nicvf_enable_msix(struct nicvf *nic);
-static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev);
-static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx);
-
 static inline void nicvf_set_rx_frame_cnt(struct nicvf *nic,
 					  struct sk_buff *skb)
 {
@@ -162,6 +158,14 @@ static int nicvf_check_pf_ready(struct nicvf *nic)
 	return 1;
 }
 
+static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx)
+{
+	if (bgx->rx)
+		nic->bgx_stats.rx_stats[bgx->idx] = bgx->stats;
+	else
+		nic->bgx_stats.tx_stats[bgx->idx] = bgx->stats;
+}
+
 static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 {
 	union nic_mbx mbx = {};
@@ -244,7 +248,7 @@ static int nicvf_hw_set_mac_addr(struct nicvf *nic, struct net_device *netdev)
 	return nicvf_send_msg_to_pf(nic, &mbx);
 }
 
-void nicvf_config_cpi(struct nicvf *nic)
+static void nicvf_config_cpi(struct nicvf *nic)
 {
 	union nic_mbx mbx = {};
 
@@ -257,7 +261,7 @@ void nicvf_config_cpi(struct nicvf *nic)
 }
 
 #ifdef	VNIC_RSS_SUPPORT
-void nicvf_get_rss_size(struct nicvf *nic)
+static void nicvf_get_rss_size(struct nicvf *nic)
 {
 	union nic_mbx mbx = {};
 
@@ -567,7 +571,7 @@ static int nicvf_poll(struct napi_struct *napi, int budget)
  *
  * As of now only CQ errors are handled
  */
-void nicvf_handle_qs_err(unsigned long data)
+static void nicvf_handle_qs_err(unsigned long data)
 {
 	struct nicvf *nic = (struct nicvf *)data;
 	struct queue_set *qs = nic->qs;
@@ -1074,14 +1078,6 @@ static int nicvf_set_mac_address(struct net_device *netdev, void *p)
 	return 0;
 }
 
-static void nicvf_read_bgx_stats(struct nicvf *nic, struct bgx_stats_msg *bgx)
-{
-	if (bgx->rx)
-		nic->bgx_stats.rx_stats[bgx->idx] = bgx->stats;
-	else
-		nic->bgx_stats.tx_stats[bgx->idx] = bgx->stats;
-}
-
 void nicvf_update_lmac_stats(struct nicvf *nic)
 {
 	int stat = 0;
@@ -1161,7 +1157,7 @@ void nicvf_update_stats(struct nicvf *nic)
 		nicvf_update_sq_stats(nic, qidx);
 }
 
-struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
+static struct rtnl_link_stats64 *nicvf_get_stats64(struct net_device *netdev,
 					    struct rtnl_link_stats64 *stats)
 {
 	struct nicvf *nic = netdev_priv(netdev);
