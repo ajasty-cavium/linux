@@ -174,6 +174,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x101:   /* RST */
 		case 0x103:   /* FUS */
 		case 0x104:   /* FUSF */
+		case 0x105:   /* OCX  */
 		case 0x109:   /* L2C */
 		case 0x10A:   /* SGPIO */
 		case 0x10C:   /* EMM */
@@ -300,6 +301,7 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 		case 0x101:   /* RST */
 		case 0x103:   /* FUS */
 		case 0x104:   /* FUSF */
+		case 0x105:   /* OCX  */
 		case 0x109:   /* L2C */
 		case 0x10A:   /* SGPIO */
 		case 0x10C:   /* EMM */
