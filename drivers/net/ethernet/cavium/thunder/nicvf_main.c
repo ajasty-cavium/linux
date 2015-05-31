@@ -442,7 +442,6 @@ static void nicvf_snd_pkt_handler(struct net_device *netdev,
 	if (skb) {
 		prefetch(skb);
 		dev_consume_skb_any(skb);
-		sq->skbuff[cqe_tx->sqe_ptr] = NULL;
 	}
 }
 
