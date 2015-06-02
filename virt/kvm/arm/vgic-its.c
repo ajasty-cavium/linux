@@ -19,6 +19,15 @@
 
 #include "vgic.h"
 
+struct msi_master {
+
+	struct list_head	entry;
+	struct pci_bus		*bus;
+	struct msi_chip		msi;
+	struct msi_chip		*real_msi;
+};
+
+LIST_HEAD(msi_masters);
 
 
 int pci_requester_id(struct pci_dev *dev);
@@ -26,7 +35,9 @@ static DEFINE_SPINLOCK(vits_lock);
 
 static struct its_node *get_its_node(struct pci_dev *pdev)
 {
-	return container_of(pdev->bus->msi, struct its_node, msi_chip);
+	struct msi_master *master = container_of(pdev->bus->msi,
+					struct msi_master, msi);
+	return container_of(master->real_msi, struct its_node, msi_chip);
 
 }
 
@@ -43,33 +54,8 @@ static u64 vgic_its_get_vm_translator_addr(struct kvm *kvm)
 	if (!kvm)
 		return (unsigned long)NULL;
 
-	return kvm->arch.vgic.vgic_its_base;
+	return kvm->arch.vgic.vgic_its_base + GITS_TRANSLATER - 0x40;
 
-}
-
-
-static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
-{
-	struct vgic_its_device *vits_dev = dev;
-	struct vgic_its_irq *vits_irq;
-	unsigned long flag;
-
-	spin_lock_irqsave(&vits_lock, flag);
-
-	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
-		if (vits_irq->pirq == irq)
-			break;
-	}
-	if (!vits_irq) {
-		spin_unlock_irqrestore(&vits_lock, flag);
-		return IRQ_NONE;
-	}
-
-	/* TODO :find vcpu number from col_id */
-	kvm_vgic_inject_irq(vits_dev->kvm, vits_irq->vcol_id,
-			vits_irq->virq, 1);
-	spin_unlock_irqrestore(&vits_lock, flag);
-	return IRQ_HANDLED;
 }
 
 struct vgic_its_device *get_vgic_its_dev(struct vgic_its *its, int vdev_id)
@@ -84,6 +70,45 @@ struct vgic_its_device *get_vgic_its_dev(struct vgic_its *its, int vdev_id)
 	return NULL;
 }
 
+struct vgic_its_irq *get_vgic_its_irq(struct vgic_its_device *vits_dev,
+					int pirq, int ID, bool irqbased)
+{
+	struct vgic_its_irq *vits_irq;
+
+	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
+		if (irqbased) {
+			if( vits_irq->pirq == pirq) {
+			return vits_irq;
+			}
+		}
+		else if (vits_irq->ID == ID) {
+			return vits_irq;
+		}
+	}
+
+	return NULL;
+}
+
+static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
+{
+	struct vgic_its_device *vits_dev = dev;
+	struct vgic_its_irq *vits_irq;
+	unsigned long flag;
+
+	spin_lock_irqsave(&vits_lock, flag);
+
+	vits_irq = get_vgic_its_irq(vits_dev, irq, -1, true);
+	if (!vits_irq || vits_irq->virq < 8192) {
+		spin_unlock_irqrestore(&vits_lock, flag);
+		return IRQ_NONE;
+	}
+
+	kvm_vgic_inject_irq(vits_dev->kvm, vits_irq->vcol_id,
+			vits_irq->virq, 1);
+	spin_unlock_irqrestore(&vits_lock, flag);
+	return IRQ_HANDLED;
+}
+
 static inline bool is_offset_legal(u64 base, int size, int offset)
 {
 	return ((base + offset) < (base + size)) ? true : false;
@@ -91,9 +116,6 @@ static inline bool is_offset_legal(u64 base, int size, int offset)
 
 static void convert_mapc(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
-	/**
-	 * do i need to send a MAPC down?, I don't think that is needed.
-	 **/
 }
 
 static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -101,29 +123,22 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u8 valid = (u8) (cmd->raw_cmd[2] >> 63);
 	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
 	u8 size  = (u8) (cmd->raw_cmd[1] & 0x1f);
-	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
-	u32 pdev_id = vits_dev->pdev_id;
-	void (*unmap_dev)(struct vfio_device *dev, unsigned long iova,
-			size_t size);
-	unsigned long its_size = 0x10000;
-	unsigned long iova;
+	struct vgic_its *its;
+	struct vgic_its_device *vits_dev;
+	u32 pdev_id;
+
+	its = &vcpu->kvm->arch.vgic.its;
+	if(!its)
+		return;
+	vits_dev = get_vgic_its_dev(its, vdev_id);
+	if(!vits_dev)
+		return;
+	pdev_id= vits_dev->pdev_id;
 
 	size = 1UL <<  (size + 1);
+
 	if (valid) {
-		vits_dev->pits_dev = its_create_device(
-						get_its_node(vits_dev->pdev),
-							pdev_id, size);
-	} else if (vits_dev->pits_dev) {
-		/* unmap ITS_TRANSLATOR from vm space */
-		iova = vgic_its_get_vm_translator_addr(vcpu->kvm);
-		unmap_dev = symbol_get(vfio_device_unmap_dev_space);
-		if (unmap_dev) {
-			unmap_dev(vits_dev->vfio, iova, its_size);
-			symbol_put(vfio_device_unmap_dev_space);
-		}
-		its_free_device(vits_dev->pits_dev);
-		vits_dev->pits_dev = NULL;
+		vits_dev->pits_dev = its_create_device(get_its_node(vits_dev->pdev), pdev_id, size);
 	}
 }
 
@@ -137,37 +152,46 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	u32 virq = (u32) (cmd->raw_cmd[1] >> 32);
 	u32 ID = (u32) cmd->raw_cmd[1];
 	u16 collection = (u16) cmd->raw_cmd[2];
-	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
-	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
-	u32 pirq = 0, hwirq;
+	struct vgic_its *its;
+	struct vgic_its_device *vits_dev;
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
+	u32 pirq = 0, hwirq;
 	int ret;
+
+       its = &vcpu->kvm->arch.vgic.its;
+	if(!its || !its_cpu)
+		return;
+	vits_dev = get_vgic_its_dev(its, vdev_id);
+	if(!vits_dev)
+		return;
 
 	if (!vits_dev->pits_dev)
 		return;
 
-	vits_irq = kzalloc(sizeof(struct vgic_its_irq), GFP_KERNEL);
+	vits_irq = kzalloc(sizeof(struct vgic_its_irq),	GFP_KERNEL);
 	if (!vits_irq)
 		return;
 
-	ret = its_alloc_device_irq(vits_dev->pits_dev, ID, &hwirq, &pirq);
-	if (ret)
-		return;
-	irq_set_handler_data(pirq, vits_dev->pits_dev);
+	its_alloc_device_irq(vits_dev->pits_dev,
+				ID, &hwirq, &pirq);
+
+	list_add(&(vits_irq->entry), &(vits_dev->pirq_list));
 	vits_irq->pirq = pirq;
-	vits_irq->virq = virq;
 	vits_irq->hwirq = hwirq;
+	vits_irq->ID = ID;
+	irq_set_handler_data(pirq, vits_dev->pits_dev);
+
+	vits_irq->virq = virq;
 	vits_irq->vcol_id = collection;
 	vits_irq->pcol_id = its_cpu->pcollection;
-	vits_irq->ID = ID;
-	ret = request_irq(pirq, vgic_its_handle_interrupt, IRQF_PERCPU,
-			  "vits-mapvi-int", vits_dev);
 
-
-	if (IS_ERR_VALUE(ret))
+	ret = request_irq(pirq, vgic_its_handle_interrupt,
+				0, "vits-mapvi-int", vits_dev);
+	if (IS_ERR_VALUE(ret)) {
 		return;
-	list_add(&(vits_irq->entry), &(vits_dev->pirq_list));
+	}
+
 }
 
 static void convert_movi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -182,17 +206,18 @@ static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
 
+	if(!vits_dev)
+		return;
+
 	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
-		if (vits_irq->ID == ID)
+		if (vits_irq->ID == ID) {
+			free_irq(vits_irq->pirq, vits_dev);
+			list_del(&(vits_irq->entry));
+			kfree(vits_irq);
 			break;
+		}
 	}
 
-	if (vits_irq) {
-		its_send_discard(vits_dev->pits_dev, vits_irq->ID);
-		list_del(&(vits_irq->entry));
-		free_irq(vits_irq->pirq, vits_dev);
-		kfree(vits_irq);
-	}
 }
 
 static void convert_inv(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -319,22 +344,31 @@ int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, struct pci_dev *pdev,
 
 	if (!pdev)
 		return -ENXIO;
-
-	its_dev = kzalloc(sizeof(struct vgic_its_device), GFP_KERNEL);
+	its_dev = get_vgic_its_dev(its, vdev_id);
+	if(its_dev) {
+		INIT_LIST_HEAD(&(its_dev->entry));
+		spin_lock_irqsave(&vits_lock, flag);
+		goto skip_list_add;
+	}
+	else {
+		its_dev = kzalloc(sizeof(struct vgic_its_device), GFP_KERNEL);
+	}
 	if (!its_dev)
 		return -ENOMEM;
-
 	spin_lock_irqsave(&vits_lock, flag);
-	INIT_LIST_HEAD(&(its_dev->pirq_list));
 	INIT_LIST_HEAD(&(its_dev->entry));
+	list_add(&(its_dev->entry), &(its->its_devices));
+skip_list_add:
+	INIT_LIST_HEAD(&(its_dev->pirq_list));
 	its_dev->vdev_id = vdev_id;
 	its_dev->pdev_id = pci_requester_id(pdev);
 	its_dev->pdev = pdev;
 	its_dev->kvm = kvm;
 	its_dev->vfio = vfio;
-	list_add(&(its_dev->entry), &(its->its_devices));
+	/* take MSI owner ship of this pdev */
+	if (IS_ENABLED(CONFIG_PCI_MSI))
+		pdev->msidata = its_dev;
 	spin_unlock_irqrestore(&vits_lock, flag);
-
 	return 0;
 }
 
@@ -367,7 +401,6 @@ int vgic_its_cpu_init(struct kvm_vcpu *vcpu)
 	its_cpu->pcollection = its_get_collection(its, cpu);
 	its_cpu->ptarget_address = its_get_target_address(its,
 			cpu);
-	put_cpu();
 
 	/* if i am the first vcpu, take some additional responsability
 	 * and add ITS transaltion entry to all iommu groups that belongs to us
@@ -389,6 +422,7 @@ int vgic_its_cpu_init(struct kvm_vcpu *vcpu)
 	}
 
 	spin_unlock_irqrestore(&vits_lock, flag);
+	put_cpu();
 	return 0;
 
 }
@@ -428,22 +462,104 @@ void vgic_its_free(struct kvm *kvm)
 					struct vgic_its_irq, entry);
 		while (vits_irq) {
 			/* Stop the delivery of interrupts */
-			if (vits_dev->pits_dev)
+			if (vits_dev->pits_dev) {
+				free_irq(vits_irq->pirq, vits_dev);
 				its_send_discard(vits_dev->pits_dev,
 						 vits_irq->ID);
-			free_irq(vits_irq->pirq, vits_dev);
+			}
 			list_del(&vits_irq->entry);
 			kfree(vits_irq);
 			vits_irq = list_first_entry_or_null(
 						&(vits_dev->pirq_list),
 						struct vgic_its_irq, entry);
 		}
-		if (vits_dev->pits_dev)
-			its_free_device(vits_dev->pits_dev);
 		list_del(&vits_dev->entry);
 		kfree(vits_dev);
 		vits_dev = list_first_entry_or_null(&(its->its_devices),
 						struct vgic_its_device, entry);
 	}
+	mb();
 	spin_unlock_irqrestore(&vits_lock, flag);
 }
+
+static inline u16 vits_msi_get_entry_nr(struct msi_desc *desc)
+{
+	return desc->msi_attrib.entry_nr;
+}
+
+static int vits_msi_setup_irq(struct msi_chip *chip,
+			     struct pci_dev *pdev,
+			     struct msi_desc *desc)
+{
+	struct msi_master *master = container_of(chip,
+					struct msi_master, msi);
+	u32 vec_nr;
+	struct msi_msg msg;
+	struct vgic_its_device *its_dev = pdev->msidata;
+	u64 addr;
+	int ret;
+	unsigned long flag;
+	unsigned int irq = 0;
+	struct vgic_its_irq *vits_irq;
+
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
+		vec_nr = vits_msi_get_entry_nr(desc);
+		if (pdev->msidata) {
+			spin_lock_irqsave(&vits_lock, flag);
+			vits_irq = get_vgic_its_irq(its_dev, -1, vec_nr, false);
+			if (!vits_irq) {
+				spin_unlock_irqrestore(&vits_lock, flag);
+				return -EINVAL;
+			}
+			irq = vits_irq->pirq;
+
+			irq_set_msi_desc(irq, desc);
+			addr = vgic_its_get_vm_translator_addr(its_dev->kvm);
+			addr += 0x40;
+			msg.address_lo		= (u32)addr;
+			msg.address_hi		= (u32)(addr >> 32);
+			msg.data		= vec_nr;
+			write_msi_msg(irq, &msg);
+			spin_unlock_irqrestore(&vits_lock, flag);
+			return 0;
+		}
+	}
+	return master->real_msi->setup_irq(master->real_msi, pdev, desc);
+}
+
+static void vits_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
+{
+	struct msi_master *master = container_of(chip,
+					struct msi_master, msi);
+	/* just fall through */
+	master->real_msi->teardown_irq(master->real_msi, irq);
+}
+
+
+/**
+ *Every thing that follows this is a Temp HACK for providing
+ *Device IRQ_DOMAIN, as this is already merged to 3.19
+ *Taking this short cut here
+ **/
+
+
+struct msi_chip *vgic_its_get_msi_node(struct pci_bus *bus,
+						struct msi_chip *msi)
+{
+	struct msi_master *master;
+
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
+		master = kzalloc(sizeof(*master), GFP_KERNEL);
+		if (!master)
+			return msi;
+
+		master->msi.setup_irq		= vits_msi_setup_irq;
+		master->msi.teardown_irq	= vits_msi_teardown_irq;
+		master->real_msi		= msi;
+		master->bus			= bus;
+		list_add(&master->entry, &msi_masters);
+		return &master->msi;
+	}
+	return msi;
+}
+EXPORT_SYMBOL(vgic_its_get_msi_node);

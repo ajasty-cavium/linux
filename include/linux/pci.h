@@ -361,6 +361,7 @@ struct pci_dev {
 #ifdef CONFIG_PCI_MSI
 	struct list_head msi_list;
 	const struct attribute_group **msi_irq_groups;
+	void *msidata; /* Temp Hack to mimic GENERIC IRQ DOMAIN */
 #endif
 	struct pci_vpd *vpd;
 #ifdef CONFIG_PCI_ATS

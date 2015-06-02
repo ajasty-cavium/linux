@@ -657,7 +657,7 @@ void vfio_device_unmap_dev_space(struct vfio_device *dev, unsigned long iova,
 {
 	struct vfio_iommu_driver *driver = dev->group->container->iommu_driver;
 
-	if (driver->ops->map_dev)
+	if (driver->ops->map_dev && dev->group->container->iommu_data)
 		driver->ops->unmap_dev(dev->group->container->iommu_data,
 				   iova, size);
 }

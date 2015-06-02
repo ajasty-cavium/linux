@@ -16,6 +16,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/eventfd.h>
+#include <linux/irq.h>
 #include <linux/msi.h>
 #include <linux/pci.h>
 #include <linux/file.h>
@@ -485,8 +486,9 @@ static int vfio_msi_enable(struct vfio_pci_device *vdev, int nvec, bool msix)
 
 		ret = pci_enable_msix_range(pdev, vdev->msix, 1, nvec);
 		if (ret < nvec) {
-			if (ret > 0)
+			if (ret > 0) {
 				pci_disable_msix(pdev);
+			}
 			kfree(vdev->msix);
 			kfree(vdev->ctx);
 			return ret;
@@ -712,6 +714,59 @@ static int vfio_pci_set_intx_trigger(struct vfio_pci_device *vdev,
 	return 0;
 }
 
+static int vfio_pci_set_msi_mask(struct vfio_pci_device *vdev,
+				    unsigned index, unsigned start,
+				    unsigned count, uint32_t flags, void *data)
+{
+#if 0
+	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
+	struct irq_data *d;
+	int irq;
+	int i;
+
+	if(!vdev->msix)
+		return 0;
+
+	for(i=start; i < start + count; i++){
+		irq = msix ? vdev->msix[i].vector : vdev->pdev->irq + i;
+		d = irq_get_irq_data(irq);
+		if(!d)
+			continue;
+		mask_msi_irq(d);
+	}
+#endif
+	return 0;
+}
+
+static int vfio_pci_set_msi_unmask(struct vfio_pci_device *vdev,
+				    unsigned index, unsigned start,
+				    unsigned count, uint32_t flags, void *data)
+{
+	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
+	int ret;
+	struct irq_data *d;
+	int irq;
+	int i =  msix ? 0 : start;
+	int msi_enabled = msix ? vdev->pdev->msix_enabled :
+					vdev->pdev->msi_enabled;
+
+	if (msi_enabled)
+		return 0;
+
+	ret = vfio_msi_enable(vdev, start + count, msix);
+	if (ret) {
+		return ret;
+	}
+
+	for (i = start; i < start + count; i++){
+		irq = msix ? vdev->msix[i].vector : vdev->pdev->irq + i;
+		d = irq_get_irq_data(irq);
+		unmask_msi_irq(d);
+	}
+	return 0;
+}
+
+
 static int vfio_pci_set_msi_trigger(struct vfio_pci_device *vdev,
 				    unsigned index, unsigned start,
 				    unsigned count, uint32_t flags, void *data)
@@ -736,13 +791,14 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_device *vdev,
 						  fds, msix);
 
 		ret = vfio_msi_enable(vdev, start + count, msix);
-		if (ret)
+		if (ret) {
 			return ret;
+		}
 
 		ret = vfio_msi_set_block(vdev, start, count, fds, msix);
-		if (ret)
+		if (ret) {
 			vfio_msi_disable(vdev, msix);
-
+		}
 		return ret;
 	}
 
@@ -829,8 +885,11 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_device *vdev, uint32_t flags,
 	case VFIO_PCI_MSIX_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_MASK:
-		case VFIO_IRQ_SET_ACTION_UNMASK:
+			func = vfio_pci_set_msi_mask;
 			/* XXX Need masking support exported */
+			break;
+		case VFIO_IRQ_SET_ACTION_UNMASK:
+			func = vfio_pci_set_msi_unmask;
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
 			func = vfio_pci_set_msi_trigger;
