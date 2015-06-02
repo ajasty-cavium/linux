@@ -1318,7 +1318,7 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 		else
 			lr_irq = vlr.irq;
 
-		vgic_cpu->vgic_irq_lr_map[vlr.irq] = LR_EMPTY;
+		vgic_cpu->vgic_irq_lr_map[lr_irq] = LR_EMPTY;
 	}
 
 #ifndef CONFIG_THUNDERX_PASS1_ERRATA_23331
