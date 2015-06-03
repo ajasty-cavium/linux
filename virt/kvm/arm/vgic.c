@@ -1065,7 +1065,7 @@ void vgic_check_pending_irq(struct kvm_vcpu *vcpu)
 
 	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
-		if (vlr.state == LR_STATE_PENDING)
+		if (vlr.state & LR_STATE_PENDING)
 			return;
 	}
 	vcpu->arch.hcr_el2 &= ~HCR_VI;
@@ -1110,10 +1110,10 @@ void vgic_clear_pending_irq(struct kvm_vcpu *vcpu, u64 irq)
 
 	for(lr = 0; lr < VGIC_V3_MAX_LRS; lr++) {
 		vlr = vgic_get_lr(vcpu, lr);
-		if (vlr.state & LR_STATE_ACTIVE )
+		if (vlr.state & LR_STATE_PENDING )
 			return;
 	}
-	/* No active LR. so disable HCR_VI */
+	/* No pending LR. so disable HCR_VI */
 	vcpu->arch.hcr_el2 &= ~HCR_VI;
 }
 #endif
@@ -1157,6 +1157,7 @@ static void __kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
 	 */
 	if (!kvm_vgic_vcpu_pending_irq(vcpu)) {
 		pr_debug("CPU%d has no pending interrupt\n", vcpu_id);
+		vcpu->arch.hcr_el2 &= ~HCR_VI;
 		goto epilog;
 	}
 
@@ -1301,10 +1302,12 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 
 		vlr = vgic_get_lr(vcpu, lr);
 #ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-	if ((vlr.state & LR_STATE_PENDING) || (vlr.state & LR_STATE_ACTIVE)) {
-		pending = 1;
-		continue;
-	}
+		if ((vlr.state & LR_STATE_PENDING) || (vlr.state & LR_STATE_ACTIVE)) {
+			if (vlr.state & LR_STATE_PENDING)
+				vcpu->arch.hcr_el2 |= HCR_VI;
+			pending = 1;
+			continue;
+		}
 #endif
 
 		if (!test_and_clear_bit(lr, vgic_cpu->lr_used))
@@ -1329,10 +1332,11 @@ static void __kvm_vgic_sync_hwstate(struct kvm_vcpu *vcpu)
 	if (level_pending || pending) {
 #endif
 		set_bit(vcpu->vcpu_id, dist->irq_pending_on_cpu);
-#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
-		vcpu->arch.hcr_el2 |= HCR_VI;
-#endif
 	}
+#ifdef CONFIG_THUNDERX_PASS1_ERRATA_23331
+	else
+		vcpu->arch.hcr_el2 &= ~HCR_VI;
+#endif
 }
 
 void kvm_vgic_flush_hwstate(struct kvm_vcpu *vcpu)
