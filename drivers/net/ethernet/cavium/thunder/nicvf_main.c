@@ -121,12 +121,6 @@ u64 nicvf_queue_reg_read(struct nicvf *nic, u64 offset, u64 qidx)
 	return readq_relaxed((void *)(addr + (qidx << NIC_Q_NUM_SHIFT)));
 }
 
-/* VF -> PF mailbox communication */
-static bool pf_ready_to_rcv_msg;
-static bool pf_acked;
-static bool pf_nacked;
-static bool bgx_stats_acked;
-
 int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 {
 	int timeout = NIC_MBOX_MSG_TIMEOUT;
@@ -134,8 +128,8 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 	u64 *msg;
 	u64 mbx_addr;
 
-	pf_acked = false;
-	pf_nacked = false;
+	nic->pf_acked = false;
+	nic->pf_nacked = false;
 	msg = (u64 *)mbx;
 	mbx_addr = nic->reg_base + NIC_VF_PF_MAILBOX_0_1;
 
@@ -143,11 +137,11 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 	writeq_relaxed(*(msg + 1), (void *)(mbx_addr + 8));
 
 	/* Wait for previous message to be acked, timeout 2sec */
-	while (!pf_acked) {
-		if (pf_nacked)
+	while (!nic->pf_acked) {
+		if (nic->pf_nacked)
 			return -EINVAL;
 		msleep(sleep);
-		if (pf_acked)
+		if (nic->pf_acked)
 			break;
 		timeout -= sleep;
 		if (!timeout) {
@@ -165,27 +159,15 @@ int nicvf_send_msg_to_pf(struct nicvf *nic, struct nic_mbx *mbx)
 */
 static int nicvf_check_pf_ready(struct nicvf *nic)
 {
-	int timeout = 5000, sleep = 20;
-	u64 mbx_addr = NIC_VF_PF_MAILBOX_0_1;
+	struct nic_mbx mbx = {};
 
-	pf_ready_to_rcv_msg = false;
-
-	nicvf_reg_write(nic, mbx_addr, le64_to_cpu(NIC_MBOX_MSG_READY));
-
-	mbx_addr += (NIC_PF_VF_MAILBOX_SIZE - 1) * 8;
-	nicvf_reg_write(nic, mbx_addr, 1ULL);
-
-	while (!pf_ready_to_rcv_msg) {
-		msleep(sleep);
-		if (pf_ready_to_rcv_msg)
-			break;
-		timeout -= sleep;
-		if (!timeout) {
-			netdev_err(nic->netdev,
-				   "PF didn't respond to READY msg\n");
-			return 0;
-		}
+	mbx.msg = NIC_MBOX_MSG_READY;
+	if (nicvf_send_msg_to_pf(nic, &mbx)) {
+		netdev_err(nic->netdev,
+			   "PF didn't respond to READY msg\n");
+		return 0;
 	}
+
 	return 1;
 }
 
@@ -209,7 +191,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		"Mbox message from PF, msg 0x%x\n", mbx.msg);
 	switch (mbx.msg) {
 	case NIC_MBOX_MSG_READY:
-		pf_ready_to_rcv_msg = true;
+		nic->pf_acked = true;
 		nic->vf_id = mbx.data.nic_cfg.vf_id & 0x7F;
 		nic->tns_mode = mbx.data.nic_cfg.tns_mode & 0x7F;
 		nic->node = mbx.data.nic_cfg.node_id;
@@ -220,24 +202,23 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 		nic->speed = 0;
 		break;
 	case NIC_MBOX_MSG_ACK:
-		pf_acked = true;
+		nic->pf_acked = true;
 		break;
 	case NIC_MBOX_MSG_NACK:
-		pf_nacked = true;
+		nic->pf_nacked = true;
 		break;
 #ifdef VNIC_RSS_SUPPORT
 	case NIC_MBOX_MSG_RSS_SIZE:
 		nic->rss_info.rss_size = mbx.data.rss_size.ind_tbl_size;
-		pf_acked = true;
+		nic->pf_acked = true;
 		break;
 #endif
 	case NIC_MBOX_MSG_BGX_STATS:
 		nicvf_read_bgx_stats(nic, &mbx.data.bgx_stats);
-		pf_acked = true;
-		bgx_stats_acked = true;
+		nic->pf_acked = true;
 		break;
 	case NIC_MBOX_MSG_BGX_LINK_CHANGE:
-		pf_acked = true;
+		nic->pf_acked = true;
 		nic->link_up = mbx.data.link_status.link_up;
 		nic->duplex = mbx.data.link_status.duplex;
 		nic->speed = mbx.data.link_status.speed;
@@ -1114,7 +1095,6 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 {
 	int stat = 0;
 	struct nic_mbx mbx = {};
-	int timeout;
 
 	if (!netif_running(nic->netdev))
 		return;
@@ -1124,14 +1104,9 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	/* Rx stats */
 	mbx.data.bgx_stats.rx = 1;
 	while (stat < BGX_RX_STATS_COUNT) {
-		bgx_stats_acked = 0;
 		mbx.data.bgx_stats.idx = stat;
-		nicvf_send_msg_to_pf(nic, &mbx);
-		timeout = 0;
-		while ((!bgx_stats_acked) && (timeout < 10)) {
-			msleep(2);
-			timeout++;
-		}
+		if (nicvf_send_msg_to_pf(nic, &mbx))
+			return;
 		stat++;
 	}
 
@@ -1140,14 +1115,9 @@ void nicvf_update_lmac_stats(struct nicvf *nic)
 	/* Tx stats */
 	mbx.data.bgx_stats.rx = 0;
 	while (stat < BGX_TX_STATS_COUNT) {
-		bgx_stats_acked = 0;
 		mbx.data.bgx_stats.idx = stat;
-		nicvf_send_msg_to_pf(nic, &mbx);
-		timeout = 0;
-		while ((!bgx_stats_acked) && (timeout < 10)) {
-			msleep(2);
-			timeout++;
-		}
+		if (nicvf_send_msg_to_pf(nic, &mbx))
+			return;
 		stat++;
 	}
 }

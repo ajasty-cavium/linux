@@ -267,6 +267,10 @@ struct nicvf {
 	struct msix_entry	msix_entries[NIC_VF_MSIX_VECTORS];
 	char			irq_name[NIC_VF_MSIX_VECTORS][20];
 	bool			irq_allocated[NIC_VF_MSIX_VECTORS];
+
+	/* VF <-> PF mailbox communication */
+	bool			pf_acked;
+	bool			pf_nacked;
 } ____cacheline_aligned_in_smp;
 
 /* PF <--> VF Mailbox communication
