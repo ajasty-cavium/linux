@@ -172,10 +172,14 @@ ENTRY(memcpy)
 .Lcpy_body_large:
 	/* pre-get 64 bytes data. */
 	ldp	A_l, A_h, [src],#16
+	prfm	pldl1strm, [src, 128]
 	ldp	B_l, B_h, [src],#16
+	prfm	pldl1strm, [src, 256]
 	ldp	C_l, C_h, [src],#16
+	prfm	pldl1strm, [src, 384]
 	ldp	D_l, D_h, [src],#16
 1:
+	prfm	pldl1strm, [src, 512]
 	/*
 	* interlace the load of next 64 bytes data block with store of the last
 	* loaded 64 bytes data.

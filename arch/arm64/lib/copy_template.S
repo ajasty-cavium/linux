@@ -181,6 +181,8 @@ D_h	.req x14
 	 */
 	.p2align 6
 .Lcpy_body_large:
+	prfm	pldl1strm, [src, #128]
+	prfm	pldl1strm, [src, #256]
 	/* There are at least 128 bytes to copy.  */
 	USER(12f, ldp A_l, A_h, [src, #0])
 	sub	dst, dst, #16			/* Pre-bias.  */
@@ -188,6 +190,7 @@ D_h	.req x14
 	USER(13f, ldp C_l, C_h, [src, #32])
 	USER(13f, ldp D_l, D_h, [src, #48]!)	/* src += 64 - Pre-bias. */
 1:
+	prfm	pldl1strm, [src, #384]
 	USER(13f, stp A_l, A_h, [dst, #16])
 	USER(13f, ldp A_l, A_h, [src, #16])
 	USER(13f, stp B_l, B_h, [dst, #32])
