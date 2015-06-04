@@ -29,6 +29,14 @@ struct msi_master {
 
 LIST_HEAD(msi_masters);
 
+struct vits_pirq {
+
+	struct list_head	entry;
+	uint32_t		pirq;
+};
+
+
+LIST_HEAD(vits_pirqs);
 
 int pci_requester_id(struct pci_dev *dev);
 static DEFINE_SPINLOCK(vits_lock);
@@ -102,7 +110,6 @@ static irqreturn_t vgic_its_handle_interrupt(int irq, void *dev)
 		spin_unlock_irqrestore(&vits_lock, flag);
 		return IRQ_NONE;
 	}
-
 	kvm_vgic_inject_irq(vits_dev->kvm, vits_irq->vcol_id,
 			vits_irq->virq, 1);
 	spin_unlock_irqrestore(&vits_lock, flag);
@@ -137,7 +144,7 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 
 	size = 1UL <<  (size + 1);
 
-	if (valid) {
+	if (valid && !vits_dev->pits_dev) {
 		vits_dev->pits_dev = its_create_device(get_its_node(vits_dev->pdev), pdev_id, size);
 	}
 }
@@ -157,9 +164,9 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_cpu *its_cpu = &vcpu->arch.vgic_cpu.its_cpu;
 	u32 pirq = 0, hwirq;
-	int ret;
+	struct irq_data *d;
 
-       its = &vcpu->kvm->arch.vgic.its;
+	its = &vcpu->kvm->arch.vgic.its;
 	if(!its || !its_cpu)
 		return;
 	vits_dev = get_vgic_its_dev(its, vdev_id);
@@ -169,29 +176,30 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	if (!vits_dev->pits_dev)
 		return;
 
+	vits_irq = get_vgic_its_irq(vits_dev, -1, ID, false);
+	if (vits_irq)
+		goto skip_allocation;
+
 	vits_irq = kzalloc(sizeof(struct vgic_its_irq),	GFP_KERNEL);
 	if (!vits_irq)
 		return;
 
 	its_alloc_device_irq(vits_dev->pits_dev,
 				ID, &hwirq, &pirq);
+	INIT_LIST_HEAD(&(vits_irq->entry));
 
 	list_add(&(vits_irq->entry), &(vits_dev->pirq_list));
 	vits_irq->pirq = pirq;
 	vits_irq->hwirq = hwirq;
 	vits_irq->ID = ID;
-	irq_set_handler_data(pirq, vits_dev->pits_dev);
-
+skip_allocation:
 	vits_irq->virq = virq;
 	vits_irq->vcol_id = collection;
 	vits_irq->pcol_id = its_cpu->pcollection;
 
-	ret = request_irq(pirq, vgic_its_handle_interrupt,
-				0, "vits-mapvi-int", vits_dev);
-	if (IS_ERR_VALUE(ret)) {
-		return;
-	}
-
+	d = irq_get_irq_data(vits_irq->pirq);
+	if(d && d->msi_desc)
+		unmask_msi_irq(d);
 }
 
 static void convert_movi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -205,19 +213,19 @@ static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
 	struct vgic_its_irq *vits_irq;
 	struct vgic_its_device *vits_dev = get_vgic_its_dev(its, vdev_id);
+	struct irq_data *d;
 
 	if(!vits_dev)
 		return;
 
-	list_for_each_entry(vits_irq, &(vits_dev->pirq_list), entry) {
-		if (vits_irq->ID == ID) {
-			free_irq(vits_irq->pirq, vits_dev);
-			list_del(&(vits_irq->entry));
-			kfree(vits_irq);
-			break;
-		}
-	}
+	vits_irq = get_vgic_its_irq(vits_dev, -1, ID, false);
+	if (vits_irq) {
+		vits_irq->virq = 0;
+		d = irq_get_irq_data(vits_irq->pirq);
+		if(d && d->msi_desc)
+			mask_msi_irq(d);
 
+	}
 }
 
 static void convert_inv(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
@@ -330,6 +338,7 @@ int vgic_its_handle_guest_commands(struct kvm_vcpu *vcpu, u64 cq_base,
 	}
 	/* flush this writes before releasing lock */
 	mb();
+	mb();
 	spin_unlock_irqrestore(&vits_lock, flag);
 	kfree(user_cq);
 	return 0;
@@ -346,7 +355,6 @@ int vgic_its_create_device(struct  kvm *kvm, u32 vdev_id, struct pci_dev *pdev,
 		return -ENXIO;
 	its_dev = get_vgic_its_dev(its, vdev_id);
 	if(its_dev) {
-		INIT_LIST_HEAD(&(its_dev->entry));
 		spin_lock_irqsave(&vits_lock, flag);
 		goto skip_list_add;
 	}
@@ -368,6 +376,7 @@ skip_list_add:
 	/* take MSI owner ship of this pdev */
 	if (IS_ENABLED(CONFIG_PCI_MSI))
 		pdev->msidata = its_dev;
+	mb();
 	spin_unlock_irqrestore(&vits_lock, flag);
 	return 0;
 }
@@ -501,37 +510,76 @@ static int vits_msi_setup_irq(struct msi_chip *chip,
 	unsigned long flag;
 	unsigned int irq = 0;
 	struct vgic_its_irq *vits_irq;
+	struct vits_pirq *pirq_entry;
 
 	if (IS_ENABLED(CONFIG_PCI_MSI)) {
 		vec_nr = vits_msi_get_entry_nr(desc);
 		if (pdev->msidata) {
 			spin_lock_irqsave(&vits_lock, flag);
 			vits_irq = get_vgic_its_irq(its_dev, -1, vec_nr, false);
-			if (!vits_irq) {
-				spin_unlock_irqrestore(&vits_lock, flag);
-				return -EINVAL;
-			}
+			if (!vits_irq)
+				goto end;
 			irq = vits_irq->pirq;
-
 			irq_set_msi_desc(irq, desc);
+
 			addr = vgic_its_get_vm_translator_addr(its_dev->kvm);
 			addr += 0x40;
 			msg.address_lo		= (u32)addr;
 			msg.address_hi		= (u32)(addr >> 32);
 			msg.data		= vec_nr;
 			write_msi_msg(irq, &msg);
+			irq_set_handler_data(irq, its_dev->pits_dev);
+			ret = request_irq(irq, vgic_its_handle_interrupt,
+				0, "vits-mapvi-int", its_dev);
+			if (IS_ERR_VALUE(ret))
+				goto end;
+			pirq_entry = kzalloc(sizeof(*pirq_entry), GFP_KERNEL);
+			if(!pirq_entry)
+				goto end;
+			INIT_LIST_HEAD(&(pirq_entry)->entry);
+
+			list_add(&(pirq_entry->entry), &vits_pirqs);
+			irq_set_handler_data(irq, its_dev);
+			mb();
 			spin_unlock_irqrestore(&vits_lock, flag);
 			return 0;
 		}
 	}
+	spin_unlock_irqrestore(&vits_lock, flag);
 	return master->real_msi->setup_irq(master->real_msi, pdev, desc);
+end:
+	spin_unlock_irqrestore(&vits_lock, flag);
+	return -EINVAL;
 }
 
 static void vits_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 {
 	struct msi_master *master = container_of(chip,
 					struct msi_master, msi);
+	struct vits_pirq *pirq_entry;
+	struct vgic_its_device *vits_dev = NULL;
+	struct vgic_its_irq *vits_irq;
+	unsigned long flag;
+
+	spin_lock_irqsave(&vits_lock, flag);
+	list_for_each_entry(pirq_entry, &vits_pirqs, entry) {
+		if(pirq_entry->pirq == irq)
+			vits_dev = irq_get_handler_data(irq);
+	}
+	if(!vits_dev)
+		goto end;
+
+	vits_irq = get_vgic_its_irq(vits_dev, irq, -1, true);
+	if (vits_irq) {
+		free_irq(vits_irq->pirq, vits_dev);
+		list_del(&(vits_irq->entry));
+		kfree(vits_irq);
+		irq_set_handler_data(vits_irq->pirq, vits_dev->pits_dev);
+		mb();
+	}
 	/* just fall through */
+end:
+	spin_unlock_irqrestore(&vits_lock, flag);
 	master->real_msi->teardown_irq(master->real_msi, irq);
 }
 
@@ -557,6 +605,7 @@ struct msi_chip *vgic_its_get_msi_node(struct pci_bus *bus,
 		master->msi.teardown_irq	= vits_msi_teardown_irq;
 		master->real_msi		= msi;
 		master->bus			= bus;
+		INIT_LIST_HEAD(&(master->entry));
 		list_add(&master->entry, &msi_masters);
 		return &master->msi;
 	}
