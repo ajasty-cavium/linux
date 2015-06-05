@@ -1,20 +1,21 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
 #include <linux/acpi.h>
+#include <linux/of_net.h>
 
 #include "nic_reg.h"
 #include "nic.h"
@@ -26,6 +27,7 @@
 struct lmac {
 	struct bgx		*bgx;
 	int			dmac;
+	unsigned char		mac[ETH_ALEN];
 	bool			link_up;
 	int			lmacid; /* ID within BGX */
 	int			lmacid_bd; /* ID on board */
@@ -37,7 +39,7 @@ struct lmac {
 	bool			is_sgmii;
 	struct delayed_work	dwork;
 	struct workqueue_struct *check_link;
-} lmac;
+};
 
 struct bgx {
 	u8			bgx_id;
@@ -47,12 +49,12 @@ struct bgx {
 	int                     lmac_type;
 	int                     lane_to_sds;
 	int			use_training;
-	u64			reg_base;
+	void __iomem		*reg_base;
 	struct pci_dev		*pdev;
-} bgx;
+};
 
-struct bgx *bgx_vnic[MAX_BGX_THUNDER];
-static int lmac_count = 0; /* Total no of LMACs in system */
+static struct bgx *bgx_vnic[MAX_BGX_THUNDER];
+static int lmac_count; /* Total no of LMACs in system */
 
 static int bgx_xaui_check_link(struct lmac *lmac);
 
@@ -68,32 +70,38 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION(DRV_VERSION);
 MODULE_DEVICE_TABLE(pci, bgx_id_table);
 
+/* The Cavium ThunderX network controller can *only* be found in SoCs
+ * containing the ThunderX ARM64 CPU implementation.  All accesses to the device
+ * registers on this platform are implicitly strongly ordered with respect
+ * to memory accesses. So writeq_relaxed() and readq_relaxed() are safe to use
+ * with no memory barriers in this driver.  The readq()/writeq() functions add
+ * explicit ordering operation which in this case are redundant, and only
+ * add overhead.
+ */
+
 /* Register read/write APIs */
 static u64 bgx_reg_read(struct bgx *bgx, u8 lmac, u64 offset)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-	return readq_relaxed((void *)addr);
+	return readq_relaxed(addr);
 }
 
-static void bgx_reg_write(struct bgx *bgx, u8 lmac,
-			  u64 offset, u64 val)
+static void bgx_reg_write(struct bgx *bgx, u8 lmac, u64 offset, u64 val)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-	writeq_relaxed(val, (void *)addr);
+	writeq_relaxed(val, addr);
 }
 
-static void bgx_reg_modify(struct bgx *bgx, u8 lmac,
-			   u64 offset, u64 val)
+static void bgx_reg_modify(struct bgx *bgx, u8 lmac, u64 offset, u64 val)
 {
-	u64 addr = bgx->reg_base + ((u32)lmac << 20) + offset;
+	void __iomem *addr = bgx->reg_base + ((u32)lmac << 20) + offset;
 
-        writeq_relaxed(val | bgx_reg_read(bgx, lmac, offset), (void *)addr);
+	writeq_relaxed(val | readq_relaxed(addr), addr);
 }
 
-static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
-			u64 reg, u64 mask, bool zero)
+static int bgx_poll_reg(struct bgx *bgx, u8 lmac, u64 reg, u64 mask, bool zero)
 {
 	int timeout = 100;
 	u64 reg_val;
@@ -111,19 +119,19 @@ static int bgx_poll_reg(struct bgx *bgx, u8 lmac,
 }
 
 /* Return number of BGX present in HW */
-void bgx_get_count(int node, int *bgx_count)
+unsigned bgx_get_map(int node)
 {
 	int i;
-	struct bgx *bgx;
+	unsigned map = 0;
 
-	*bgx_count = 0;
 	for (i = 0; i < MAX_BGX_PER_CN88XX; i++) {
-		bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + i];
-		if (bgx)
-			*bgx_count |= (1 << i);
+		if (bgx_vnic[(node * MAX_BGX_PER_CN88XX) + i])
+			map |= (1 << i);
 	}
+
+	return map;
 }
-EXPORT_SYMBOL(bgx_get_count);
+EXPORT_SYMBOL(bgx_get_map);
 
 /* Return number of LMAC configured for this BGX */
 int bgx_get_lmac_count(int node, int bgx_idx)
@@ -155,6 +163,28 @@ void bgx_get_lmac_link_state(int node, int bgx_idx, int lmacid, void *status)
 	link->speed = lmac->last_speed;
 }
 EXPORT_SYMBOL(bgx_get_lmac_link_state);
+
+const u8 *bgx_get_lmac_mac(int node, int bgx_idx, int lmacid)
+{
+	struct bgx *bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+
+	if (bgx)
+		return bgx->lmac[lmacid].mac;
+
+	return NULL;
+}
+EXPORT_SYMBOL(bgx_get_lmac_mac);
+
+void bgx_set_lmac_mac(int node, int bgx_idx, int lmacid, const u8 *mac)
+{
+	struct bgx *bgx = bgx_vnic[(node * MAX_BGX_PER_CN88XX) + bgx_idx];
+
+	if (!bgx)
+		return;
+
+	ether_addr_copy(bgx->lmac[lmacid].mac, mac);
+}
+EXPORT_SYMBOL(bgx_set_lmac_mac);
 
 static void bgx_sgmii_change_link_state(struct lmac *lmac)
 {
@@ -224,7 +254,7 @@ static void bgx_sgmii_change_link_state(struct lmac *lmac)
 	bgx_reg_write(bgx, lmac->lmacid, BGX_CMRX_CFG, cmr_cfg);
 }
 
-void bgx_lmac_handler(struct net_device *netdev)
+static void bgx_lmac_handler(struct net_device *netdev)
 {
 	struct lmac *lmac = container_of(netdev, struct lmac, netdev);
 	struct phy_device *phydev = lmac->phydev;
@@ -236,10 +266,10 @@ void bgx_lmac_handler(struct net_device *netdev)
 	if (!phydev->link && lmac->last_link)
 		link_changed = -1;
 
-	if (phydev->link
-	    && (lmac->last_duplex != phydev->duplex
-		|| lmac->last_link != phydev->link
-		|| lmac->last_speed != phydev->speed)) {
+	if (phydev->link &&
+	    (lmac->last_duplex != phydev->duplex ||
+	     lmac->last_link != phydev->link ||
+	     lmac->last_speed != phydev->speed)) {
 			link_changed = 1;
 	}
 
@@ -289,21 +319,19 @@ EXPORT_SYMBOL(bgx_get_tx_stats);
 
 static void bgx_flush_dmac_addrs(struct bgx *bgx, int lmac)
 {
-	u64 dmac = 0x00;
-	u64 offset, addr;
+	u64 offset;
 
 	while (bgx->lmac[lmac].dmac > 0) {
-		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(dmac)) +
-			(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
-		addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
-		writeq_relaxed(dmac, (void *)addr);
+		offset = ((bgx->lmac[lmac].dmac - 1) * sizeof(u64)) +
+			(lmac * MAX_DMAC_PER_LMAC * sizeof(u64));
+		bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + offset, 0);
 		bgx->lmac[lmac].dmac--;
 	}
 }
 
 void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac)
 {
-	u64 offset, addr;
+	u64 offset;
 	struct bgx *bgx;
 
 #ifdef BGX_IN_PROMISCUOUS_MODE
@@ -331,10 +359,9 @@ void bgx_add_dmac_addr(u64 dmac, int node, int bgx_idx, int lmac)
 	if (bgx->lmac[lmac].dmac == MAX_DMAC_PER_LMAC_TNS_BYPASS_MODE)
 		bgx->lmac[lmac].dmac = 1;
 
-	offset = (bgx->lmac[lmac].dmac * sizeof(dmac)) +
-		(lmac * MAX_DMAC_PER_LMAC * sizeof(dmac));
-	addr = bgx->reg_base + BGX_CMR_RX_DMACX_CAM + offset;
-	writeq_relaxed(dmac, (void *)addr);
+	offset = (bgx->lmac[lmac].dmac * sizeof(u64)) +
+		(lmac * MAX_DMAC_PER_LMAC * sizeof(u64));
+	bgx_reg_write(bgx, 0, BGX_CMR_RX_DMACX_CAM + offset, dmac);
 	bgx->lmac[lmac].dmac++;
 
 	bgx_reg_write(bgx, lmac, BGX_CMRX_RX_DMAC_CTL,
@@ -606,7 +633,7 @@ static void bgx_poll_for_link(struct work_struct *work)
 	queue_delayed_work(lmac->check_link, &lmac->dwork, HZ * 2);
 }
 
-static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
+static int bgx_lmac_enable(struct bgx *bgx, u8 lmacid)
 {
 	u64 dmac_bcast = (1ULL << 48) - 1;
 	struct lmac *lmac;
@@ -674,14 +701,14 @@ static int bgx_lmac_enable(struct bgx *bgx, int8_t lmacid)
 	return 0;
 }
 
-void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
+static void bgx_lmac_disable(struct bgx *bgx, u8 lmacid)
 {
 	struct lmac *lmac;
 	u64 cmrx_cfg;
 
 	lmac = &bgx->lmac[lmacid];
 	if (lmac->check_link) {
-		/*Destroy work Queue */
+		/* Destroy work queue */
 		cancel_delayed_work(&lmac->dwork);
 		flush_workqueue(lmac->check_link);
 		destroy_workqueue(lmac->check_link);
@@ -807,14 +834,14 @@ static void bgx_get_qlm_mode(struct bgx *bgx)
 
 	/* Read LMAC0 type to figure out QLM mode
 	 * This is configured by low level firmware
-	 **/
+	 */
 	lmac_type = bgx_reg_read(bgx, 0, BGX_CMRX_CFG);
 	lmac_type = (lmac_type >> 8) & 0x07;
 
 	train_en = bgx_reg_read(bgx, 0, BGX_SPUX_BR_PMD_CRTL) &
 				SPU_PMD_CRTL_TRAIN_EN;
 
-	switch(lmac_type) {
+	switch (lmac_type) {
 	case BGX_MODE_SGMII:
 		bgx->qlm_mode = QLM_MODE_SGMII;
 		dev_info(dev, "BGX%d QLM mode: SGMII\n", bgx->bgx_id);
@@ -909,7 +936,7 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 		return AE_OK;
 	}
 
-	if(strncmp(string.pointer, bgx_sel, 4))
+	if (strncmp(string.pointer, bgx_sel, 4))
 		return AE_OK;
 
 	acpi_walk_namespace(ACPI_TYPE_DEVICE, handle, 1,
@@ -918,42 +945,36 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 	kfree(string.pointer);
 	return AE_CTRL_TERMINATE;
 }
-static int
-bgx_init_acpi_phy(struct bgx *bgx)
+
+static void
+bgx_init_acpi(struct bgx *bgx)
 {
 	acpi_get_devices(NULL, bgx_acpi_match_id, bgx, (void **)NULL);
-	return 0;
 }
 
 #else
-static int
-bgx_init_acpi_phy(struct bgx *bgx)
+static void
+bgx_init_acpi(struct bgx *bgx)
 {
-	return -ENODEV;
 }
 #endif
 
-#ifdef CONFIG_OF_MDIO
-static int
-bgx_init_of_phy(struct bgx *bgx)
+static void bgx_init_of(struct bgx *bgx, struct device_node *np)
 {
-	struct device_node *np;
 	struct device_node *np_child;
 	u8 lmac = 0;
-	char bgx_sel[5];
-
-	/* Get BGX node from DT */
-	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
-	np = of_find_node_by_name(NULL, bgx_sel);
-	if (!np)
-		return -ENODEV;
 
 	for_each_child_of_node(np, np_child) {
-		struct device_node *phy_np = of_parse_phandle(np_child,
-							      "phy-handle", 0);
-		if (!phy_np)
-			continue;
-		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+		struct device_node *phy_np;
+		const char *mac;
+
+		phy_np = of_parse_phandle(np_child, "phy-handle", 0);
+		if (phy_np)
+			bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+
+		mac = of_get_mac_address(np_child);
+		if (mac)
+			ether_addr_copy(bgx->lmac[lmac].mac, mac);
 
 		SET_NETDEV_DEV(&bgx->lmac[lmac].netdev, &bgx->pdev->dev);
 		bgx->lmac[lmac].lmacid = lmac;
@@ -961,24 +982,6 @@ bgx_init_of_phy(struct bgx *bgx)
 		if (lmac == MAX_LMAC_PER_BGX)
 			break;
 	}
-	return 0;
-}
-#else
-static int
-bgx_init_of_phy(struct bgx *bgx)
-{
-	return -ENODEV;
-}
-#endif
-
-static int bgx_init_phy(struct bgx *bgx)
-{
-	int err = bgx_init_of_phy(bgx);
-
-	if (err != -ENODEV)
-		return err;
-
-	return bgx_init_acpi_phy(bgx);
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -986,9 +989,11 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct bgx *bgx = NULL;
+	struct device_node *np;
+	char bgx_sel[5];
 	u8 lmac;
 
-	bgx = kzalloc(sizeof(*bgx), GFP_KERNEL);
+	bgx = devm_kzalloc(dev, sizeof(*bgx), GFP_KERNEL);
 	if (!bgx)
 		return -ENOMEM;
 	bgx->pdev = pdev;
@@ -998,7 +1003,8 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Failed to enable PCI device\n");
-		goto exit;
+		pci_set_drvdata(pdev, NULL);
+		return err;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -1008,7 +1014,7 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* MAP configuration registers */
-	bgx->reg_base = (u64)pci_ioremap_bar(pdev, PCI_CFG_REG_BAR_NUM);
+	bgx->reg_base = pcim_iomap(pdev, PCI_CFG_REG_BAR_NUM, 0);
 	if (!bgx->reg_base) {
 		dev_err(dev, "BGX: Cannot map CSR memory space, aborting\n");
 		err = -ENOMEM;
@@ -1020,9 +1026,13 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx_vnic[bgx->bgx_id] = bgx;
 	bgx_get_qlm_mode(bgx);
 
-	err = bgx_init_phy(bgx);
-	if (err)
-		goto err_enable;
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np = of_find_node_by_name(NULL, bgx_sel);
+	if (np) {
+		bgx_init_of(bgx, np);
+	} else {
+		bgx_init_acpi(bgx);
+	}
 
 	bgx_init_hw(bgx);
 
@@ -1037,16 +1047,14 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	return 0;
+
 err_enable:
-	if (bgx->reg_base)
-		iounmap((void *)bgx->reg_base);
+	bgx_vnic[bgx->bgx_id] = NULL;
 err_release_regions:
 	pci_release_regions(pdev);
 err_disable_device:
 	pci_disable_device(pdev);
-exit:
-	bgx_vnic[bgx->bgx_id] = NULL;
-	kfree(bgx);
+	pci_set_drvdata(pdev, NULL);
 	return err;
 }
 
@@ -1055,20 +1063,14 @@ static void bgx_remove(struct pci_dev *pdev)
 	struct bgx *bgx = pci_get_drvdata(pdev);
 	u8 lmac;
 
-	if (!bgx)
-		return;
 	/* Disable all LMACs */
 	for (lmac = 0; lmac < bgx->lmac_count; lmac++)
 		bgx_lmac_disable(bgx, lmac);
 
-	pci_set_drvdata(pdev, NULL);
-
-	if (bgx->reg_base)
-		iounmap((void *)bgx->reg_base);
-
+	bgx_vnic[bgx->bgx_id] = NULL;
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
-	kfree(bgx);
+	pci_set_drvdata(pdev, NULL);
 }
 
 static struct pci_driver bgx_driver = {

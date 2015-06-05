@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #ifndef NIC_H
@@ -33,8 +32,8 @@
 #define	NIC_TNS_MODE			1
 
 /* NIC priv flags */
-#define	NIC_SRIOV_ENABLED		(1 << 0)
-#define	NIC_TNS_ENABLED			(1 << 1)
+#define	NIC_SRIOV_ENABLED		BIT(0)
+#define	NIC_TNS_ENABLED			BIT(1)
 
 /* VNIC HW optimiation features */
 #define VNIC_RSS_SUPPORT
@@ -101,10 +100,10 @@
 #define	NICVF_INTR_CQ_MASK		(0xFF << NICVF_INTR_CQ_SHIFT)
 #define	NICVF_INTR_SQ_MASK		(0xFF << NICVF_INTR_SQ_SHIFT)
 #define	NICVF_INTR_RBDR_MASK		(0x03 << NICVF_INTR_RBDR_SHIFT)
-#define	NICVF_INTR_PKT_DROP_MASK	(1 << NICVF_INTR_PKT_DROP_SHIFT)
-#define	NICVF_INTR_TCP_TIMER_MASK	(1 << NICVF_INTR_TCP_TIMER_SHIFT)
-#define	NICVF_INTR_MBOX_MASK		(1 << NICVF_INTR_MBOX_SHIFT)
-#define	NICVF_INTR_QS_ERR_MASK		(1 << NICVF_INTR_QS_ERR_SHIFT)
+#define	NICVF_INTR_PKT_DROP_MASK	BIT(NICVF_INTR_PKT_DROP_SHIFT)
+#define	NICVF_INTR_TCP_TIMER_MASK	BIT(NICVF_INTR_TCP_TIMER_SHIFT)
+#define	NICVF_INTR_MBOX_MASK		BIT(NICVF_INTR_MBOX_SHIFT)
+#define	NICVF_INTR_QS_ERR_MASK		BIT(NICVF_INTR_QS_ERR_SHIFT)
 
 /* MSI-X interrupts */
 #define	NIC_PF_MSIX_VECTORS		10
@@ -143,15 +142,15 @@ struct nicvf_cq_poll {
 #ifdef VNIC_RSS_SUPPORT
 struct nicvf_rss_info {
 	bool enable;
-#define	RSS_L2_EXTENDED_HASH_ENA	(1 << 0)
-#define	RSS_IP_HASH_ENA			(1 << 1)
-#define	RSS_TCP_HASH_ENA		(1 << 2)
-#define	RSS_TCP_SYN_DIS			(1 << 3)
-#define	RSS_UDP_HASH_ENA		(1 << 4)
-#define RSS_L4_EXTENDED_HASH_ENA	(1 << 5)
-#define	RSS_ROCE_ENA			(1 << 6)
-#define	RSS_L3_BI_DIRECTION_ENA		(1 << 7)
-#define	RSS_L4_BI_DIRECTION_ENA		(1 << 8)
+#define	RSS_L2_EXTENDED_HASH_ENA	BIT(0)
+#define	RSS_IP_HASH_ENA			BIT(1)
+#define	RSS_TCP_HASH_ENA		BIT(2)
+#define	RSS_TCP_SYN_DIS			BIT(3)
+#define	RSS_UDP_HASH_ENA		BIT(4)
+#define RSS_L4_EXTENDED_HASH_ENA	BIT(5)
+#define	RSS_ROCE_ENA			BIT(6)
+#define	RSS_L3_BI_DIRECTION_ENA		BIT(7)
+#define	RSS_L4_BI_DIRECTION_ENA		BIT(8)
 	u64 cfg;
 	u8  hash_bits;
 	u16 rss_size;
@@ -235,7 +234,7 @@ struct nicvf {
 	u8			tns_mode;
 	u16			mtu;
 	struct queue_set	*qs;
-	u64			reg_base;
+	void __iomem		*reg_base;
 	bool			link_up;
 	u8			duplex;
 	u32			speed;
@@ -305,114 +304,107 @@ struct nicvf {
 #define NIC_MBOX_MSG_SHUTDOWN		0x13	/* VF is being shutdown */
 
 struct nic_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    tns_mode;
 	u8    node_id;
-	u8    unused0;
-	u16   unused1;
-	u64   mac_addr;
-} __packed;
+	u8    mac_addr[ETH_ALEN];
+};
 
 /* Qset configuration */
 struct qs_cfg_msg {
+	u8    msg;
 	u8    num;
-	u8    unused0;
-	u32   unused1;
 	u64   cfg;
-} __packed;
+};
 
 /* Receive queue configuration */
 struct rq_cfg_msg {
+	u8    msg;
 	u8    qs_num;
 	u8    rq_num;
-	u32   unused0;
 	u64   cfg;
-} __packed;
+};
 
 /* Send queue configuration */
 struct sq_cfg_msg {
+	u8    msg;
 	u8    qs_num;
 	u8    sq_num;
-	u32   unused0;
 	u64   cfg;
-} __packed;
+};
 
 /* Set VF's MAC address */
 struct set_mac_msg {
+	u8    msg;
 	u8    vf_id;
-	u8    unused0;
-	u32   unused1;
-	u64   addr;
-} __packed;
+	u8    mac_addr[ETH_ALEN];
+};
 
 /* Set Maximum frame size */
 struct set_frs_msg {
+	u8    msg;
 	u8    vf_id;
 	u16   max_frs;
 };
 
 /* Set CPI algorithm type */
 struct cpi_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    rq_cnt;
 	u8    cpi_alg;
 };
 
-#ifdef VNIC_RSS_SUPPORT
 /* Get RSS table size */
 struct rss_sz_msg {
+	u8    msg;
 	u8    vf_id;
 	u16   ind_tbl_size;
 };
 
 /* Set RSS configuration */
 struct rss_cfg_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    hash_bits;
 	u8    tbl_len;
 	u8    tbl_offset;
-	u16   unused0;
 #define RSS_IND_TBL_LEN_PER_MBX_MSG	8
 	u8    ind_tbl[RSS_IND_TBL_LEN_PER_MBX_MSG];
-} __packed;
-#endif
+};
 
 struct bgx_stats_msg {
+	u8    msg;
 	u8    vf_id;
 	u8    rx;
 	u8    idx;
-	u8    unused0;
-	u16   unused1;
 	u64   stats;
-} __packed;
+};
 
 /* Physical interface link status */
 struct bgx_link_status {
+	u8    msg;
 	u8    link_up;
 	u8    duplex;
 	u32   speed;
 };
 
 /* 128 bit shared memory between PF and each VF */
-struct nic_mbx {
-	u8    msg;
-	u8    unused;
-	union	{
-		struct nic_cfg_msg	nic_cfg;
-		struct qs_cfg_msg	qs;
-		struct rq_cfg_msg	rq;
-		struct sq_cfg_msg	sq;
-		struct set_mac_msg	mac;
-		struct set_frs_msg	frs;
-		struct cpi_cfg_msg	cpi_cfg;
-#ifdef VNIC_RSS_SUPPORT
-		struct rss_sz_msg	rss_size;
-		struct rss_cfg_msg	rss_cfg;
-#endif
-		struct bgx_stats_msg    bgx_stats;
-		struct bgx_link_status  link_status;
-	} data;
-} __packed;
+union nic_mbx {
+	struct { u8 msg; }	msg;
+	struct nic_cfg_msg	nic_cfg;
+	struct qs_cfg_msg	qs;
+	struct rq_cfg_msg	rq;
+	struct sq_cfg_msg	sq;
+	struct set_mac_msg	mac;
+	struct set_frs_msg	frs;
+	struct cpi_cfg_msg	cpi_cfg;
+	struct rss_sz_msg	rss_size;
+	struct rss_cfg_msg	rss_cfg;
+	struct bgx_stats_msg    bgx_stats;
+	struct bgx_link_status  link_status;
+};
 
 #define NIC_NODE_ID_MASK	0x03
 #define NIC_NODE_ID_SHIFT	44
@@ -427,25 +419,11 @@ int nicvf_set_real_num_queues(struct net_device *netdev,
 			      int tx_queues, int rx_queues);
 int nicvf_open(struct net_device *netdev);
 int nicvf_stop(struct net_device *netdev);
-int nicvf_send_msg_to_pf(struct nicvf *vf, struct nic_mbx *mbx);
-void nicvf_config_cpi(struct nicvf *nic);
-#ifdef VNIC_RSS_SUPPORT
+int nicvf_send_msg_to_pf(struct nicvf *vf, union nic_mbx *mbx);
 void nicvf_config_rss(struct nicvf *nic);
 void nicvf_set_rss_key(struct nicvf *nic);
-#endif
-void nicvf_free_skb(struct nicvf *nic, struct sk_buff *skb);
 void nicvf_set_ethtool_ops(struct net_device *netdev);
 void nicvf_update_stats(struct nicvf *nic);
 void nicvf_update_lmac_stats(struct nicvf *nic);
-
-/* Debug */
-#undef	NIC_DEBUG
-
-#ifdef	NIC_DEBUG
-#define	nic_dbg(dev, fmt, arg...) \
-		dev_info(dev, fmt, ##arg)
-#else
-#define	nic_dbg(dev, fmt, arg...) do {} while (0)
-#endif
 
 #endif /* NIC_H */

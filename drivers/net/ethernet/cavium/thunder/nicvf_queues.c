@@ -1,10 +1,9 @@
 /*
  * Copyright (C) 2015 Cavium, Inc.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2 of the GNU General Public License
+ * as published by the Free Software Foundation.
  */
 
 #include <linux/pci.h>
@@ -59,12 +58,11 @@ static int nicvf_alloc_q_desc_mem(struct nicvf *nic, struct q_desc_mem *dmem,
 	dmem->unalign_base = dma_zalloc_coherent(&nic->pdev->dev, dmem->size,
 						&dmem->dma, GFP_KERNEL);
 	if (!dmem->unalign_base)
-		return -1;
+		return -ENOMEM;
 
 	/* Align memory address for 'align_bytes' */
 	dmem->phys_base = NICVF_ALIGNED_ADDR((u64)dmem->dma, align_bytes);
-	dmem->base = (void *)((u8 *)dmem->unalign_base +
-			      (dmem->phys_base - dmem->dma));
+	dmem->base = dmem->unalign_base + (dmem->phys_base - dmem->dma);
 	return 0;
 }
 
@@ -165,14 +163,13 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 	int idx;
 	u64 *rbuf;
 	struct rbdr_entry_t *desc;
+	int err;
 
-	if (nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
-				   sizeof(struct rbdr_entry_t),
-				   NICVF_RCV_BUF_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for rcv buffer ring\n");
-		return -ENOMEM;
-	}
+	err = nicvf_alloc_q_desc_mem(nic, &rbdr->dmem, ring_len,
+				     sizeof(struct rbdr_entry_t),
+				     NICVF_RCV_BUF_ALIGN_BYTES);
+	if (err)
+		return err;
 
 	rbdr->desc = rbdr->dmem.base;
 	/* Buffer size has to be in multiples of 128 bytes */
@@ -182,9 +179,10 @@ static int  nicvf_init_rbdr(struct nicvf *nic, struct rbdr *rbdr,
 
 	nic->rb_page = NULL;
 	for (idx = 0; idx < ring_len; idx++) {
-		if (nicvf_alloc_rcv_buffer(nic, GFP_KERNEL,
-					   RCV_FRAG_LEN, &rbuf))
-			return -ENOMEM;
+		err = nicvf_alloc_rcv_buffer(nic, GFP_KERNEL, RCV_FRAG_LEN,
+					     &rbuf);
+		if (err)
+			return err;
 
 		desc = GET_RBDR_DESC(rbdr, idx);
 		desc->buf_addr = virt_to_phys(rbuf) >> NICVF_RCV_BUF_ALIGN;
@@ -231,7 +229,7 @@ static void nicvf_free_rbdr(struct nicvf *nic, struct rbdr *rbdr)
 
 /* Refill receive buffer descriptors with new buffers.
  */
-void nicvf_refill_rbdr(struct nicvf *nic, gfp_t gfp)
+static void nicvf_refill_rbdr(struct nicvf *nic, gfp_t gfp)
 {
 	struct queue_set *qs = nic->qs;
 	int rbdr_idx = qs->rbdr_cnt;
@@ -324,13 +322,13 @@ void nicvf_rbdr_task(unsigned long data)
 static int nicvf_init_cmp_queue(struct nicvf *nic,
 				struct cmp_queue *cq, int q_len)
 {
-	if (nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len,
-				   CMP_QUEUE_DESC_SIZE,
-				   NICVF_CQ_BASE_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for completion queue\n");
-		return -ENOMEM;
-	}
+	int err;
+
+	err = nicvf_alloc_q_desc_mem(nic, &cq->dmem, q_len, CMP_QUEUE_DESC_SIZE,
+				     NICVF_CQ_BASE_ALIGN_BYTES);
+	if (err)
+		return err;
+
 	cq->desc = cq->dmem.base;
 	cq->thresh = CMP_QUEUE_CQE_THRESH;
 	nic->cq_coalesce_usecs = (CMP_QUEUE_TIMER_THRESH * 0.05) - 1;
@@ -352,16 +350,17 @@ static void nicvf_free_cmp_queue(struct nicvf *nic, struct cmp_queue *cq)
 static int nicvf_init_snd_queue(struct nicvf *nic,
 				struct snd_queue *sq, int q_len)
 {
-	if (nicvf_alloc_q_desc_mem(nic, &sq->dmem, q_len,
-				   SND_QUEUE_DESC_SIZE,
-				   NICVF_SQ_BASE_ALIGN_BYTES)) {
-		netdev_err(nic->netdev,
-			   "Unable to allocate memory for send queue\n");
-		return -ENOMEM;
-	}
+	int err;
+
+	err = nicvf_alloc_q_desc_mem(nic, &sq->dmem, q_len, SND_QUEUE_DESC_SIZE,
+				     NICVF_SQ_BASE_ALIGN_BYTES);
+	if (err)
+		return err;
 
 	sq->desc = sq->dmem.base;
-	sq->skbuff = kcalloc(q_len, sizeof(u64), GFP_ATOMIC);
+	sq->skbuff = kcalloc(q_len, sizeof(u64), GFP_KERNEL);
+	if (!sq->skbuff)
+		return -ENOMEM;
 	sq->head = 0;
 	sq->tail = 0;
 	atomic_set(&sq->free_cnt, q_len - 1);
@@ -408,11 +407,10 @@ static void nicvf_reclaim_snd_queue(struct nicvf *nic,
 static void nicvf_reclaim_rcv_queue(struct nicvf *nic,
 				    struct queue_set *qs, int qidx)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 
 	/* Make sure all packets in the pipeline are written back into mem */
-	mbx.msg = NIC_MBOX_MSG_RQ_SW_SYNC;
-	mbx.data.rq.cfg = 0;
+	mbx.msg.msg = NIC_MBOX_MSG_RQ_SW_SYNC;
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
 
@@ -481,7 +479,7 @@ static void nicvf_reclaim_rbdr(struct nicvf *nic,
 static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	struct rcv_queue *rq;
 	struct cmp_queue *cq;
 	struct rq_cfg rq_cfg;
@@ -513,24 +511,24 @@ static void nicvf_rcv_queue_config(struct nicvf *nic, struct queue_set *qs,
 	rq->caching = 1;
 
 	/* Send a mailbox msg to PF to config RQ */
-	mbx.msg = NIC_MBOX_MSG_RQ_CFG;
-	mbx.data.rq.qs_num = qs->vnic_id;
-	mbx.data.rq.rq_num = qidx;
-	mbx.data.rq.cfg = (rq->caching << 26) | (rq->cq_qs << 19) |
+	mbx.rq.msg = NIC_MBOX_MSG_RQ_CFG;
+	mbx.rq.qs_num = qs->vnic_id;
+	mbx.rq.rq_num = qidx;
+	mbx.rq.cfg = (rq->caching << 26) | (rq->cq_qs << 19) |
 			  (rq->cq_idx << 16) | (rq->cont_rbdr_qs << 9) |
 			  (rq->cont_qs_rbdr_idx << 8) |
 			  (rq->start_rbdr_qs << 1) | (rq->start_qs_rbdr_idx);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
-	mbx.msg = NIC_MBOX_MSG_RQ_BP_CFG;
-	mbx.data.rq.cfg = (1ULL << 63) | (1ULL << 62) | (qs->vnic_id << 0);
+	mbx.rq.msg = NIC_MBOX_MSG_RQ_BP_CFG;
+	mbx.rq.cfg = (1ULL << 63) | (1ULL << 62) | (qs->vnic_id << 0);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* RQ drop config
 	 * Enable CQ drop to reserve sufficient CQEs for all tx packets
 	 */
-	mbx.msg = NIC_MBOX_MSG_RQ_DROP_CFG;
-	mbx.data.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
+	mbx.rq.msg = NIC_MBOX_MSG_RQ_DROP_CFG;
+	mbx.rq.cfg = (1ULL << 62) | (RQ_CQ_DROP << 8);
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_GEN_CFG, qidx, 0x00);
@@ -614,7 +612,7 @@ void nicvf_cmp_queue_config(struct nicvf *nic, struct queue_set *qs,
 static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 				   int qidx, bool enable)
 {
-	struct nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	struct snd_queue *sq;
 	struct sq_cfg sq_cfg;
 
@@ -633,10 +631,10 @@ static void nicvf_snd_queue_config(struct nicvf *nic, struct queue_set *qs,
 	sq->cq_idx = qidx;
 
 	/* Send a mailbox msg to PF to config SQ */
-	mbx.msg = NIC_MBOX_MSG_SQ_CFG;
-	mbx.data.sq.qs_num = qs->vnic_id;
-	mbx.data.sq.sq_num = qidx;
-	mbx.data.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
+	mbx.sq.msg = NIC_MBOX_MSG_SQ_CFG;
+	mbx.sq.qs_num = qs->vnic_id;
+	mbx.sq.sq_num = qidx;
+	mbx.sq.cfg = (sq->cq_qs << 3) | sq->cq_idx;
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	/* Set queue base address */
@@ -701,7 +699,7 @@ static void nicvf_rbdr_config(struct nicvf *nic, struct queue_set *qs,
 /* Requests PF to assign and enable Qset */
 void nicvf_qset_config(struct nicvf *nic, bool enable)
 {
-	struct  nic_mbx mbx = {};
+	union nic_mbx mbx = {};
 	struct queue_set *qs = nic->qs;
 	struct qs_cfg *qs_cfg;
 
@@ -715,11 +713,11 @@ void nicvf_qset_config(struct nicvf *nic, bool enable)
 	qs->vnic_id = nic->vf_id;
 
 	/* Send a mailbox msg to PF to config Qset */
-	mbx.msg = NIC_MBOX_MSG_QS_CFG;
-	mbx.data.qs.num = qs->vnic_id;
+	mbx.qs.msg = NIC_MBOX_MSG_QS_CFG;
+	mbx.qs.num = qs->vnic_id;
 
-	mbx.data.qs.cfg = 0;
-	qs_cfg = (struct qs_cfg *)&mbx.data.qs.cfg;
+	mbx.qs.cfg = 0;
+	qs_cfg = (struct qs_cfg *)&mbx.qs.cfg;
 	if (qs->enable) {
 		qs_cfg->ena = 1;
 #ifdef __BIG_ENDIAN
@@ -782,7 +780,7 @@ int nicvf_set_qset_resources(struct nicvf *nic)
 {
 	struct queue_set *qs;
 
-	qs = kzalloc(sizeof(*qs), GFP_ATOMIC);
+	qs = devm_kzalloc(&nic->pdev->dev, sizeof(*qs), GFP_KERNEL);
 	if (!qs)
 		return -ENOMEM;
 	nic->qs = qs;
@@ -1167,7 +1165,7 @@ doorbell:
 	return 1;
 
 append_fail:
-	nic_dbg(&nic->pdev->dev, "Not enough SQ descriptors to xmit pkt\n");
+	netdev_dbg(nic->netdev, "Not enough SQ descriptors to xmit pkt\n");
 	return 0;
 }
 
@@ -1194,8 +1192,8 @@ struct sk_buff *nicvf_get_rcv_skb(struct nicvf *nic, struct cqe_rx_t *cqe_rx)
 	rb_lens = (void *)cqe_rx + (3 * sizeof(u64));
 	rb_ptrs = (void *)cqe_rx + (6 * sizeof(u64));
 
-	nic_dbg(&nic->pdev->dev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
-		__func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
+	netdev_dbg(nic->netdev, "%s rb_cnt %d rb0_ptr %llx rb0_sz %d\n",
+		   __func__, cqe_rx->rb_cnt, cqe_rx->rb0_ptr, cqe_rx->rb0_sz);
 
 	for (frag = 0; frag < cqe_rx->rb_cnt; frag++) {
 		payload_len = rb_lens[frag_num(frag)];
@@ -1243,29 +1241,29 @@ void nicvf_enable_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val |= (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val |= (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val |= (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to enable interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_ENA_W1S, reg_val);
@@ -1279,29 +1277,29 @@ void nicvf_disable_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val |= ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val |= (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val |= (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val |= (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to disable interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_ENA_W1C, reg_val);
@@ -1315,29 +1313,29 @@ void nicvf_clear_intr(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		reg_val = ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		reg_val = (1ULL << NICVF_INTR_PKT_DROP_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		reg_val = (1ULL << NICVF_INTR_TCP_TIMER_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		reg_val = (1ULL << NICVF_INTR_MBOX_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		reg_val |= (1ULL << NICVF_INTR_QS_ERR_SHIFT);
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to clear interrupt: unknown type\n");
-	break;
+		break;
 	}
 
 	nicvf_reg_write(nic, NIC_VF_INT, reg_val);
@@ -1354,29 +1352,29 @@ int nicvf_is_intr_enabled(struct nicvf *nic, int int_type, int q_idx)
 	switch (int_type) {
 	case NICVF_INTR_CQ:
 		mask = ((1ULL << q_idx) << NICVF_INTR_CQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_SQ:
 		mask = ((1ULL << q_idx) << NICVF_INTR_SQ_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_RBDR:
 		mask = ((1ULL << q_idx) << NICVF_INTR_RBDR_SHIFT);
-	break;
+		break;
 	case NICVF_INTR_PKT_DROP:
 		mask = NICVF_INTR_PKT_DROP_MASK;
-	break;
+		break;
 	case NICVF_INTR_TCP_TIMER:
 		mask = NICVF_INTR_TCP_TIMER_MASK;
-	break;
+		break;
 	case NICVF_INTR_MBOX:
 		mask = NICVF_INTR_MBOX_MASK;
-	break;
+		break;
 	case NICVF_INTR_QS_ERR:
 		mask = NICVF_INTR_QS_ERR_MASK;
-	break;
+		break;
 	default:
 		netdev_err(nic->netdev,
 			   "Failed to check interrupt enable: unknown type\n");
-	break;
+		break;
 	}
 
 	return (reg_val & mask);
@@ -1428,109 +1426,109 @@ int nicvf_check_cqe_rx_errs(struct nicvf *nic,
 	switch (cqe_rx->err_level) {
 	case CQ_ERRLVL_MAC:
 		stats->rx.errlvl.mac_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L2:
 		stats->rx.errlvl.l2_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L3:
 		stats->rx.errlvl.l3_errs++;
-	break;
+		break;
 	case CQ_ERRLVL_L4:
 		stats->rx.errlvl.l4_errs++;
-	break;
+		break;
 	}
 
 	switch (cqe_rx->err_opcode) {
 	case CQ_RX_ERROP_RE_PARTIAL:
 		stats->rx.errop.partial_pkts++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_JABBER:
 		stats->rx.errop.jabber_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_FCS:
 		stats->rx.errop.fcs_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_TERMINATE:
 		stats->rx.errop.terminate_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_RE_RX_CTL:
 		stats->rx.errop.bgx_rx_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_PREL2_ERR:
 		stats->rx.errop.prel2_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_FRAGMENT:
 		stats->rx.errop.l2_frags++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_OVERRUN:
 		stats->rx.errop.l2_overruns++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PFCS:
 		stats->rx.errop.l2_pfcs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PUNY:
 		stats->rx.errop.l2_puny++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_MAL:
 		stats->rx.errop.l2_hdr_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_OVERSIZE:
 		stats->rx.errop.l2_oversize++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_UNDERSIZE:
 		stats->rx.errop.l2_undersize++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_LENMISM:
 		stats->rx.errop.l2_len_mismatch++;
-	break;
+		break;
 	case CQ_RX_ERROP_L2_PCLP:
 		stats->rx.errop.l2_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_NOT:
 		stats->rx.errop.non_ip++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_CSUM_ERR:
 		stats->rx.errop.ip_csum_err++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_MAL:
 		stats->rx.errop.ip_hdr_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_MALD:
 		stats->rx.errop.ip_payload_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_IP_HOP:
 		stats->rx.errop.ip_hop_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L3_ICRC:
 		stats->rx.errop.l3_icrc_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L3_PCLP:
 		stats->rx.errop.l3_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_MAL:
 		stats->rx.errop.l4_malformed++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_CHK:
 		stats->rx.errop.l4_csum_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_UDP_LEN:
 		stats->rx.errop.udp_len_err++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_PORT:
 		stats->rx.errop.bad_l4_port++;
-	break;
+		break;
 	case CQ_RX_ERROP_TCP_FLAG:
 		stats->rx.errop.bad_tcp_flag++;
-	break;
+		break;
 	case CQ_RX_ERROP_TCP_OFFSET:
 		stats->rx.errop.tcp_offset_errs++;
-	break;
+		break;
 	case CQ_RX_ERROP_L4_PCLP:
 		stats->rx.errop.l4_pclp++;
-	break;
+		break;
 	case CQ_RX_ERROP_RBDR_TRUNC:
 		stats->rx.errop.pkt_truncated++;
-	break;
+		break;
 	}
 
 	return 1;
@@ -1546,46 +1544,45 @@ int nicvf_check_cqe_tx_errs(struct nicvf *nic,
 	case CQ_TX_ERROP_GOOD:
 		stats->tx.good++;
 		return 0;
-	break;
 	case CQ_TX_ERROP_DESC_FAULT:
 		stats->tx.desc_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_HDR_CONS_ERR:
 		stats->tx.hdr_cons_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_SUBDC_ERR:
 		stats->tx.subdesc_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_IMM_SIZE_OFLOW:
 		stats->tx.imm_size_oflow++;
-	break;
+		break;
 	case CQ_TX_ERROP_DATA_SEQUENCE_ERR:
 		stats->tx.data_seq_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_MEM_SEQUENCE_ERR:
 		stats->tx.mem_seq_err++;
-	break;
+		break;
 	case CQ_TX_ERROP_LOCK_VIOL:
 		stats->tx.lock_viol++;
-	break;
+		break;
 	case CQ_TX_ERROP_DATA_FAULT:
 		stats->tx.data_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_TSTMP_CONFLICT:
 		stats->tx.tstmp_conflict++;
-	break;
+		break;
 	case CQ_TX_ERROP_TSTMP_TIMEOUT:
 		stats->tx.tstmp_timeout++;
-	break;
+		break;
 	case CQ_TX_ERROP_MEM_FAULT:
 		stats->tx.mem_fault++;
-	break;
+		break;
 	case CQ_TX_ERROP_CK_OVERLAP:
 		stats->tx.csum_overlap++;
-	break;
+		break;
 	case CQ_TX_ERROP_CK_OFLOW:
 		stats->tx.csum_overflow++;
-	break;
+		break;
 	}
 
 	return 1;
