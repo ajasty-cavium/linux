@@ -309,6 +309,7 @@ static int kvm_vfio_set_its(struct kvm_device *dev, long attr, u64 arg)
 		}
 		vgic_its_create_device(dev->kvm, vfio_its.vdev_devfn,
 					vdev->pdev, device);
+		kvm_vfio_put_vfio_device(device);
 		return 0;
 	case KVM_DEV_VFIO_ITS_DEL:
 		kvm_vfio_put_vfio_device(device);
