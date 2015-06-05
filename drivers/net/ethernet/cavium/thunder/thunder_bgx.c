@@ -6,6 +6,7 @@
  * as published by the Free Software Foundation.
  */
 
+#include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
@@ -14,7 +15,6 @@
 #include <linux/phy.h>
 #include <linux/of.h>
 #include <linux/of_mdio.h>
-#include <linux/acpi.h>
 #include <linux/of_net.h>
 
 #include "nic_reg.h"
@@ -879,8 +879,8 @@ static void bgx_get_qlm_mode(struct bgx *bgx)
 }
 
 #ifdef CONFIG_ACPI
-static int
-bgx_match_phy_id(struct device *dev, void *data)
+
+static int bgx_match_phy_id(struct device *dev, void *data)
 {
 	struct phy_device *phydev = to_phy_device(dev);
 	u32 *phy_id = data;
@@ -891,8 +891,8 @@ bgx_match_phy_id(struct device *dev, void *data)
 	return 0;
 }
 
-static acpi_status
-bgx_acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
+static acpi_status bgx_acpi_register_phy(acpi_handle handle,
+					u32 lvl, void *context, void **rv)
 {
 	struct acpi_reference_args args;
 	struct bgx *bgx = context;
@@ -923,8 +923,8 @@ bgx_acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
 	return AE_OK;
 }
 
-static acpi_status
-bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
+static acpi_status bgx_acpi_match_id(acpi_handle handle, u32 lvl,
+				void *context, void **ret_val)
 {
 	struct acpi_buffer string = { ACPI_ALLOCATE_BUFFER, NULL };
 	struct bgx *bgx = context;
@@ -946,31 +946,43 @@ bgx_acpi_match_id(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 	return AE_CTRL_TERMINATE;
 }
 
-static void
-bgx_init_acpi(struct bgx *bgx)
+static int bgx_init_acpi_phy(struct bgx *bgx)
 {
 	acpi_get_devices(NULL, bgx_acpi_match_id, bgx, (void **)NULL);
+	return 0;
 }
 
 #else
-static void
-bgx_init_acpi(struct bgx *bgx)
-{
-}
-#endif
 
-static void bgx_init_of(struct bgx *bgx, struct device_node *np)
+static int bgx_init_acpi_phy(struct bgx *bgx)
 {
+	return -ENODEV;
+}
+
+#endif /* CONFIG_ACPI */
+
+#ifdef CONFIG_OF_MDIO
+
+static int bgx_init_of_phy(struct bgx *bgx)
+{
+	struct device_node *np;
 	struct device_node *np_child;
 	u8 lmac = 0;
+	char bgx_sel[5];
+	const char *mac;
+
+	/* Get BGX node from DT */
+	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
+	np = of_find_node_by_name(NULL, bgx_sel);
+	if (!np)
+		return -ENODEV;
 
 	for_each_child_of_node(np, np_child) {
-		struct device_node *phy_np;
-		const char *mac;
-
-		phy_np = of_parse_phandle(np_child, "phy-handle", 0);
-		if (phy_np)
-			bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
+		struct device_node *phy_np = of_parse_phandle(np_child,
+							      "phy-handle", 0);
+		if (!phy_np)
+			continue;
+		bgx->lmac[lmac].phydev = of_phy_find_device(phy_np);
 
 		mac = of_get_mac_address(np_child);
 		if (mac)
@@ -982,6 +994,26 @@ static void bgx_init_of(struct bgx *bgx, struct device_node *np)
 		if (lmac == MAX_LMAC_PER_BGX)
 			break;
 	}
+	return 0;
+}
+
+#else
+
+static int bgx_init_of_phy(struct bgx *bgx)
+{
+	return -ENODEV;
+}
+
+#endif /* CONFIG_OF_MDIO */
+
+static int bgx_init_phy(struct bgx *bgx)
+{
+	int err = bgx_init_of_phy(bgx);
+
+	if (err != -ENODEV)
+		return err;
+
+	return bgx_init_acpi_phy(bgx);
 }
 
 static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -989,8 +1021,6 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	int err;
 	struct device *dev = &pdev->dev;
 	struct bgx *bgx = NULL;
-	struct device_node *np;
-	char bgx_sel[5];
 	u8 lmac;
 
 	bgx = devm_kzalloc(dev, sizeof(*bgx), GFP_KERNEL);
@@ -1026,13 +1056,9 @@ static int bgx_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	bgx_vnic[bgx->bgx_id] = bgx;
 	bgx_get_qlm_mode(bgx);
 
-	snprintf(bgx_sel, 5, "bgx%d", bgx->bgx_id);
-	np = of_find_node_by_name(NULL, bgx_sel);
-	if (np) {
-		bgx_init_of(bgx, np);
-	} else {
-		bgx_init_acpi(bgx);
-	}
+	err = bgx_init_phy(bgx);
+	if (err)
+		goto err_enable;
 
 	bgx_init_hw(bgx);
 
