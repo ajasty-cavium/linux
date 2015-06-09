@@ -112,23 +112,6 @@ static int thunder_pem_read_config(struct pci_bus *bus, unsigned int devfn,
 	if (busnr > 255 || devfn > 255 || reg > 4095)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	if (PCI_SLOT(devfn)) {
-		switch (size) {
-		case 1:
-			*val = 0xff;
-			break;
-		case 2:
-			*val = 0xffff;
-			break;
-		case 4:
-			*val = 0xffffffff;
-			break;
-		default:
-			return PCIBIOS_BAD_REGISTER_NUMBER;
-		}
-		return PCIBIOS_SUCCESSFUL;
-	}
-
 	addr = pem->cfgregion + ((busnr << 24)  | (devfn << 16) | reg);
 
 	switch (size) {
@@ -157,9 +140,6 @@ static int thunder_pem_write_config(struct pci_bus *bus, unsigned int devfn,
 
 	if (busnr > 255 || devfn > 255 || reg > 4095)
 		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	if (PCI_SLOT(devfn))
-		return PCIBIOS_SUCCESSFUL;
 
 	addr = pem->cfgregion + ((busnr << 24)  | (devfn << 16) | reg);
 
@@ -414,6 +394,7 @@ static int thunder_pem_pci_probe(struct pci_dev *pdev,
 		ret = -ENODEV;
 		goto err_root_bus;
 	}
+	pem->bus->is_pcierc = 1;
 	list_add_tail(&pem->list, &thunder_pem_buses);
 
 	for (i = 0; i < 3; i++) {
