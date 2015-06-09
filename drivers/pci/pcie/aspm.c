@@ -526,8 +526,10 @@ static struct pcie_link_state *alloc_pcie_link_state(struct pci_dev *pdev)
 	INIT_LIST_HEAD(&link->link);
 	link->pdev = pdev;
 	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_DOWNSTREAM) {
-		struct pcie_link_state *parent;
-		parent = pdev->bus->parent->self->link_state;
+		struct pcie_link_state *parent = NULL;
+
+		if (pdev->bus->parent->self)
+			parent = pdev->bus->parent->self->link_state;
 		if (!parent) {
 			kfree(link);
 			return NULL;
