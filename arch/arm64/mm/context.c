@@ -48,7 +48,7 @@ static void flush_context(void)
 {
 	/* set the reserved TTBR0 before flushing the TLB */
 	cpu_set_reserved_ttbr0();
-	flush_tlb_all();
+	flush_tlb_all_local();
 	if (icache_is_aivivt())
 		__flush_icache_all();
 }

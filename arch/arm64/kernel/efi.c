@@ -439,7 +439,7 @@ static int __init arm64_enter_virtual_mode(void)
 					     memmap.desc_version,
 					     (efi_memory_desc_t *)virtmap_phys);
 	cpu_set_reserved_ttbr0();
-	flush_tlb_all();
+	flush_tlb_all_local();
 	local_irq_restore(flags);
 
 	kfree(virtmap);

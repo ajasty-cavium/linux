@@ -70,57 +70,31 @@ extern struct cpu_tlb_fns cpu_tlb;
  *		only require the D-TLB to be invalidated.
  *		- kaddr - Kernel virtual memory address
  */
-static inline void flush_tlb_all(void)
-{
-	dsb(ishst);
-	asm("tlbi	vmalle1is");
-	dsb(ish);
-	isb();
-}
+void flush_tlb_all(void);
 
-static inline void flush_tlb_mm(struct mm_struct *mm)
-{
-	unsigned long asid = (unsigned long)ASID(mm) << 48;
-
-	dsb(ishst);
-	asm("tlbi	aside1is, %0" : : "r" (asid));
-	dsb(ish);
-}
+void flush_tlb_mm(struct mm_struct *mm);
 
 static inline void flush_tlb_page(struct vm_area_struct *vma,
 				  unsigned long uaddr)
 {
-	unsigned long addr = uaddr >> 12 |
-		((unsigned long)ASID(vma->vm_mm) << 48);
-
-	dsb(ishst);
-	asm("tlbi	vae1is, %0" : : "r" (addr));
-	dsb(ish);
+	flush_tlb_mm(vma->vm_mm);
 }
 
 static inline void __flush_tlb_range(struct vm_area_struct *vma,
 				     unsigned long start, unsigned long end)
 {
-	unsigned long asid = (unsigned long)ASID(vma->vm_mm) << 48;
-	unsigned long addr;
-	start = asid | (start >> 12);
-	end = asid | (end >> 12);
-
-	dsb(ishst);
-	for (addr = start; addr < end; addr += 1 << (PAGE_SHIFT - 12))
-		asm("tlbi vae1is, %0" : : "r"(addr));
-	dsb(ish);
+	flush_tlb_mm(vma->vm_mm);
 }
 
 static inline void __flush_tlb_kernel_range(unsigned long start, unsigned long end)
 {
-	unsigned long addr;
-	start >>= 12;
-	end >>= 12;
+	flush_tlb_all();
+}
 
+static inline void flush_tlb_all_local(void)
+{
 	dsb(ishst);
-	for (addr = start; addr < end; addr += 1 << (PAGE_SHIFT - 12))
-		asm("tlbi vaae1is, %0" : : "r"(addr));
+	asm("tlbi       vmalle1");
 	dsb(ish);
 	isb();
 }

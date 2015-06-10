@@ -20,12 +20,58 @@
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
+#include <linux/smp.h>
 
 #include <asm/cacheflush.h>
 #include <asm/cachetype.h>
 #include <asm/tlbflush.h>
 
 #include "mm.h"
+
+static void flush_tlb_local(void *info)
+{
+	asm volatile("\n"
+		     "	tlbi	vmalle1\n"
+		     "	isb	sy"
+		);
+}
+
+static void flush_tlb_mm_local(void *info)
+{
+	unsigned long asid = (unsigned long)info;
+
+	asm volatile("\n"
+		     "	tlbi	aside1, %0\n"
+		     "	isb	sy"
+		     : : "r" (asid)
+		);
+}
+
+void flush_tlb_all(void)
+{
+	/* Make sure page table modifications are visible. */
+	dsb(ishst);
+	/* IPI to all CPUs to do local flush. */
+	on_each_cpu(flush_tlb_local, NULL, 1);
+
+}
+EXPORT_SYMBOL(flush_tlb_all);
+
+void flush_tlb_mm(struct mm_struct *mm)
+{
+	if (!mm) {
+		flush_tlb_all();
+	} else {
+		unsigned long asid = (unsigned long)ASID(mm) << 48;
+		/* Make sure page table modifications are visible. */
+		dsb(ishst);
+		/* IPI to all CPUs to do local flush. */
+		on_each_cpu_mask(mm_cpumask(mm),
+				 flush_tlb_mm_local, (void *)asid, 1);
+	}
+
+}
+EXPORT_SYMBOL(flush_tlb_mm);
 
 void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
 		       unsigned long end)
