@@ -156,7 +156,7 @@ static void vgic_free_bitmap(struct vgic_bitmap *b)
  *
  * Warning: Calling this function may modify *val.
  */
-static unsigned long *u64_to_bitmask(u64 *val)
+static inline unsigned long *u64_to_bitmask(u64 *val)
 {
 #if defined(CONFIG_CPU_BIG_ENDIAN) && BITS_PER_LONG == 32
 	*val = (*val >> 32) | (*val << 32);
