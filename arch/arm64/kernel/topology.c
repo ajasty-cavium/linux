@@ -257,10 +257,17 @@ void store_cpu_topology(unsigned int cpuid)
 		cpuid_topo->core_id    = MPIDR_AFFINITY_LEVEL(mpidr, 1);
 		cpuid_topo->cluster_id = MPIDR_AFFINITY_LEVEL(mpidr, 2);
 	} else {
+#ifdef CONFIG_ACPI
+		/* Multiprocessor system : Single-thread per core */
+		cpuid_topo->thread_id  = -1;
+		cpuid_topo->core_id    = (((mpidr >> 8) & 0xff) * 16) + (mpidr & 0xff);
+		cpuid_topo->cluster_id = (cpuid_topo->core_id) > 47 ? 1:0;
+#else
 		/* Multiprocessor system : Single-thread per core */
 		cpuid_topo->thread_id  = -1;
 		cpuid_topo->core_id    = MPIDR_AFFINITY_LEVEL(mpidr, 0);
 		cpuid_topo->cluster_id = MPIDR_AFFINITY_LEVEL(mpidr, 1);
+#endif
 	}
 
 	pr_debug("CPU%u: cluster %d core %d thread %d mpidr %#016llx\n",

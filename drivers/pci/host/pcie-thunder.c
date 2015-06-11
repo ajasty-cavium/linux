@@ -119,9 +119,11 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 	 * machine.  In that case, don't mark things as
 	 * IORESOURCE_PCI_FIXED
 	 */
+	/* If ACPI, ignore this check */
+#ifndef CONFIG_ACPI
 	if (atomic_read(&thunder_pcie_ecam_probed) == 0)
 		return;
-
+#endif
 	for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
 		dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
 
