@@ -1204,18 +1204,6 @@ static inline void ahci_gtf_filter_workaround(struct ata_host *host)
 {}
 #endif
 
-static struct msi_desc *msix_get_desc(struct pci_dev *dev, u16 entry)
-{
-	struct msi_desc *desc;
-
-	list_for_each_entry(desc, &dev->msi_list, list) {
-		if (desc->msi_attrib.entry_nr == entry)
-			return desc;
-	}
-
-	return NULL;
-}
-
 /*
  * MSI-X support is needed for host controller that only have MSI-X
  * support implemented, but no MSI or intx. For now, function
@@ -1225,7 +1213,6 @@ static struct msi_desc *msix_get_desc(struct pci_dev *dev, u16 entry)
 static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
 			  struct ahci_host_priv *hpriv)
 {
-	struct msi_desc *desc;
 	int rc, nvec;
 	struct msix_entry entry = {};
 
@@ -1252,13 +1239,7 @@ static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
 	if (rc < 0)
 		goto fail;
 
-	desc = msix_get_desc(pdev, 0);	/* first entry */
-	if (!desc) {
-		rc = -EINVAL;
-		goto fail;
-	}
-
-	hpriv->irq = desc->irq;
+	hpriv->irq = entry.vector;
 
 	return 1;
 fail:
