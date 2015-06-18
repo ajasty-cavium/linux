@@ -94,22 +94,6 @@ static void kvm_vfio_device_put_external_user(struct vfio_device *vdev)
 	symbol_put(vfio_device_put_external_user);
 }
 
-static struct device *kvm_vfio_external_base_device(struct vfio_device *vdev)
-{
-	struct device *(*fn)(struct vfio_device *);
-	struct device *dev;
-
-	fn = symbol_get(vfio_external_base_device);
-	if (!fn)
-		return NULL;
-
-	dev = fn(vdev);
-
-	symbol_put(vfio_external_base_device);
-
-	return dev;
-}
-
 /**
  * kvm_vfio_get_vfio_device - Returns a handle to a vfio-device
  *
