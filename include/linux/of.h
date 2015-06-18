@@ -23,7 +23,6 @@
 #include <linux/spinlock.h>
 #include <linux/topology.h>
 #include <linux/notifier.h>
-#include <linux/property.h>
 
 #include <asm/byteorder.h>
 #include <asm/errno.h>
@@ -264,10 +263,6 @@ extern int of_property_read_u32_array(const struct device_node *np,
 				      size_t sz);
 extern int of_property_read_u64(const struct device_node *np,
 				const char *propname, u64 *out_value);
-extern int of_property_read_u64_array(const struct device_node *np,
-				      const char *propname,
-				      u64 *out_values,
-				      size_t sz);
 
 extern int of_property_read_string(struct device_node *np,
 				   const char *propname,
@@ -489,43 +484,9 @@ static inline int of_property_read_string(struct device_node *np,
 	return -ENOSYS;
 }
 
-static inline int of_property_read_u64_array(const struct device_node *np,
-					     const char *propname,
-					     u64 *out_values, size_t sz)
-{
-	return -ENOSYS;
-}
-
 static inline int of_property_read_string_helper(struct device_node *np,
 						 const char *propname,
 						 const char **out_strs, size_t sz, int index)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_read_string(struct device_node *np,
-					  const char *propname,
-					  const char **out_string)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_read_string_index(struct device_node *np,
-						const char *propname, int index,
-						const char **out_string)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_count_strings(struct device_node *np,
-					    const char *propname)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_read_string_array(struct device_node *np,
-						 const char *propname,
-						 char **out_strs, size_t sz)
 {
 	return -ENOSYS;
 }
