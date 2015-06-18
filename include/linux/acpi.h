@@ -678,6 +678,36 @@ do {									\
 #endif
 #endif
 
+struct acpi_gpio_params {
+	unsigned int crs_entry_index;
+	unsigned int line_index;
+	bool active_low;
+};
+
+struct acpi_gpio_mapping {
+	const char *name;
+	const struct acpi_gpio_params *data;
+	unsigned int size;
+};
+
+#if defined(CONFIG_ACPI) && defined(CONFIG_GPIOLIB)
+int acpi_dev_add_driver_gpios(struct acpi_device *adev,
+			      const struct acpi_gpio_mapping *gpios);
+
+static inline void acpi_dev_remove_driver_gpios(struct acpi_device *adev)
+{
+	if (adev)
+		adev->driver_gpios = NULL;
+}
+#else
+static inline int acpi_dev_add_driver_gpios(struct acpi_device *adev,
+			      const struct acpi_gpio_mapping *gpios)
+{
+	return -ENXIO;
+}
+static inline void acpi_dev_remove_driver_gpios(struct acpi_device *adev) {}
+#endif
+
 /* Device properties */
 
 #define MAX_ACPI_REFERENCE_ARGS	8
@@ -693,17 +723,16 @@ int acpi_dev_get_property(struct acpi_device *adev, const char *name,
 int acpi_dev_get_property_array(struct acpi_device *adev, const char *name,
 				acpi_object_type type,
 				const union acpi_object **obj);
-int acpi_dev_get_property_reference(struct acpi_device *adev, const char *name,
-				    const char *cells_name, size_t index,
+int acpi_dev_get_property_reference(struct acpi_device *adev,
+				    const char *name, size_t index,
 				    struct acpi_reference_args *args);
 
 int acpi_dev_prop_get(struct acpi_device *adev, const char *propname,
 		      void **valptr);
+int acpi_dev_prop_read_single(struct acpi_device *adev, const char *propname,
+			      enum dev_prop_type proptype, void *val);
 int acpi_dev_prop_read(struct acpi_device *adev, const char *propname,
-		       enum dev_prop_type proptype, void *val);
-int acpi_dev_prop_read_array(struct acpi_device *adev, const char *propname,
-			     enum dev_prop_type proptype, void *val,
-			     size_t nval);
+		       enum dev_prop_type proptype, void *val, size_t nval);
 
 struct acpi_device *acpi_get_next_child(struct device *dev,
 					struct acpi_device *child);
@@ -735,17 +764,18 @@ static inline int acpi_dev_prop_get(struct acpi_device *adev,
 	return -ENXIO;
 }
 
-static inline int acpi_dev_prop_read(struct acpi_device *adev,
-				     const char *propname,
-				     enum dev_prop_type proptype, void *val)
+static inline int acpi_dev_prop_read_single(struct acpi_device *adev,
+					    const char *propname,
+					    enum dev_prop_type proptype,
+					    void *val)
 {
 	return -ENXIO;
 }
 
-static inline int acpi_dev_prop_read_array(struct acpi_device *adev,
-					   const char *propname,
-					   enum dev_prop_type proptype,
-					   void *val, size_t nval)
+static inline int acpi_dev_prop_read(struct acpi_device *adev,
+				     const char *propname,
+				     enum dev_prop_type proptype,
+				     void *val, size_t nval)
 {
 	return -ENXIO;
 }

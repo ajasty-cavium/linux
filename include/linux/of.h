@@ -504,13 +504,6 @@ static inline int of_property_read_u32_array(const struct device_node *np,
 	return -ENOSYS;
 }
 
-static inline int of_property_read_string(struct device_node *np,
-					  const char *propname,
-					  const char **out_string)
-{
-	return -ENOSYS;
-}
-
 static inline int of_property_read_u64_array(const struct device_node *np,
 					     const char *propname,
 					     u64 *out_values, size_t sz)
@@ -518,13 +511,6 @@ static inline int of_property_read_u64_array(const struct device_node *np,
 	return -ENOSYS;
 }
 
-static inline int of_property_read_string_helper(struct device_node *np,
-						 const char *propname,
-						 const char **out_strs, size_t sz, int index)
-{
-	return -ENOSYS;
-}
-
 static inline int of_property_read_string(struct device_node *np,
 					  const char *propname,
 					  const char **out_string)
@@ -532,22 +518,9 @@ static inline int of_property_read_string(struct device_node *np,
 	return -ENOSYS;
 }
 
-static inline int of_property_read_string_index(struct device_node *np,
-						const char *propname, int index,
-						const char **out_string)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_count_strings(struct device_node *np,
-					    const char *propname)
-{
-	return -ENOSYS;
-}
-
-static inline int of_property_read_string_array(struct device_node *np,
+static inline int of_property_read_string_helper(struct device_node *np,
 						 const char *propname,
-						 char **out_strs, size_t sz)
+						 const char **out_strs, size_t sz, int index)
 {
 	return -ENOSYS;
 }

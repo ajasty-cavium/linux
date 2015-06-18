@@ -903,10 +903,11 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 	if (acpi_bus_get_device(handle, &adev))
 		return AE_OK;
 
-	if (acpi_dev_get_property_reference(adev, "phy-handle", NULL, 0, &args))
+	if (acpi_dev_get_property_reference(adev, "phy-handle", 0, &args))
 		return AE_OK;
 
-	if (acpi_dev_prop_read(args.adev, "phy-channel", DEV_PROP_U32, &phy_id))
+	if (acpi_dev_prop_read_single(args.adev, "phy-channel", DEV_PROP_U32,
+					&phy_id))
 		return AE_OK;
 
 	phy_dev = bus_find_device(&mdio_bus_type, NULL, (void *)&phy_id,

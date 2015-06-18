@@ -131,8 +131,8 @@ static int create_modalias(struct acpi_device *acpi_dev, char *modalias,
 	if (acpi_dev->data.of_compatible) {
 		struct acpi_buffer buf = { ACPI_ALLOCATE_BUFFER };
 		const union acpi_object *of_compatible, *obj;
+		int i, nval;
 		char *c;
-		int i;
 
 		acpi_get_name(acpi_dev->handle, ACPI_SINGLE_NAME, &buf);
 		/* DT strings are all in lower case */
@@ -143,9 +143,14 @@ static int create_modalias(struct acpi_device *acpi_dev, char *modalias,
 		ACPI_FREE(buf.pointer);
 
 		of_compatible = acpi_dev->data.of_compatible;
-		for (i = 0; i < of_compatible->package.count; i++) {
-			obj = &of_compatible->package.elements[i];
-
+		if (of_compatible->type == ACPI_TYPE_PACKAGE) {
+			nval = of_compatible->package.count;
+			obj = of_compatible->package.elements;
+		} else { /* Must be ACPI_TYPE_STRING. */
+			nval = 1;
+			obj = of_compatible;
+		}
+		for (i = 0; i < nval; i++, obj++) {
 			count = snprintf(&modalias[len], size, "C%s",
 					 obj->string.pointer);
 			if (count < 0)
@@ -940,9 +945,9 @@ EXPORT_SYMBOL(acpi_match_device_ids);
 static bool acpi_of_driver_match_device(struct device *dev,
 					const struct device_driver *drv)
 {
-	const union acpi_object *of_compatible;
+	const union acpi_object *of_compatible, *obj;
 	struct acpi_device *adev;
-	int i;
+	int i, nval;
 
 	adev = ACPI_COMPANION(dev);
 	if (!adev)
@@ -952,12 +957,16 @@ static bool acpi_of_driver_match_device(struct device *dev,
 	if (!drv->of_match_table || !of_compatible)
 		return false;
 
+	if (of_compatible->type == ACPI_TYPE_PACKAGE) {
+		nval = of_compatible->package.count;
+		obj = of_compatible->package.elements;
+	} else { /* Must be ACPI_TYPE_STRING. */
+		nval = 1;
+		obj = of_compatible;
+	}
 	/* Now we can look for the driver DT compatible strings */
-	for (i = 0; i < of_compatible->package.count; i++) {
+	for (i = 0; i < nval; i++, obj++) {
 		const struct of_device_id *id;
-		const union acpi_object *obj;
-
-		obj = &of_compatible->package.elements[i];
 
 		for (id = drv->of_match_table; id->compatible[0]; id++)
 			if (!strcasecmp(obj->string.pointer, id->compatible))

@@ -201,7 +201,8 @@ acpi_register_phy(acpi_handle handle, u32 lvl, void *context, void **rv)
 	if (acpi_bus_get_device(handle, &adev))
 		return AE_OK;
 
-	if (acpi_dev_prop_read(adev, "phy-channel", DEV_PROP_U32, &phy_id))
+	if (acpi_dev_prop_read_single(adev, "phy-channel", DEV_PROP_U32,
+					&phy_id))
 		return AE_OK;
 
 	phy = get_phy_device(mdio, phy_id, false);
