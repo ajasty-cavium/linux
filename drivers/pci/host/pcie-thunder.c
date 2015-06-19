@@ -155,7 +155,7 @@ static u64 thunder_get_gser_cfg(int node, int qlm)
 }
 
 static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
-					 unsigned int devfn)
+					unsigned int devfn)
 {
 	int supported = 0;
 	u16 bdf = (bus << 8) | devfn;
@@ -418,16 +418,17 @@ static int thunder_pcie_check_ecam_cfg_access(int ecam, unsigned int bus,
 }
 
 static void __iomem *thunder_pcie_cfg_base(struct thunder_pcie *pcie,
-				 unsigned int bus, unsigned int devfn)
+					   unsigned int bus,
+					   unsigned int devfn)
 {
 	return  pcie->cfg_base + ((bus << THUNDER_PCIE_BUS_SHIFT)
 		| (PCI_SLOT(devfn) << THUNDER_PCIE_DEV_SHIFT)
 		| (PCI_FUNC(devfn) << THUNDER_PCIE_FUNC_SHIFT));
 }
 
-static void __iomem *
-thunder_pcie_get_cfg_addr(struct thunder_pcie *pcie, unsigned int busnr,
-			unsigned int devfn, int reg)
+static void __iomem *thunder_pcie_get_cfg_addr(struct thunder_pcie *pcie,
+					       unsigned int busnr,
+					       unsigned int devfn, int reg)
 {
 	if (!thunder_pcie_check_ecam_cfg_access(pcie->ecam, busnr, devfn))
 		return NULL;
@@ -435,7 +436,7 @@ thunder_pcie_get_cfg_addr(struct thunder_pcie *pcie, unsigned int busnr,
 }
 
 static int thunder_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
-				  int reg, int size, u32 *val)
+				int reg, int size, u32 *val)
 {
 	struct thunder_pcie *pcie = bus->sysdata;
 	void __iomem *addr;
@@ -593,7 +594,7 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	struct thunder_pcie *pcie;
 	struct resource *cfg_base;
 	struct pci_bus *bus;
-	int ret = 0;
+	int ret;
 	int primary_bus = 0;
 	LIST_HEAD(res);
 
@@ -605,7 +606,6 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 
 	pcie->node = of_node_get(pdev->dev.of_node);
 	pcie->dev = &pdev->dev;
-
 
 	/* Get controller's configuration space range */
 	cfg_base = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -630,11 +630,12 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	       pcie->ecam, (u64)cfg_base->start, (u64)gser_base1);
 #endif
 	ret = of_pci_get_host_bridge_resources(pdev->dev.of_node,
-					       0, 255, &res, NULL);
+					0, 255, &res, NULL);
 	if (ret)
 		goto err_root_bus;
 
-	bus = pci_create_root_bus(&pdev->dev, primary_bus, &thunder_pcie_ops, pcie, &res);
+	bus = pci_create_root_bus(&pdev->dev, primary_bus, &thunder_pcie_ops,
+				pcie, &res);
 	if (!bus) {
 		ret = -ENODEV;
 		goto err_root_bus;
