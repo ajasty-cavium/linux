@@ -1843,7 +1843,7 @@ static irqreturn_t ahci_single_irq_intr(int irq, void *dev_instance)
 	irq_stat = readl(mmio + HOST_IRQ_STAT);
 redo:
 	if (!irq_stat)
-		goto out;
+		return IRQ_NONE;
 
 	irq_masked = irq_stat & hpriv->port_map;
 
@@ -1890,7 +1890,7 @@ redo:
 	spin_unlock(&host->lock);
 
 	goto redo;
-out:
+
 	VPRINTK("EXIT\n");
 
 	return IRQ_RETVAL(handled);
