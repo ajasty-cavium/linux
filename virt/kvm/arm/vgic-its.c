@@ -211,6 +211,20 @@ skip_allocation:
 
 static void convert_movi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 {
+	u32 vdev_id = (u32) (cmd->raw_cmd[0] >> 32);
+	u32 ID = (u32) cmd->raw_cmd[1];
+	u16 collection = (u16) cmd->raw_cmd[2];
+	struct vgic_its *its = &vcpu->kvm->arch.vgic.its;
+	struct vgic_its_device *vits_dev;
+	struct vgic_its_irq *vits_irq;
+
+	vits_dev = get_vgic_its_dev(its, vdev_id);
+	if (!vits_dev)
+		return;
+	vits_irq = get_vgic_its_irq(vits_dev, -1, ID, false);
+	if (!vits_irq)
+		return;
+	vits_irq->vcol_id = collection;
 }
 
 static void convert_discard(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
