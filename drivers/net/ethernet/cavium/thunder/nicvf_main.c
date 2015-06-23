@@ -727,7 +727,7 @@ static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 	else
 		cpu = first_cpu + (qidx % num_online_cpus);
 
-	if (!(cpu_online(cpu) && irq_can_set_affinity(cpu)))
+	if (!(cpu_online(cpu) && irq_can_set_affinity(irq)))
 		cpu = first_cpu;
 
 	cpumask_clear(&cq->affinity_mask);
