@@ -129,9 +129,6 @@
  */
 #define NICPF_CLK_PER_INT_TICK		2
 
-/* Time to wait before we decide that a SQ is stuck */
-#define	NICVF_TX_TIMEOUT		(10 * HZ)
-
 struct nicvf_cq_poll {
 	u8	cq_idx;		/* Completion queue index */
 	struct	napi_struct napi;
