@@ -78,6 +78,7 @@ LIST_HEAD(its_nodes);
 static DEFINE_SPINLOCK(its_lock);
 static struct irq_domain *lpi_domain;
 static struct rdists *gic_rdists;
+static int is_multi_its = -1;
 
 #define gic_data_rdist()		(raw_cpu_ptr(gic_rdists->rdist))
 #define gic_data_rdist_rd_base()	(gic_data_rdist()->rd_base)
@@ -468,7 +469,7 @@ void its_send_inv(struct its_device *dev, u32 event_id)
 	desc.its_inv_cmd.event_id = event_id;
 
 	its_send_single_command(dev->its, its_build_inv_cmd, &desc);
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		int cpu, other_cpu;
 		struct its_node *other_its;
 
@@ -489,7 +490,7 @@ void its_send_mapd(struct its_device *dev, int valid)
 	desc.its_mapd_cmd.valid = !!valid;
 
 	its_send_single_command(dev->its, its_build_mapd_cmd, &desc);
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		int cpu, other_cpu;
 		struct its_node *other_its;
 		void *itt_tmp;
@@ -527,7 +528,7 @@ void its_send_mapvi(struct its_device *dev, u32 irq_id, u32 id)
 	desc.its_mapvi_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_mapvi_cmd, &desc);
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		int cpu, other_cpu;
 		struct its_node *other_its;
 
@@ -561,7 +562,7 @@ void its_send_discard(struct its_device *dev, u32 id)
 	desc.its_discard_cmd.event_id = id;
 
 	its_send_single_command(dev->its, its_build_discard_cmd, &desc);
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		int cpu, other_cpu;
 		struct its_node *other_its;
 
@@ -679,7 +680,7 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 	if (cpu >= nr_cpu_ids)
 		return -EINVAL;
 
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		struct msi_msg msg;
 		u64 addr;
 		u32 vec_nr;
@@ -1181,7 +1182,7 @@ struct its_device *its_create_device(struct its_node *its, u32 dev_id,
 	list_add(&dev->entry, &its->its_device_list);
 	raw_spin_unlock_irqrestore(&its->lock, flags);
 
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144)) {
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its) {
 		dev->itt1 = kmalloc(sz, GFP_KERNEL);
 		if (!dev->itt1) {
 			kfree(dev);
@@ -1213,7 +1214,7 @@ void its_free_device(struct its_device *its_dev)
 	list_del(&its_dev->entry);
 	raw_spin_unlock_irqrestore(&its_dev->its->lock, flags);
 	kfree(its_dev->itt);
-	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144))
+	if (IS_ENABLED(CONFIG_THUNDERX_PASS1_ERRATA_23144) && is_multi_its)
 		kfree(its_dev->itt1);
 	kfree(its_dev);
 }
@@ -1364,6 +1365,7 @@ static struct its_node *its_probe(unsigned long phys_base, unsigned long size)
 
 	/* node_id suppose come from DT or ACPI table */
 	its->node_id = (its->phys_base >> 44) & 0x3;
+	++is_multi_its;
 
 	its->cmd_base = kzalloc(ITS_CMD_QUEUE_SZ, GFP_KERNEL);
 	if (!its->cmd_base) {
