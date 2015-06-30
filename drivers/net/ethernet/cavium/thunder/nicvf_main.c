@@ -643,10 +643,19 @@ static void nicvf_handle_qs_err(unsigned long data)
 	nicvf_enable_intr(nic, NICVF_INTR_QS_ERR, 0);
 }
 
+static inline void nicvf_dump_intr_status(struct nicvf *nic)
+{
+	if (netif_msg_intr(nic))
+		netdev_info(nic->netdev, "%s: interrupt status 0x%llx\n",
+			    nic->netdev->name, nicvf_reg_read(nic, NIC_VF_INT));
+}
+
 static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 {
 	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 	u64 intr;
+
+	nicvf_dump_intr_status(nic);
 
 	intr = nicvf_reg_read(nic, NIC_VF_INT);
 	/* Check for spurious interrupt */
@@ -658,70 +667,58 @@ static irqreturn_t nicvf_misc_intr_handler(int irq, void *nicvf_irq)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t nicvf_intr_handler(int irq, void *nicvf_irq)
+static irqreturn_t nicvf_intr_handler(int irq, void *cq_irq)
 {
-	u64 qidx, intr, clear_intr = 0;
-	u64 cq_intr, rbdr_intr, qs_err_intr;
+	struct nicvf_cq_poll *cq_poll = (struct nicvf_cq_poll *)cq_irq;
+	struct nicvf *nic = cq_poll->nicvf;
+	int qidx = cq_poll->cq_idx;
+
+	nicvf_dump_intr_status(nic);
+
+	/* Disable interrupts */
+	nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
+
+	/* Schedule NAPI */
+	napi_schedule(&cq_poll->napi);
+
+	/* Clear interrupt */
+	nicvf_clear_intr(nic, NICVF_INTR_CQ, qidx);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t nicvf_rbdr_intr_handler(int irq, void *nicvf_irq)
+{
 	struct nicvf *nic = (struct nicvf *)nicvf_irq;
-	struct queue_set *qs = nic->qs;
-	struct nicvf_cq_poll *cq_poll = NULL;
-	struct cmp_queue *cq;
-	struct irq_desc *irq_desc;
+	u8 qidx;
 
-	intr = nicvf_reg_read(nic, NIC_VF_INT);
-	if (netif_msg_intr(nic))
-		netdev_info(nic->netdev, "%s: interrupt status 0x%llx\n",
-			    nic->netdev->name, intr);
 
-	qs_err_intr = intr & NICVF_INTR_QS_ERR_MASK;
-	if (qs_err_intr) {
-		/* Disable Qset err interrupt and schedule softirq */
-		nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
-		tasklet_hi_schedule(&nic->qs_err_task);
-		clear_intr |= qs_err_intr;
+	nicvf_dump_intr_status(nic);
+
+	/* Disable RBDR interrupt and schedule softirq */
+	for (qidx = 0; qidx < nic->qs->rbdr_cnt; qidx++) {
+		if (!nicvf_is_intr_enabled(nic, NICVF_INTR_RBDR, qidx))
+			continue;
+		nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
+		tasklet_hi_schedule(&nic->rbdr_task);
+		/* Clear interrupt */
+		nicvf_clear_intr(nic, NICVF_INTR_RBDR, qidx);
 	}
 
-	/* Disable interrupts and start polling */
-	cq_intr = (intr & NICVF_INTR_CQ_MASK) >> NICVF_INTR_CQ_SHIFT;
-	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
-		if (!(cq_intr & (1 << qidx)))
-			continue;
-		if (!nicvf_is_intr_enabled(nic, NICVF_INTR_CQ, qidx))
-			continue;
+	return IRQ_HANDLED;
+}
 
-		/* Make sure NAPI is scheduled on CPU to which
-		 * CQ's IRQ affinity is set.
-		 */
-		cq = &nic->qs->cq[qidx];
-		irq_desc = irq_to_desc(cq->irq);
-		if (smp_processor_id() !=
-		    cpumask_first(irq_desc_get_irq_data(irq_desc)->affinity))
-			continue;
+static irqreturn_t nicvf_qs_err_intr_handler(int irq, void *nicvf_irq)
+{
+	struct nicvf *nic = (struct nicvf *)nicvf_irq;
 
-		nicvf_disable_intr(nic, NICVF_INTR_CQ, qidx);
-		clear_intr |= ((1 << qidx) << NICVF_INTR_CQ_SHIFT);
+	nicvf_dump_intr_status(nic);
 
-		cq_poll = nic->napi[qidx];
-		/* Schedule NAPI */
-		if (cq_poll)
-			napi_schedule(&cq_poll->napi);
-	}
+	/* Disable Qset err interrupt and schedule softirq */
+	nicvf_disable_intr(nic, NICVF_INTR_QS_ERR, 0);
+	tasklet_hi_schedule(&nic->qs_err_task);
+	nicvf_clear_intr(nic, NICVF_INTR_QS_ERR, 0);
 
-	/* Handle RBDR interrupts */
-	rbdr_intr = (intr & NICVF_INTR_RBDR_MASK) >> NICVF_INTR_RBDR_SHIFT;
-	if (rbdr_intr) {
-		/* Disable RBDR interrupt and schedule softirq */
-		for (qidx = 0; qidx < qs->rbdr_cnt; qidx++) {
-			if (!nicvf_is_intr_enabled(nic, NICVF_INTR_RBDR, qidx))
-				continue;
-			nicvf_disable_intr(nic, NICVF_INTR_RBDR, qidx);
-			tasklet_hi_schedule(&nic->rbdr_task);
-			clear_intr |= ((1 << qidx) << NICVF_INTR_RBDR_SHIFT);
-		}
-	}
-
-	/* Clear interrupts */
-	nicvf_reg_write(nic, NIC_VF_INT, clear_intr);
 	return IRQ_HANDLED;
 }
 
@@ -778,7 +775,7 @@ static void nicvf_set_cq_irq_affinity(struct nicvf *nic, int qidx, int irq)
 
 static int nicvf_register_interrupts(struct nicvf *nic)
 {
-	int irq, free, ret = 0;
+	int irq, ret = 0;
 	int vector;
 
 	for_each_cq_irq(irq)
@@ -793,47 +790,45 @@ static int nicvf_register_interrupts(struct nicvf *nic)
 		sprintf(nic->irq_name[irq], "NICVF%d RBDR%d",
 			nic->vf_id, irq - NICVF_INTR_ID_RBDR);
 
-	/* Register all interrupts except mailbox */
-	for (irq = 0; irq < NICVF_INTR_ID_SQ; irq++) {
+	/* Register CQ interrupts */
+	for (irq = 0; irq < nic->qs->cq_cnt; irq++) {
 		vector = nic->msix_entries[irq].vector;
 		ret = request_irq(vector, nicvf_intr_handler,
-				  0, nic->irq_name[irq], nic);
+				  0, nic->irq_name[irq], nic->napi[irq]);
 		if (ret)
-			break;
+			goto err;
 		nic->irq_allocated[irq] = true;
 
 		/* Set CQ irq affinity */
 		nicvf_set_cq_irq_affinity(nic, irq, vector);
 	}
 
-	for (irq = NICVF_INTR_ID_SQ; irq < NICVF_INTR_ID_MISC; irq++) {
+	/* Register RBDR interrupt */
+	for (irq = NICVF_INTR_ID_RBDR;
+	     irq < (NICVF_INTR_ID_RBDR + nic->qs->rbdr_cnt); irq++) {
 		vector = nic->msix_entries[irq].vector;
-		ret = request_irq(vector, nicvf_intr_handler,
+		ret = request_irq(vector, nicvf_rbdr_intr_handler,
 				  0, nic->irq_name[irq], nic);
 		if (ret)
-			break;
+			goto err;
 		nic->irq_allocated[irq] = true;
 	}
 
+	/* Register QS error interrupt */
 	sprintf(nic->irq_name[NICVF_INTR_ID_QS_ERR],
 		"NICVF%d Qset error", nic->vf_id);
-	if (!ret) {
-		vector = nic->msix_entries[NICVF_INTR_ID_QS_ERR].vector;
-		irq = NICVF_INTR_ID_QS_ERR;
-		ret = request_irq(vector, nicvf_intr_handler,
-				  0, nic->irq_name[irq], nic);
-		if (!ret)
-			nic->irq_allocated[irq] = true;
-	}
+	irq = NICVF_INTR_ID_QS_ERR;
+	ret = request_irq(nic->msix_entries[irq].vector,
+			  nicvf_qs_err_intr_handler,
+			  0, nic->irq_name[irq], nic);
+	if (!ret)
+		nic->irq_allocated[irq] = true;
 
-	if (ret) {
-		netdev_err(nic->netdev, "Request irq failed\n");
-		for (free = 0; free < irq; free++)
-			free_irq(nic->msix_entries[free].vector, nic);
-		return ret;
-	}
+err:
+	if (ret)
+		netdev_err(nic->netdev, "request_irq failed, vector %d\n", irq);
 
-	return 0;
+	return ret;
 }
 
 static void nicvf_unregister_interrupts(struct nicvf *nic)
@@ -842,8 +837,14 @@ static void nicvf_unregister_interrupts(struct nicvf *nic)
 
 	/* Free registered interrupts */
 	for (irq = 0; irq < nic->num_vec; irq++) {
-		if (nic->irq_allocated[irq])
+		if (!nic->irq_allocated[irq])
+			continue;
+
+		if (irq < NICVF_INTR_ID_SQ)
+			free_irq(nic->msix_entries[irq].vector, nic->napi[irq]);
+		else
 			free_irq(nic->msix_entries[irq].vector, nic);
+
 		nic->irq_allocated[irq] = false;
 	}
 
@@ -915,6 +916,20 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 	return NETDEV_TX_OK;
 }
 
+static inline void nicvf_free_cq_poll(struct nicvf *nic)
+{
+	struct nicvf_cq_poll *cq_poll = NULL;
+	int qidx;
+
+	for (qidx = 0; qidx < nic->qs->cq_cnt; qidx++) {
+		cq_poll = nic->napi[qidx];
+		if (!cq_poll)
+			continue;
+		nic->napi[qidx] = NULL;
+		kfree(cq_poll);
+	}
+}
+
 int nicvf_stop(struct net_device *netdev)
 {
 	int irq, qidx;
@@ -950,7 +965,6 @@ int nicvf_stop(struct net_device *netdev)
 		cq_poll = nic->napi[qidx];
 		if (!cq_poll)
 			continue;
-		nic->napi[qidx] = NULL;
 		napi_synchronize(&cq_poll->napi);
 		/* CQ intr is enabled while napi_complete,
 		 * so disable it now
@@ -959,7 +973,6 @@ int nicvf_stop(struct net_device *netdev)
 		nicvf_clear_intr(nic, NICVF_INTR_CQ, qidx);
 		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
-		kfree(cq_poll);
 	}
 
 	/* Free resources */
@@ -972,6 +985,8 @@ int nicvf_stop(struct net_device *netdev)
 	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
 
 	nicvf_unregister_interrupts(nic);
+
+	nicvf_free_cq_poll(nic);
 
 	return 0;
 }
@@ -999,6 +1014,7 @@ int nicvf_open(struct net_device *netdev)
 			goto napi_del;
 		}
 		cq_poll->cq_idx = qidx;
+		cq_poll->nicvf = nic;
 		netif_napi_add(netdev, &cq_poll->napi, nicvf_poll,
 			       NAPI_POLL_WEIGHT);
 		napi_enable(&cq_poll->napi);
@@ -1063,6 +1079,8 @@ int nicvf_open(struct net_device *netdev)
 cleanup:
 	nicvf_disable_intr(nic, NICVF_INTR_MBOX, 0);
 	nicvf_unregister_interrupts(nic);
+	tasklet_kill(&nic->qs_err_task);
+	tasklet_kill(&nic->rbdr_task);
 napi_del:
 	for (qidx = 0; qidx < qs->cq_cnt; qidx++) {
 		cq_poll = nic->napi[qidx];
@@ -1070,9 +1088,8 @@ napi_del:
 			continue;
 		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
-		kfree(cq_poll);
-		nic->napi[qidx] = NULL;
 	}
+	nicvf_free_cq_poll(nic);
 	return err;
 }
 
