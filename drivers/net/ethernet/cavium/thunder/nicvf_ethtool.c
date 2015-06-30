@@ -125,10 +125,35 @@ static void nicvf_set_msglevel(struct net_device *netdev, u32 lvl)
 	nic->msg_enable = lvl;
 }
 
+static void nicvf_get_qset_strings(struct nicvf *nic, u8 **data, int qset)
+{
+	int stats, qidx;
+	int start_qidx = qset * MAX_RCV_QUEUES_PER_QS;
+
+	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++) {
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
+			sprintf(*data, "rxq%d: %s", qidx + start_qidx,
+				nicvf_queue_stats[stats].name);
+			*data += ETH_GSTRING_LEN;
+		}
+	}
+
+	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++) {
+		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
+			sprintf(*data, "txq%d: %s", qidx + start_qidx,
+				nicvf_queue_stats[stats].name);
+			*data += ETH_GSTRING_LEN;
+		}
+	}
+}
+
 static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
-	int stats, qidx;
+	int stats;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	int sqs;
+#endif
 
 	if (sset != ETH_SS_STATS)
 		return;
@@ -143,21 +168,12 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 		data += ETH_GSTRING_LEN;
 	}
 
-	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++) {
-		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
-			sprintf(data, "rxq%d: %s", qidx,
-				nicvf_queue_stats[stats].name);
-			data += ETH_GSTRING_LEN;
-		}
-	}
+	nicvf_get_qset_strings(nic, &data, 0);
 
-	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++) {
-		for (stats = 0; stats < nicvf_n_queue_stats; stats++) {
-			sprintf(data, "txq%d: %s", qidx,
-				nicvf_queue_stats[stats].name);
-			data += ETH_GSTRING_LEN;
-		}
-	}
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	for (sqs = 0; sqs < nic->sqs_count; sqs++)
+		nicvf_get_qset_strings(nic->snicvf[sqs], &data, sqs + 1);
+#endif
 
 	for (stats = 0; stats < BGX_RX_STATS_COUNT; stats++) {
 		sprintf(data, "bgx_rxstat%d: ", stats);
@@ -173,21 +189,64 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 static int nicvf_get_sset_count(struct net_device *netdev, int sset)
 {
 	struct nicvf *nic = netdev_priv(netdev);
+	int qstats_count;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	int sqs;
+#endif
 
 	if (sset != ETH_SS_STATS)
 		return -EINVAL;
 
+	qstats_count = nicvf_n_queue_stats *
+		       (nic->qs->rq_cnt + nic->qs->sq_cnt);
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	for (sqs = 0; sqs < nic->sqs_count; sqs++) {
+		struct nicvf *snic;
+
+		snic = nic->snicvf[sqs];
+		if (!snic)
+			continue;
+		qstats_count += nicvf_n_queue_stats *
+				(snic->qs->rq_cnt + snic->qs->sq_cnt);
+	}
+#endif
+
 	return nicvf_n_hw_stats + nicvf_n_drv_stats +
-		(nicvf_n_queue_stats *
-		 (nic->qs->rq_cnt + nic->qs->sq_cnt)) +
+		qstats_count +
 		BGX_RX_STATS_COUNT + BGX_TX_STATS_COUNT;
+}
+
+static void nicvf_get_qset_stats(struct nicvf *nic,
+				 struct ethtool_stats *stats, u64 **data)
+{
+	int stat, qidx;
+
+	if (!nic)
+		return;
+
+	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++) {
+		nicvf_update_rq_stats(nic, qidx);
+		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
+			*((*data)++) = ((u64 *)&nic->qs->rq[qidx].stats)
+					[nicvf_queue_stats[stat].index];
+	}
+
+	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++) {
+		nicvf_update_sq_stats(nic, qidx);
+		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
+			*((*data)++) = ((u64 *)&nic->qs->sq[qidx].stats)
+					[nicvf_queue_stats[stat].index];
+	}
 }
 
 static void nicvf_get_ethtool_stats(struct net_device *netdev,
 				    struct ethtool_stats *stats, u64 *data)
 {
 	struct nicvf *nic = netdev_priv(netdev);
-	int stat, qidx;
+	int stat;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	int sqs;
+#endif
 
 	nicvf_update_stats(nic);
 
@@ -201,17 +260,12 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 		*(data++) = ((u64 *)&nic->drv_stats)
 				[nicvf_drv_stats[stat].index];
 
-	for (qidx = 0; qidx < nic->qs->rq_cnt; qidx++) {
-		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
-			*(data++) = ((u64 *)&nic->qs->rq[qidx].stats)
-					[nicvf_queue_stats[stat].index];
-	}
+	nicvf_get_qset_stats(nic, stats, &data);
 
-	for (qidx = 0; qidx < nic->qs->sq_cnt; qidx++) {
-		for (stat = 0; stat < nicvf_n_queue_stats; stat++)
-			*(data++) = ((u64 *)&nic->qs->sq[qidx].stats)
-					[nicvf_queue_stats[stat].index];
-	}
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	for (sqs = 0; sqs < nic->sqs_count; sqs++)
+		nicvf_get_qset_stats(nic->snicvf[sqs], stats, &data);
+#endif
 
 	for (stat = 0; stat < BGX_RX_STATS_COUNT; stat++)
 		*(data++) = nic->bgx_stats.rx_stats[stat];
@@ -386,7 +440,7 @@ static int nicvf_get_rxnfc(struct net_device *dev,
 
 	switch (info->cmd) {
 	case ETHTOOL_GRXRINGS:
-		info->data = nic->qs->rq_cnt;
+		info->data = nic->rx_queues;
 		ret = 0;
 		break;
 	case ETHTOOL_GRXFH:
@@ -543,11 +597,11 @@ static void nicvf_get_channels(struct net_device *dev,
 
 	memset(channel, 0, sizeof(*channel));
 
-	channel->max_rx = MAX_RCV_QUEUES_PER_QS;
-	channel->max_tx = MAX_SND_QUEUES_PER_QS;
+	channel->max_rx = nic->max_queues;
+	channel->max_tx = nic->max_queues;
 
-	channel->rx_count = nic->qs->rq_cnt;
-	channel->tx_count = nic->qs->sq_cnt;
+	channel->rx_count = nic->rx_queues;
+	channel->tx_count = nic->tx_queues;
 }
 
 /* Set no of Tx, Rx queues to be used */
@@ -555,24 +609,38 @@ static int nicvf_set_channels(struct net_device *dev,
 			      struct ethtool_channels *channel)
 {
 	struct nicvf *nic = netdev_priv(dev);
-	int err = 0;
 	bool if_up = netif_running(dev);
+	int cqcount;
+	int err = 0;
 
 	if (!channel->rx_count || !channel->tx_count)
 		return -EINVAL;
-	if (channel->rx_count > MAX_RCV_QUEUES_PER_QS)
+	if (channel->rx_count > nic->max_queues)
 		return -EINVAL;
-	if (channel->tx_count > MAX_SND_QUEUES_PER_QS)
+	if (channel->tx_count > nic->max_queues)
 		return -EINVAL;
 
 	if (if_up)
 		nicvf_stop(dev);
 
-	nic->qs->rq_cnt = channel->rx_count;
-	nic->qs->sq_cnt = channel->tx_count;
+	cqcount = max(channel->rx_count, channel->tx_count);
+
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	if (cqcount > MAX_CMP_QUEUES_PER_QS) {
+		nic->sqs_count = roundup(cqcount, MAX_CMP_QUEUES_PER_QS);
+		nic->sqs_count = (nic->sqs_count / MAX_CMP_QUEUES_PER_QS) - 1;
+	} else {
+		nic->sqs_count = 0;
+	}
+#endif
+
+	nic->qs->rq_cnt = min_t(u32, channel->rx_count, MAX_RCV_QUEUES_PER_QS);
+	nic->qs->sq_cnt = min_t(u32, channel->tx_count, MAX_SND_QUEUES_PER_QS);
 	nic->qs->cq_cnt = max(nic->qs->rq_cnt, nic->qs->sq_cnt);
 
-	err = nicvf_set_real_num_queues(dev, nic->qs->sq_cnt, nic->qs->rq_cnt);
+	nic->rx_queues = channel->rx_count;
+	nic->tx_queues = channel->tx_count;
+	err = nicvf_set_real_num_queues(dev, nic->tx_queues, nic->rx_queues);
 	if (err)
 		return err;
 
@@ -580,7 +648,7 @@ static int nicvf_set_channels(struct net_device *dev,
 		nicvf_open(dev);
 
 	netdev_info(dev, "Setting num Tx rings to %d, Rx rings to %d success\n",
-		    nic->qs->sq_cnt, nic->qs->rq_cnt);
+		    nic->tx_queues, nic->rx_queues);
 
 	return err;
 }

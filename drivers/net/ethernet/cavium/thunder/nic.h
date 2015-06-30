@@ -37,6 +37,7 @@
 
 /* VNIC HW optimiation features */
 #define VNIC_RSS_SUPPORT
+#define VNIC_MULTI_QSET_SUPPORT
 
 /* Min/Max packet size */
 #define	NIC_HW_MIN_FRS			64
@@ -238,13 +239,24 @@ struct nicvf_drv_stats {
 };
 
 struct nicvf {
+	struct nicvf		*pnicvf;
 	struct net_device	*netdev;
 	struct pci_dev		*pdev;
 	u8			vf_id;
 	u8			node;
 	u8			tns_mode;
+	bool                    sqs_mode;
 	u16			mtu;
 	struct queue_set	*qs;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+#define	MAX_SQS_PER_VF		11
+	u8			sqs_id;
+	u8			sqs_count; /* Secondary Qset count */
+	struct nicvf		*snicvf[MAX_SQS_PER_VF];
+#endif
+	u8			rx_queues;
+	u8			tx_queues;
+	u8			max_queues;
 	void __iomem		*reg_base;
 	bool			link_up;
 	u8			duplex;
@@ -311,14 +323,18 @@ struct nicvf {
 #define	NIC_MBOX_MSG_RQ_SW_SYNC		0x0F	/* Flush inflight pkts to RQ */
 #define	NIC_MBOX_MSG_BGX_STATS		0x10	/* Get stats from BGX */
 #define	NIC_MBOX_MSG_BGX_LINK_CHANGE	0x11	/* BGX:LMAC link status */
-#define NIC_MBOX_MSG_CFG_DONE		0x12	/* VF configuration done */
-#define NIC_MBOX_MSG_SHUTDOWN		0x13	/* VF is being shutdown */
+#define	NIC_MBOX_MSG_ALLOC_SQS		0x12	/* Allocate secondary Qset */
+#define	NIC_MBOX_MSG_NICVF_PTR		0x13	/* Send nicvf ptr to PF */
+#define	NIC_MBOX_MSG_SNICVF_PTR		0x14	/* Send sqet nicvf ptr to VF */
+#define	NIC_MBOX_MSG_CFG_DONE		0xF0	/* VF configuration done */
+#define	NIC_MBOX_MSG_SHUTDOWN		0xF1	/* VF is being shutdown */
 
 struct nic_cfg_msg {
 	u8    msg;
 	u8    vf_id;
 	u8    tns_mode;
 	u8    node_id;
+	u8    sqs_mode;
 	u8    mac_addr[ETH_ALEN];
 };
 
@@ -326,6 +342,7 @@ struct nic_cfg_msg {
 struct qs_cfg_msg {
 	u8    msg;
 	u8    num;
+	u8    sqs_count;
 	u64   cfg;
 };
 
@@ -342,6 +359,7 @@ struct sq_cfg_msg {
 	u8    msg;
 	u8    qs_num;
 	u8    sq_num;
+	u8    sqs_mode;
 	u64   cfg;
 };
 
@@ -401,6 +419,23 @@ struct bgx_link_status {
 	u32   speed;
 };
 
+#ifdef VNIC_MULTI_QSET_SUPPORT
+/* Get Extra Qset IDs */
+struct sqs_alloc {
+	u8    msg;
+	u8    vf_id;
+	u8    qs_count;
+};
+
+struct nicvf_ptr {
+	u8    msg;
+	u8    vf_id;
+	u8    sqs_mode;
+	u8    sqs_id;
+	u64   nicvf;
+};
+#endif
+
 /* 128 bit shared memory between PF and each VF */
 union nic_mbx {
 	struct { u8 msg; }	msg;
@@ -415,6 +450,10 @@ union nic_mbx {
 	struct rss_cfg_msg	rss_cfg;
 	struct bgx_stats_msg    bgx_stats;
 	struct bgx_link_status  link_status;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	struct sqs_alloc        sqs_alloc;
+	struct nicvf_ptr	nicvf;
+#endif
 };
 
 #define NIC_NODE_ID_MASK	0x03
