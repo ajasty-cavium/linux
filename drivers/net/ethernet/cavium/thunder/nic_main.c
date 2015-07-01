@@ -149,12 +149,14 @@ static void nic_mbx_send_ready(struct nicpf *nic, int vf)
 	else
 		mbx.nic_cfg.tns_mode = NIC_TNS_BYPASS_MODE;
 
-	bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
-	lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+	if (vf < MAX_LMAC) {
+		bgx_idx = NIC_GET_BGX_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
+		lmac = NIC_GET_LMAC_FROM_VF_LMAC_MAP(nic->vf_lmac_map[vf]);
 
-	mac = bgx_get_lmac_mac(nic->node, bgx_idx, lmac);
-	if (mac)
-		ether_addr_copy((u8 *)&mbx.nic_cfg.mac_addr, mac);
+		mac = bgx_get_lmac_mac(nic->node, bgx_idx, lmac);
+		if (mac)
+			ether_addr_copy((u8 *)&mbx.nic_cfg.mac_addr, mac);
+	}
 #ifdef VNIC_MULTI_QSET_SUPPORT
 	mbx.nic_cfg.sqs_mode = (vf >= nic->num_vf_en) ? true : false;
 #endif
