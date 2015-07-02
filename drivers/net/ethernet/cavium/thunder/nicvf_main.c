@@ -232,7 +232,7 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 				    nic->duplex == DUPLEX_FULL ?
 				"Full duplex" : "Half duplex");
 			netif_carrier_on(nic->netdev);
-			netif_tx_wake_all_queues(nic->netdev);
+			netif_tx_start_all_queues(nic->netdev);
 		} else {
 			netdev_info(nic->netdev, "%s: Link is Down\n",
 				    nic->netdev->name);
@@ -706,7 +706,7 @@ done:
 		nic = nic->pnicvf;
 #endif
 		if (netif_tx_queue_stopped(txq)) {
-			netif_tx_wake_queue(txq);
+			netif_tx_start_queue(txq);
 			nic->drv_stats.txq_wake++;
 			if (netif_msg_tx_err(nic))
 				netdev_warn(netdev,
@@ -1044,7 +1044,7 @@ static netdev_tx_t nicvf_xmit(struct sk_buff *skb, struct net_device *netdev)
 		return NETDEV_TX_OK;
 	}
 
-	if (!nicvf_sq_append_skb(nic, skb) && !netif_tx_queue_stopped(txq)) {
+	if (!netif_tx_queue_stopped(txq) && !nicvf_sq_append_skb(nic, skb)) {
 		netif_tx_stop_queue(txq);
 		nic->drv_stats.txq_stop++;
 		if (netif_msg_tx_err(nic))
@@ -1083,7 +1083,6 @@ int nicvf_stop(struct net_device *netdev)
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	netif_carrier_off(netdev);
-	netif_tx_disable(netdev);
 
 #ifdef	VNIC_MULTI_QSET_SUPPORT
 	/* Teardown secondary qsets first */
@@ -1127,6 +1126,8 @@ int nicvf_stop(struct net_device *netdev)
 		napi_disable(&cq_poll->napi);
 		netif_napi_del(&cq_poll->napi);
 	}
+
+	netif_tx_disable(netdev);
 
 	/* Free resources */
 	nicvf_config_data_transfer(nic, false);
