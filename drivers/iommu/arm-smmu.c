@@ -1976,15 +1976,15 @@ static int arm_smmu_acpi_probe(struct platform_device *pdev,
 			 struct arm_smmu_device *smmu)
 {
 	struct device *dev = smmu->dev;
-	struct acpi_table_iort_node_header *node =
-		*(struct acpi_table_iort_node_header **)dev_get_platdata(dev);
-	struct acpi_table_iort_node_smmu_v12 *iort_smmu;
+	struct acpi_iort_header *node =
+		*(struct acpi_iort_header **)dev_get_platdata(dev);
+	struct acpi_iort_smmu_v12 *iort_smmu;
 	int num_irqs, i, err, trigger;
 	u64 *ctx_irq;
 
 	/* Move to SMMU1/2 specific data */
-	iort_smmu = ACPI_ADD_PTR(struct acpi_table_iort_node_smmu_v12, node,
-				sizeof(struct acpi_table_iort_node_header));
+	iort_smmu = ACPI_ADD_PTR(struct acpi_iort_smmu_v12, node,
+				sizeof(struct acpi_iort_header));
 
 	smmu->version = (enum arm_smmu_arch_version)iort_smmu->model + 1;
 
@@ -2026,7 +2026,7 @@ static int arm_smmu_acpi_probe(struct platform_device *pdev,
 	i = 0;
 	smmu->masters = RB_ROOT;
 	while (1) {
-		struct acpi_table_iort_node_header *child;
+		struct acpi_iort_header *child;
 		uint32_t streamids[MAX_MASTER_STREAMIDS];
 		struct device *child_dev;
 		int num_streamids;

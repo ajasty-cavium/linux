@@ -31,15 +31,15 @@
 int iort_pci_msi_chip_add(struct msi_chip *chip, u32 its_id);
 void iort_pci_msi_chip_remove(struct msi_chip *chip);
 struct msi_chip *iort_find_pci_msi_chip(int segment, unsigned int idx);
-struct acpi_table_iort_node_header *
-iort_find_node_children(struct acpi_table_iort_node_header *parent,
+struct acpi_iort_header *
+iort_find_node_children(struct acpi_iort_header *parent,
 			unsigned int idx);
 int
-iort_find_endpoint_id(struct acpi_table_iort_node_header *node, u32 *streamids);
+iort_find_endpoint_id(struct acpi_iort_header *node, u32 *streamids);
 int
 iort_map_pcidev_to_streamid(struct pci_dev *pdev, u32 req_id, u32 *stream_id);
 struct device *
-iort_find_node_device(struct acpi_table_iort_node_header *node);
+iort_find_node_device(struct acpi_iort_header *node);
 
 #endif /* CONFIG_IORT_TABLE */
 

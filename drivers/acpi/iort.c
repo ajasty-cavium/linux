@@ -43,12 +43,12 @@ struct iort_its_msi_chip {
 };
 
 struct iort_priv_ctx {
-	struct acpi_table_iort_node_header	*parent;
+	struct acpi_iort_header	*parent;
 	unsigned int				index;
 };
 
 typedef acpi_status (*iort_find_node_callback)
-	(struct acpi_table_iort_node_header *node, void *context);
+	(struct acpi_iort_header *node, void *context);
 
 static LIST_HEAD(iort_pci_msi_chip_list);
 static DEFINE_MUTEX(iort_pci_msi_chip_mutex);
@@ -106,17 +106,17 @@ static struct msi_chip *iort_pci_find_msi_chip_by_id(u32 its_id)
 }
 EXPORT_SYMBOL_GPL(iort_pci_find_msi_chip_by_id);
 
-static struct acpi_table_iort_node_header *
-iort_find_root_node(struct acpi_table_iort_node_header *node)
+static struct acpi_iort_header *
+iort_find_root_node(struct acpi_iort_header *node)
 {
-	struct acpi_table_iort_node_id *id_map;
+	struct acpi_iort_id *id_map;
 
 	if (!node)
 		return NULL;
 
 	/* Root node has no ID map */
 	while (node->ref_to_ids) {
-		id_map = ACPI_ADD_PTR(struct acpi_table_iort_node_id,
+		id_map = ACPI_ADD_PTR(struct acpi_iort_id,
 				      node, node->ref_to_ids);
 
 		/* Firmware bug! */
@@ -126,22 +126,22 @@ iort_find_root_node(struct acpi_table_iort_node_header *node)
 			return NULL;
 		}
 
-		node = ACPI_ADD_PTR(struct acpi_table_iort_node_header,
+		node = ACPI_ADD_PTR(struct acpi_iort_header,
 					 iort_table, id_map->output_ref);
 	}
 
 	return node;
 }
 
-static struct acpi_table_iort_node_header *
+static struct acpi_iort_header *
 iort_find_node_type(int type, iort_find_node_callback callback, void *context)
 {
-	struct acpi_table_iort_node_header *iort_node, *iort_end;
+	struct acpi_iort_header *iort_node, *iort_end;
 
 	/* Skip IORT header */
-	iort_node = ACPI_ADD_PTR(struct acpi_table_iort_node_header, iort_table,
+	iort_node = ACPI_ADD_PTR(struct acpi_iort_header, iort_table,
 				 sizeof(struct acpi_table_iort));
-	iort_end = ACPI_ADD_PTR(struct acpi_table_iort_node_header, iort_table,
+	iort_end = ACPI_ADD_PTR(struct acpi_iort_header, iort_table,
 				iort_table->length);
 
 	while (iort_node < iort_end) {
@@ -150,7 +150,7 @@ iort_find_node_type(int type, iort_find_node_callback callback, void *context)
 				return iort_node;
 		}
 
-		iort_node = ACPI_ADD_PTR(struct acpi_table_iort_node_header,
+		iort_node = ACPI_ADD_PTR(struct acpi_iort_header,
 					  iort_node, iort_node->length);
 	}
 
@@ -158,13 +158,13 @@ iort_find_node_type(int type, iort_find_node_callback callback, void *context)
 }
 
 static acpi_status
-iort_find_pci_rc_callback(struct acpi_table_iort_node_header *node, void *context)
+iort_find_pci_rc_callback(struct acpi_iort_header *node, void *context)
 {
 	int segment = *(int *)context;
-	struct acpi_table_iort_node_root_complex *pci_rc;
+	struct acpi_iort_root_complex *pci_rc;
 
-	pci_rc = ACPI_ADD_PTR(struct acpi_table_iort_node_root_complex, node,
-			      sizeof(struct acpi_table_iort_node_header));
+	pci_rc = ACPI_ADD_PTR(struct acpi_iort_root_complex, node,
+			      sizeof(struct acpi_iort_header));
 
 	if (pci_rc->segment == segment)
 		return AE_OK;
@@ -172,7 +172,7 @@ iort_find_pci_rc_callback(struct acpi_table_iort_node_header *node, void *contex
 	return AE_NOT_FOUND;
 }
 
-static struct acpi_table_iort_node_header *
+static struct acpi_iort_header *
 iort_find_pci_rc(int segment)
 {
 
@@ -185,8 +185,8 @@ iort_find_pci_rc(int segment)
 
 struct msi_chip *iort_find_pci_msi_chip(int segment, unsigned int idx)
 {
-	struct acpi_table_iort_node_its *its_node;
-	struct acpi_table_iort_node_header *node;
+	struct acpi_iort_its *its_node;
+	struct acpi_iort_header *node;
 	struct msi_chip *msi_chip;
 
 	if (!iort_table)
@@ -207,8 +207,8 @@ struct msi_chip *iort_find_pci_msi_chip(int segment, unsigned int idx)
 	}
 
 	/* Move to ITS specific data */
-	its_node = ACPI_ADD_PTR(struct acpi_table_iort_node_its, node,
-				sizeof(struct acpi_table_iort_node_header));
+	its_node = ACPI_ADD_PTR(struct acpi_iort_its, node,
+				sizeof(struct acpi_iort_header));
 
 	if (idx > its_node->number_of_its) {
 		pr_err(IORT_PFX "requested ITS ID index [%d] is greater than available ITS IDs [%d]\n",
@@ -226,7 +226,7 @@ struct msi_chip *iort_find_pci_msi_chip(int segment, unsigned int idx)
 EXPORT_SYMBOL_GPL(iort_find_pci_msi_chip);
 
 static acpi_status
-iort_find_node_idx_callback(struct acpi_table_iort_node_header *node,
+iort_find_node_idx_callback(struct acpi_iort_header *node,
 			    void *context)
 {
 	unsigned int *count = context;
@@ -237,7 +237,7 @@ iort_find_node_idx_callback(struct acpi_table_iort_node_header *node,
 	return AE_OK;
 }
 
-static struct acpi_table_iort_node_header *
+static struct acpi_iort_header *
 iort_find_node(int type, unsigned int idx)
 {
 	unsigned int count = idx;
@@ -249,19 +249,19 @@ iort_find_node(int type, unsigned int idx)
 }
 
 static acpi_status
-iort_find_children_idx_callback(struct acpi_table_iort_node_header *node,
+iort_find_children_idx_callback(struct acpi_iort_header *node,
 				void *context)
 {
 	struct iort_priv_ctx *info = context;
-	struct acpi_table_iort_node_id *id;
-	struct acpi_table_iort_node_header *parent;
+	struct acpi_iort_id *id;
+	struct acpi_iort_header *parent;
 	int i, found = 0;
 
 	/* Move to ID section */
-	id = ACPI_ADD_PTR(struct acpi_table_iort_node_id, node,
+	id = ACPI_ADD_PTR(struct acpi_iort_id, node,
 			  node->ref_to_ids);
 	for (i = 0; i < node->number_of_ids; i++) {
-		parent = ACPI_ADD_PTR(struct acpi_table_iort_node_header,
+		parent = ACPI_ADD_PTR(struct acpi_iort_header,
 				      iort_table, id->output_ref);
 		if (parent == info->parent) {
 			found = 1;
@@ -276,8 +276,8 @@ iort_find_children_idx_callback(struct acpi_table_iort_node_header *node,
 	return AE_OK;
 }
 
-struct acpi_table_iort_node_header *
-iort_find_node_children(struct acpi_table_iort_node_header *parent,
+struct acpi_iort_header *
+iort_find_node_children(struct acpi_iort_header *parent,
 			unsigned int idx)
 {
 	struct iort_priv_ctx info;
@@ -291,13 +291,13 @@ EXPORT_SYMBOL_GPL(iort_find_node_children);
 
 
 int
-iort_find_endpoint_id(struct acpi_table_iort_node_header *node, u32 *streamids)
+iort_find_endpoint_id(struct acpi_iort_header *node, u32 *streamids)
 {
-	struct acpi_table_iort_node_id *id;
+	struct acpi_iort_id *id;
 	int i, num_streamids = 0;
 
 	/* Move to ID section */
-	id = ACPI_ADD_PTR(struct acpi_table_iort_node_id, node,
+	id = ACPI_ADD_PTR(struct acpi_iort_id, node,
 			  node->ref_to_ids);
 	/* Hunt for endpoint ID map */
 	for (i = 0; i < node->number_of_ids &&
@@ -312,8 +312,8 @@ EXPORT_SYMBOL_GPL(iort_find_endpoint_id);
 int
 iort_map_pcidev_to_streamid(struct pci_dev *pdev, u32 req_id, u32 *stream_id)
 {
-	struct acpi_table_iort_node_header *node;
-	struct acpi_table_iort_node_id *id;
+	struct acpi_iort_header *node;
+	struct acpi_iort_id *id;
 	int i;
 
 	node = iort_find_pci_rc(pci_domain_nr(pdev->bus));
@@ -324,7 +324,7 @@ iort_map_pcidev_to_streamid(struct pci_dev *pdev, u32 req_id, u32 *stream_id)
 	}
 
 	/* Move to ID section */
-	id = ACPI_ADD_PTR(struct acpi_table_iort_node_id, node,
+	id = ACPI_ADD_PTR(struct acpi_iort_id, node,
 			  node->ref_to_ids);
 
 	/* Look for request ID to stream ID map */
@@ -383,10 +383,10 @@ match_segment(acpi_handle handle, u32 lvl, void *context, void **ret_val)
 }
 
 struct device *
-iort_find_node_device(struct acpi_table_iort_node_header *node)
+iort_find_node_device(struct acpi_iort_header *node)
 {
-	struct acpi_table_iort_node_named_component *acpi_dev;
-	struct acpi_table_iort_node_root_complex *pci_rc;
+	struct acpi_iort_named_component *acpi_dev;
+	struct acpi_iort_root_complex *pci_rc;
 	struct acpi_device *adev;
 	struct device *device = NULL;
 	acpi_handle handle;
@@ -396,8 +396,8 @@ iort_find_node_device(struct acpi_table_iort_node_header *node)
 	switch (node->type) {
 	case ACPI_IORT_TYPE_NAMED_NODE:
 		acpi_dev = ACPI_ADD_PTR(
-			struct acpi_table_iort_node_named_component,
-			node, sizeof(struct acpi_table_iort_node_header));
+			struct acpi_iort_named_component,
+			node, sizeof(struct acpi_iort_header));
 
 		device_path = acpi_dev->device_name;
 		if (ACPI_FAILURE(acpi_get_handle(ACPI_ROOT_OBJECT, device_path,
@@ -417,8 +417,8 @@ iort_find_node_device(struct acpi_table_iort_node_header *node)
 		break;
 	case ACPI_IORT_TYPE_ROOT_COMPLEX:
 		pci_rc = ACPI_ADD_PTR(
-			struct acpi_table_iort_node_root_complex,
-			node, sizeof(struct acpi_table_iort_node_header));
+			struct acpi_iort_root_complex,
+			node, sizeof(struct acpi_iort_header));
 		segment = pci_rc->segment;
 		acpi_get_devices("PNP0A03", match_segment, &segment, (void **)&device);
 		break;
@@ -432,16 +432,16 @@ iort_find_node_device(struct acpi_table_iort_node_header *node)
 }
 EXPORT_SYMBOL_GPL(iort_find_node_device);
 
-static void iort_add_smmu_platform_device(struct acpi_table_iort_node_header *node)
+static void iort_add_smmu_platform_device(struct acpi_iort_header *node)
 {
-	struct acpi_table_iort_node_smmu_v12 *smmu;
+	struct acpi_iort_smmu_v12 *smmu;
 	struct platform_device_info pdevinfo;
 	struct platform_device *pdev = NULL;
 	struct resource resources;
 
 	/* Move to SMMU1/2 specific data */
-	smmu = ACPI_ADD_PTR(struct acpi_table_iort_node_smmu_v12, node,
-				sizeof(struct acpi_table_iort_node_header));
+	smmu = ACPI_ADD_PTR(struct acpi_iort_smmu_v12, node,
+				sizeof(struct acpi_iort_header));
 
 	memset(&pdevinfo, 0, sizeof(pdevinfo));
 	pdevinfo.parent = NULL;
@@ -469,7 +469,7 @@ static void iort_add_smmu_platform_device(struct acpi_table_iort_node_header *no
 
 static int iort_add_smmu_devices(void)
 {
-	struct acpi_table_iort_node_header *iort_node = NULL;
+	struct acpi_iort_header *iort_node = NULL;
 	unsigned int idx = 0;
 
 	while (1) {

@@ -661,7 +661,7 @@ struct acpi_table_iort
 
 };
 
-struct acpi_table_iort_node_header {
+struct acpi_iort_header {
 	u8	type;
 	u16	length;
 	u8	revision;
@@ -682,7 +682,7 @@ enum acpi_iort_type {
 	ACPI_IORT_TYPE_RESERVED = 5 /* 5 and greater are reserved */
 };
 
-struct acpi_table_iort_node_id {
+struct acpi_iort_id {
 	u16	length;
 	u16	flags;
 	u32	input_base;
@@ -692,7 +692,7 @@ struct acpi_table_iort_node_id {
 
 #define IORT_ID_SINGLE_MAPPING	(1 << 0ULL)
 
-struct acpi_table_iort_node_smmu_v12 {
+struct acpi_iort_smmu_v12 {
 	u64	base_address;
 	u64	span;
 	u32	model;
@@ -711,7 +711,7 @@ struct acpi_table_iort_node_smmu_v12 {
 	u32	smmu_nsg_cfg_irpt_flags;
 };
 
-struct acpi_table_iort_node_smmu_v3 {
+struct acpi_iort_smmu_v3 {
 	u64	base_address;
 	u64	span;
 	u32	model;
@@ -725,17 +725,17 @@ struct acpi_table_iort_node_smmu_v3 {
 	u32	sync_flags;
 };
 
-struct acpi_table_iort_node_its {
+struct acpi_iort_its {
 	u32	number_of_its;
 	u32	its_id[1];
 };
 
-struct acpi_table_iort_node_named_component {
+struct acpi_iort_named_component {
 	u32	coherency_attribute;
 	char	device_name[1];
 };
 
-struct acpi_table_iort_node_root_complex {
+struct acpi_iort_root_complex {
 	u32	ats_attribute;
 	u32	segment;
 };
