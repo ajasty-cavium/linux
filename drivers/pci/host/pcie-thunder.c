@@ -115,15 +115,14 @@ static void pci_dev_resource_fixup(struct pci_dev *dev)
 	struct resource *res;
 	int resno;
 
-	/* If the ECAM is not yet probed, we must be in a virtual
+	/*
+	 * If the ECAM is not yet probed, we must be in a virtual
 	 * machine.  In that case, don't mark things as
 	 * IORESOURCE_PCI_FIXED
 	 */
-	/* If ACPI, ignore this check */
-#ifndef CONFIG_ACPI
-	if (atomic_read(&thunder_pcie_ecam_probed) == 0)
+	if (!atomic_read(&thunder_pcie_ecam_probed))
 		return;
-#endif
+
 	for (resno = 0; resno < PCI_NUM_RESOURCES; resno++)
 		dev->resource[resno].flags |= IORESOURCE_PCI_FIXED;
 
@@ -546,6 +545,8 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 
 static void thunder_pcie_config(struct thunder_pcie *pcie, u64 addr)
 {
+	atomic_set(&thunder_pcie_ecam_probed, 1);
+
 	pcie->valid = true;
 
 	switch (addr) {
@@ -597,8 +598,6 @@ static int thunder_pcie_probe(struct platform_device *pdev)
 	int ret;
 	int primary_bus = 0;
 	LIST_HEAD(res);
-
-	atomic_set(&thunder_pcie_ecam_probed, 1);
 
 	pcie = devm_kzalloc(&pdev->dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
