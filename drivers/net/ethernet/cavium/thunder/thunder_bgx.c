@@ -899,17 +899,12 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 	struct acpi_device *adev;
 	struct device *phy_dev;
 	u32 phy_id;
-	u64 mac;
 
 	if (acpi_bus_get_device(handle, &adev))
 		return AE_OK;
 
 	if (acpi_dev_get_property_reference(adev, "phy-handle", 0, &args))
 		return AE_OK;
-
-	if (acpi_dev_prop_read_single(adev, "mac-address", DEV_PROP_U64, &mac)) {
-		return AE_OK;
-	}
 
 	if (acpi_dev_prop_read_single(args.adev, "phy-channel", DEV_PROP_U32,
 					&phy_id))
@@ -922,9 +917,6 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 
 	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
 	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
-
-	mac = cpu_to_be64(mac) >> 16;
-	memcpy ((void*)bgx->lmac[bgx->lmac_count].mac, &mac, ETH_ALEN);
 
 	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
 	bgx->lmac_count++;
