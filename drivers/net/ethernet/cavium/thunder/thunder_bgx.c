@@ -27,7 +27,7 @@
 struct lmac {
 	struct bgx		*bgx;
 	int			dmac;
-	unsigned char		mac[ETH_ALEN];
+	u8			mac[ETH_ALEN];
 	bool			link_up;
 	int			lmacid; /* ID within BGX */
 	int			lmacid_bd; /* ID on board */
@@ -891,6 +891,39 @@ static int bgx_match_phy_id(struct device *dev, void *data)
 	return 0;
 }
 
+static const char *addr_propnames[] = {
+	"mac-address",
+	"local-mac-address",
+	"address",
+};
+
+static int acpi_get_mac_address(struct acpi_device *adev, u8 *dst)
+{
+	u64 mac;
+	int i;
+	int ret;
+
+	for (i = 0; i < ARRAY_SIZE(addr_propnames); i++) {
+		ret = acpi_dev_prop_read_single(adev, addr_propnames[i],
+						DEV_PROP_U64, &mac);
+		if (ret)
+			continue;
+
+		if (mac & (~0ULL << 48))
+			continue;	/* more than 6 bytes */
+
+		mac = cpu_to_be64(mac << 16);
+		if (!is_valid_ether_addr((u8 *)&mac))
+			continue;
+
+		ether_addr_copy(dst, (u8 *)&mac);
+
+		return 0;
+	}
+
+	return ret ? ret : -EINVAL;
+}
+
 static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 					u32 lvl, void *context, void **rv)
 {
@@ -917,6 +950,8 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 
 	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
 	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
+
+	acpi_get_mac_address(adev, bgx->lmac[bgx->lmac_count].mac);
 
 	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
 	bgx->lmac_count++;
