@@ -277,7 +277,7 @@ iort_find_children_idx_callback(struct acpi_iort_header *node,
 }
 
 struct acpi_iort_header *
-iort_find_node_children(struct acpi_iort_header *parent,
+iort_find_child(struct acpi_iort_header *parent,
 			unsigned int idx)
 {
 	struct iort_priv_ctx info;
@@ -287,7 +287,7 @@ iort_find_node_children(struct acpi_iort_header *parent,
 
 	return iort_find_node_type(-1, iort_find_children_idx_callback, &info);
 }
-EXPORT_SYMBOL_GPL(iort_find_node_children);
+EXPORT_SYMBOL_GPL(iort_find_child);
 
 
 int

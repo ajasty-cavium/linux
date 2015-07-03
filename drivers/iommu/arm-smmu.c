@@ -2031,7 +2031,7 @@ static int arm_smmu_acpi_probe(struct platform_device *pdev,
 		struct device *child_dev;
 		int num_streamids;
 
-		child = iort_find_node_children(node, i);
+		child = iort_find_child(node, i);
 		if (!child)
 			break;
 
