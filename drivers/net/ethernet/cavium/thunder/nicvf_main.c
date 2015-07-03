@@ -431,9 +431,11 @@ static void nicvf_request_sqs(struct nicvf *nic)
 			tx_queues = 0;
 		}
 
+		nic->snicvf[sqs]->qs->cq_cnt =
+		max(nic->snicvf[sqs]->qs->rq_cnt, nic->snicvf[sqs]->qs->sq_cnt);
+
 		/* Initialize secondary Qset's queues and its interrupts */
-		if (nic->snicvf[sqs])
-			nicvf_open(nic->snicvf[sqs]->netdev);
+		nicvf_open(nic->snicvf[sqs]->netdev);
 	}
 
 	/* Update stack with actual Rx/Tx queue count allocated */
@@ -1083,6 +1085,7 @@ int nicvf_stop(struct net_device *netdev)
 	nicvf_send_msg_to_pf(nic, &mbx);
 
 	netif_carrier_off(netdev);
+	netif_tx_stop_all_queues(nic->netdev);
 
 #ifdef	VNIC_MULTI_QSET_SUPPORT
 	/* Teardown secondary qsets first */

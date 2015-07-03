@@ -467,6 +467,8 @@ static void nic_config_rss(struct nicpf *nic, struct rss_cfg_msg *cfg)
 
 		if (svf)
 			qset = nic->vf_sqs[cfg->vf_id][svf - 1];
+		else
+			qset = cfg->vf_id;
 #endif
 		nic_reg_write(nic, NIC_PF_RSSI_0_4097_RQ | (rssi << 3),
 			      (qset << 3) | (cfg->ind_tbl[idx] & 0x7));

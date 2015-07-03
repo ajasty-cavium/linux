@@ -1133,9 +1133,9 @@ int nicvf_sq_append_skb(struct nicvf *nic, struct sk_buff *skb)
 		/* Get secondary Qset's SQ structure */
 		i = sq_num / MAX_SND_QUEUES_PER_QS;
 		if (!nic->snicvf[i - 1]) {
-			netdev_err(nic->netdev,
-				   "Secondary Qset#%d's ptr not initialized\n",
-				   i - 1);
+			netdev_warn(nic->netdev,
+				    "Secondary Qset#%d's ptr not initialized\n",
+				    i - 1);
 			return 1;
 		}
 		nic = (struct nicvf *)nic->snicvf[i - 1];
