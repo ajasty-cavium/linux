@@ -753,7 +753,7 @@ static int vfio_pci_set_msi_unmask(struct vfio_pci_device *vdev,
 	if (msi_enabled)
 		return 0;
 
-	ret = vfio_msi_enable(vdev, start + count, msix);
+	ret = vfio_msi_enable(vdev, vdev->pdev->num_enabled_msi, msix);
 	if (ret) {
 		return ret;
 	}

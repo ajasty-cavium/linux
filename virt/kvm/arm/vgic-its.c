@@ -147,12 +147,16 @@ static void convert_mapd(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 
 	if (valid && !vits_dev->pits_dev) {
 		vits_dev->pits_dev = its_create_device(get_its_node(vits_dev->pdev), pdev_id, size);
-		if (IS_ENABLED(CONFIG_PCI_MSI))
+		if (IS_ENABLED(CONFIG_PCI_MSI)) {
 			vits_dev->pdev->msidata = vits_dev;
+			vits_dev->pdev->num_enabled_msi = 0;
+		}
 	}
 	else {
-		if (IS_ENABLED(CONFIG_PCI_MSI))
+		if (IS_ENABLED(CONFIG_PCI_MSI)) {
 			vits_dev->pdev->msidata = NULL;
+			vits_dev->pdev->num_enabled_msi = 0;
+		}
 	}
 }
 
@@ -196,6 +200,7 @@ static void convert_mapvi(struct kvm_vcpu *vcpu, struct its_cmd_block *cmd)
 	INIT_LIST_HEAD(&(vits_irq->entry));
 
 	list_add(&(vits_irq->entry), &(vits_dev->pirq_list));
+	vits_dev->pdev->num_enabled_msi++;
 	vits_irq->pirq = pirq;
 	vits_irq->hwirq = hwirq;
 	vits_irq->ID = ID;
@@ -397,8 +402,10 @@ skip_list_add:
 	its_dev->kvm = kvm;
 	its_dev->vfio = vfio;
 	/* take MSI owner ship of this pdev */
-	if (IS_ENABLED(CONFIG_PCI_MSI))
+	if (IS_ENABLED(CONFIG_PCI_MSI)) {
 		pdev->msidata = its_dev;
+		pdev->num_enabled_msi = 0;
+	}
 	mb();
 	spin_unlock_irqrestore(&vits_lock, flag);
 	return 0;
@@ -507,6 +514,7 @@ void vgic_its_free(struct kvm *kvm)
 		}
 		list_del(&vits_dev->entry);
 		vits_dev->pdev->msidata = NULL;
+		vits_dev->pdev->num_enabled_msi = 0;
 		kfree(vits_dev);
 		vits_dev = list_first_entry_or_null(&(its->its_devices),
 						struct vgic_its_device, entry);
