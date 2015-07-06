@@ -486,6 +486,7 @@ void vgic_its_free(struct kvm *kvm)
 	struct vgic_its *its = &kvm->arch.vgic.its;
 	struct vgic_its_device *vits_dev =  NULL;
 	struct vgic_its_irq *vits_irq = NULL;
+	struct vits_pirq *pirq_entry, *tmp;
 	unsigned long flag;
 
 	if (kvm->arch.vgic.vgic_its_base == VGIC_ADDR_UNDEF)
@@ -512,6 +513,15 @@ void vgic_its_free(struct kvm *kvm)
 						&(vits_dev->pirq_list),
 						struct vgic_its_irq, entry);
 		}
+
+		list_for_each_entry_safe(pirq_entry, tmp, &vits_pirqs, entry) {
+			if(pirq_entry->vits_dev != vits_dev)
+				continue;
+
+			list_del(&(pirq_entry->entry));
+			kfree(pirq_entry);
+		}
+
 		list_del(&vits_dev->entry);
 		vits_dev->pdev->msidata = NULL;
 		vits_dev->pdev->num_enabled_msi = 0;
@@ -589,29 +599,30 @@ static void vits_msi_teardown_irq(struct msi_chip *chip, unsigned int irq)
 {
 	struct msi_master *master = container_of(chip,
 					struct msi_master, msi);
-	struct vits_pirq *pirq_entry;
+	struct vits_pirq *pirq_entry, *tmp;
 	struct vgic_its_device *vits_dev = NULL;
 	struct vgic_its_irq *vits_irq;
 	unsigned long flag;
 
 	spin_lock_irqsave(&vits_lock, flag);
-	list_for_each_entry(pirq_entry, &vits_pirqs, entry) {
-		if(pirq_entry->pirq == irq)
-			vits_dev = pirq_entry->vits_dev;
-	}
-	if(!vits_dev)
-		goto end;
+	list_for_each_entry_safe(pirq_entry, tmp, &vits_pirqs, entry) {
+		if(pirq_entry->pirq != irq)
+			continue;
+		vits_dev = pirq_entry->vits_dev;
+		if(!vits_dev)
+			continue;
 
-	vits_irq = get_vgic_its_irq(vits_dev, irq, -1, true);
-	if (vits_irq) {
-		free_irq(vits_irq->pirq, vits_dev);
-		list_del(&(vits_irq->entry));
-		kfree(vits_irq);
-		irq_set_handler_data(vits_irq->pirq, vits_dev->pits_dev);
-		mb();
+		vits_irq = get_vgic_its_irq(vits_dev, irq, -1, true);
+		if (vits_irq) {
+			free_irq(vits_irq->pirq, vits_dev);
+			list_del(&(vits_irq->entry));
+			kfree(vits_irq);
+			mb();
+		}
+		list_del(&(pirq_entry->entry));
+		kfree(pirq_entry);
+
 	}
-	/* just fall through */
-end:
 	spin_unlock_irqrestore(&vits_lock, flag);
 	master->real_msi->teardown_irq(master->real_msi, irq);
 }
