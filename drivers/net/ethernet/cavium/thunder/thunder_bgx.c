@@ -932,11 +932,8 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
 	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
 
-	if (acpi_get_mac_address(adev, &mac) == AE_OK) {
-		//mac = cpu_to_be64(mac) >> 16;
+	if (acpi_get_mac_address(adev, &mac) == AE_OK)
 		ether_addr_copy(bgx->lmac[bgx->lmac_count].mac, &mac);
- 		//memcpy ((void*)bgx->lmac[bgx->lmac_count].mac, &mac, ETH_ALEN);
-	}
 
 	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
 	bgx->lmac_count++;
