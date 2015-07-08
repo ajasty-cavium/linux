@@ -879,6 +879,19 @@ static void bgx_get_qlm_mode(struct bgx *bgx)
 }
 
 #ifdef CONFIG_ACPI
+static acpi_status acpi_get_mac_address(struct acpi_device *adev, u64* mac)
+{
+	if (acpi_dev_prop_read_single(adev, "mac-address", DEV_PROP_U64, mac))
+		return AE_OK;
+
+	if (acpi_dev_prop_read_single(adev, "local-mac-address", DEV_PROP_U64, mac))
+		return AE_OK;
+
+	if (acpi_dev_prop_read_single(adev, "address", DEV_PROP_U64, mac))
+		return AE_OK;
+
+	return AE_ERROR;
+}
 
 static int bgx_match_phy_id(struct device *dev, void *data)
 {
@@ -907,10 +920,6 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 	if (acpi_dev_get_property_reference(adev, "phy-handle", 0, &args))
 		return AE_OK;
 
-	if (acpi_dev_prop_read_single(adev, "mac-address", DEV_PROP_U64, &mac)) {
-		return AE_OK;
-	}
-
 	if (acpi_dev_prop_read_single(args.adev, "phy-channel", DEV_PROP_U32,
 					&phy_id))
 		return AE_OK;
@@ -923,8 +932,11 @@ static acpi_status bgx_acpi_register_phy(acpi_handle handle,
 	SET_NETDEV_DEV(&bgx->lmac[bgx->lmac_count].netdev, &bgx->pdev->dev);
 	bgx->lmac[bgx->lmac_count].phydev = to_phy_device(phy_dev);
 
-	mac = cpu_to_be64(mac) >> 16;
-	memcpy ((void*)bgx->lmac[bgx->lmac_count].mac, &mac, ETH_ALEN);
+	if (acpi_get_mac_address(adev, &mac) == AE_OK) {
+		//mac = cpu_to_be64(mac) >> 16;
+		ether_addr_copy(bgx->lmac[bgx->lmac_count].mac, &mac);
+ 		//memcpy ((void*)bgx->lmac[bgx->lmac_count].mac, &mac, ETH_ALEN);
+	}
 
 	bgx->lmac[bgx->lmac_count].lmacid = bgx->lmac_count;
 	bgx->lmac_count++;
