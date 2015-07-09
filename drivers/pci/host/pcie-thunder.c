@@ -755,8 +755,8 @@ static int thunder_mmcfg_write_config(struct pci_mmcfg_region *cfg,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int thunder_acpi_mcfg_fixup(struct acpi_pci_root *root,
-			    struct pci_mmcfg_region *cfg)
+static int thunder_acpi_mcfg_fixup(struct acpi_pci_root *root,
+				   struct pci_mmcfg_region *cfg)
 {
 	struct thunder_pcie *pcie;
 
