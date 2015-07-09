@@ -41,7 +41,7 @@ resource_size_t pcibios_align_resource(void *data, const struct resource *res,
 /*
  * Try to assign the IRQ number from DT when adding a new device
  */
-int  __weak pcibios_add_device(struct pci_dev *dev)
+int pcibios_add_device(struct pci_dev *dev)
 {
 	dev->irq = of_irq_parse_and_map_pci(dev, 0, 0);
 
