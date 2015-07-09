@@ -210,7 +210,7 @@ int thunder_pem_requester_id(struct pci_dev *dev)
 	return -ENODEV;
 }
 
-int pcibios_add_device(struct pci_dev *dev)
+static int thunder_pem_pcibios_add_device(struct pci_dev *dev)
 {
 	struct thunder_pem *pem;
 	u8 pin;
@@ -248,6 +248,8 @@ static int thunder_pem_pci_probe(struct pci_dev *pdev,
 	int ret = 0;
 	struct resource *res;
 	LIST_HEAD(resources);
+
+	set_pcibios_add_device(thunder_pem_pcibios_add_device);
 
 	pem = devm_kzalloc(&pdev->dev, sizeof(*pem), GFP_KERNEL);
 	if (!pem)
