@@ -552,7 +552,6 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 		 * the effect of taking the interrupt again, in SVC
 		 * mode this time.
 		 */
-		local_irq_enable();
 
 		/*
 		 * Back from guest
@@ -560,6 +559,8 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *run)
 
 		kvm_timer_sync_hwstate(vcpu);
 		kvm_vgic_sync_hwstate(vcpu);
+
+		local_irq_enable();
 
 		ret = handle_exit(vcpu, run, ret);
 	}
