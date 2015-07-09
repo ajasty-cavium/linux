@@ -405,6 +405,9 @@ int its_alloc_device_irq(struct its_device *dev, u32 id,
 int its_get_collection(struct its_node *its, int cpu);
 u64 its_get_target_address(struct its_node *its, int cpu);
 void its_send_discard(struct its_device *dev, u32 id);
+
+typedef u32 (*its_pci_requester_id_t)(struct pci_dev *, u16);
+void set_its_pci_requester_id(its_pci_requester_id_t fn);
 #endif
 
 #endif

@@ -1255,7 +1255,17 @@ static int its_msi_get_vec_count(struct pci_dev *pdev, struct msi_desc *desc)
 #endif
 }
 
-int pci_requester_id(struct pci_dev *dev);
+static u32 its_dflt_pci_requester_id(struct pci_dev *pdev, u16 alias)
+{
+	return (pci_domain_nr(pdev->bus) << 16) | ((pdev)->bus->number << 8) | (pdev)->devfn;
+}
+
+static its_pci_requester_id_t its_pci_requester_id = its_dflt_pci_requester_id;
+void set_its_pci_requester_id(its_pci_requester_id_t fn)
+{
+	its_pci_requester_id = fn;
+}
+EXPORT_SYMBOL(set_its_pci_requester_id);
 
 static int its_msi_setup_irq(struct msi_chip *chip,
 			     struct pci_dev *pdev,
@@ -1268,7 +1278,7 @@ static int its_msi_setup_irq(struct msi_chip *chip,
 	u64 addr;
 	int hwirq;
 	int err;
-	u32 dev_id = pci_requester_id(pdev);
+	u32 dev_id = its_pci_requester_id(pdev, 0);
 	u32 vec_nr;
 
 	its_dev = its_find_device(its, dev_id);
