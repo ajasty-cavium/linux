@@ -352,8 +352,9 @@ struct nicvf {
 #define	NIC_MBOX_MSG_BGX_LINK_CHANGE	0x11	/* BGX:LMAC link status */
 #define	NIC_MBOX_MSG_ALLOC_SQS		0x12	/* Allocate secondary Qset */
 #define	NIC_MBOX_MSG_NICVF_PTR		0x13	/* Send nicvf ptr to PF */
-#define	NIC_MBOX_MSG_SNICVF_PTR		0x14	/* Send sqet nicvf ptr to VF */
-#define	NIC_MBOX_MSG_LOOPBACK		0x15	/* Set interface in loopback */
+#define	NIC_MBOX_MSG_PNICVF_PTR		0x14	/* Get primary qset nicvf ptr */
+#define	NIC_MBOX_MSG_SNICVF_PTR		0x15	/* Send sqet nicvf ptr to PVF */
+#define	NIC_MBOX_MSG_LOOPBACK		0x16	/* Set interface in loopback */
 #define	NIC_MBOX_MSG_CFG_DONE		0xF0	/* VF configuration done */
 #define	NIC_MBOX_MSG_SHUTDOWN		0xF1	/* VF is being shutdown */
 
@@ -388,7 +389,7 @@ struct sq_cfg_msg {
 	u8    msg;
 	u8    qs_num;
 	u8    sq_num;
-	u8    sqs_mode;
+	bool  sqs_mode;
 	u64   cfg;
 };
 
@@ -459,7 +460,7 @@ struct sqs_alloc {
 struct nicvf_ptr {
 	u8    msg;
 	u8    vf_id;
-	u8    sqs_mode;
+	bool  sqs_mode;
 	u8    sqs_id;
 	u64   nicvf;
 };

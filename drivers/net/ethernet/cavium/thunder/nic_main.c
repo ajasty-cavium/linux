@@ -551,6 +551,16 @@ static void nic_tx_channel_cfg(struct nicpf *nic, u8 vnic,
 }
 
 #ifdef VNIC_MULTI_QSET_SUPPORT
+/* Send primary nicvf pointer to secondary QS's VF */
+static void nic_send_pnicvf(struct nicpf *nic, int sqs)
+{
+	union nic_mbx mbx = {};
+
+	mbx.nicvf.msg = NIC_MBOX_MSG_PNICVF_PTR;
+	mbx.nicvf.nicvf = nic->nicvf[nic->pqs_vf[sqs]];
+	nic_send_msg_to_vf(nic, sqs, &mbx);
+}
+
 /* Send SQS's nicvf pointer to primary QS's VF */
 static void nic_send_snicvf(struct nicpf *nic, struct nicvf_ptr *nicvf)
 {
@@ -597,11 +607,6 @@ static void nic_alloc_sqs(struct nicpf *nic, struct sqs_alloc *sqs)
 		nic->vf_sqs[sqs->vf_id][idx] = sqs_id;
 		nic->pqs_vf[sqs_id] = sqs->vf_id;
 		alloc_qs++;
-
-		/* Send primary nicvf ptr to SQS */
-		mbx.nicvf.msg = NIC_MBOX_MSG_NICVF_PTR;
-		mbx.nicvf.nicvf = nic->nicvf[sqs->vf_id];
-		nic_send_msg_to_vf(nic, sqs_id, &mbx);
 	}
 
 send_mbox:
@@ -736,6 +741,7 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 #ifdef VNIC_MULTI_QSET_SUPPORT
 		if (vf >= nic->num_vf_en)
 			nic->sqs_used[vf - nic->num_vf_en] = false;
+		nic->pqs_vf[vf] = 0;
 #endif
 		break;
 #ifdef VNIC_MULTI_QSET_SUPPORT
@@ -745,6 +751,9 @@ static void nic_handle_mbx_intr(struct nicpf *nic, int vf)
 	case NIC_MBOX_MSG_NICVF_PTR:
 		nic->nicvf[vf] = mbx.nicvf.nicvf;
 		break;
+	case NIC_MBOX_MSG_PNICVF_PTR:
+		nic_send_pnicvf(nic, vf);
+		goto unlock;
 	case NIC_MBOX_MSG_SNICVF_PTR:
 		nic_send_snicvf(nic, &mbx.nicvf);
 		goto unlock;

@@ -255,12 +255,13 @@ static void  nicvf_handle_mbx_intr(struct nicvf *nic)
 			(struct nicvf *)mbx.nicvf.nicvf;
 		nic->pf_acked = true;
 		break;
-	case NIC_MBOX_MSG_NICVF_PTR:
+	case NIC_MBOX_MSG_PNICVF_PTR:
 		/* Secondary VF/Qset: make note of primary VF's pointer
 		 * to be used while packet reception, to handover packet
 		 * to primary VF's netdev.
 		 */
 		nic->pnicvf = (struct nicvf *)mbx.nicvf.nicvf;
+		nic->pf_acked = true;
 		break;
 #endif
 	default:
@@ -457,6 +458,14 @@ static void nicvf_send_vf_struct(struct nicvf *nic)
 	mbx.nicvf.msg = NIC_MBOX_MSG_NICVF_PTR;
 	mbx.nicvf.sqs_mode = nic->sqs_mode;
 	mbx.nicvf.nicvf = (u64)nic;
+	nicvf_send_msg_to_pf(nic, &mbx);
+}
+
+static void nicvf_get_primary_vf_struct(struct nicvf *nic)
+{
+	union nic_mbx mbx = {};
+
+	mbx.nicvf.msg = NIC_MBOX_MSG_PNICVF_PTR;
 	nicvf_send_msg_to_pf(nic, &mbx);
 }
 #endif
@@ -714,7 +723,7 @@ done:
 #ifdef VNIC_MULTI_QSET_SUPPORT
 		nic = nic->pnicvf;
 #endif
-		if (netif_tx_queue_stopped(txq)) {
+		if (netif_tx_queue_stopped(txq) && netif_carrier_ok(netdev)) {
 			netif_tx_start_queue(txq);
 			nic->drv_stats.txq_wake++;
 			if (netif_msg_tx_err(nic))
@@ -1152,6 +1161,12 @@ int nicvf_stop(struct net_device *netdev)
 
 	nicvf_free_cq_poll(nic);
 
+#ifdef	VNIC_MULTI_QSET_SUPPORT
+	/* Clear multiqset info */
+	nic->pnicvf = nic;
+	nic->sqs_count = 0;
+#endif
+
 	return 0;
 }
 
@@ -1207,6 +1222,8 @@ int nicvf_open(struct net_device *netdev)
 
 #ifdef VNIC_MULTI_QSET_SUPPORT
 	nicvf_request_sqs(nic);
+	if (nic->sqs_mode)
+		nicvf_get_primary_vf_struct(nic);
 #endif
 
 #ifdef	VNIC_RSS_SUPPORT
@@ -1612,9 +1629,13 @@ static void nicvf_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct nicvf *nic = netdev_priv(netdev);
+	struct net_device *pnetdev = nic->pnicvf->netdev;
 
-	if (!nic->sqs_mode)
-		unregister_netdev(netdev);
+	/* Check if this Qset is assigned to different VF.
+	 * If yes, clean primary and all secondary Qsets.
+	 */
+	if (pnetdev && (pnetdev->reg_state == NETREG_REGISTERED))
+		unregister_netdev(pnetdev);
 	nicvf_unregister_interrupts(nic);
 	pci_set_drvdata(pdev, NULL);
 	free_netdev(netdev);
