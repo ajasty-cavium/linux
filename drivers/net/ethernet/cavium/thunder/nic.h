@@ -276,7 +276,8 @@ struct nicvf {
 	u16			mtu;
 	struct queue_set	*qs;
 #ifdef VNIC_MULTI_QSET_SUPPORT
-#define	MAX_SQS_PER_VF		11
+#define	MAX_SQS_PER_VF_SINGLE_NODE		5
+#define	MAX_SQS_PER_VF				11
 	u8			sqs_id;
 	u8			sqs_count; /* Secondary Qset count */
 	struct nicvf		*snicvf[MAX_SQS_PER_VF];

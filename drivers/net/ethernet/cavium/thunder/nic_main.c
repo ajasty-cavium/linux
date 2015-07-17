@@ -898,12 +898,16 @@ static void nic_unregister_interrupts(struct nicpf *nic)
 #ifdef VNIC_MULTI_QSET_SUPPORT
 int nic_num_sqs_en(struct nicpf *nic, int vf_en)
 {
-	int pos = 0;
+	int pos = 0, sqs_per_vf = MAX_SQS_PER_VF_SINGLE_NODE;
 	u16 total_vf;
+
+	/* Check if its a multi-node environment */
+	if (nr_node_ids > 1)
+		sqs_per_vf = MAX_SQS_PER_VF;
 
 	pos = pci_find_ext_capability(nic->pdev, PCI_EXT_CAP_ID_SRIOV);
 	pci_read_config_word(nic->pdev, (pos + PCI_SRIOV_TOTAL_VF), &total_vf);
-	return min(total_vf - vf_en, vf_en * MAX_SQS_PER_VF);
+	return min(total_vf - vf_en, vf_en * sqs_per_vf);
 }
 #endif
 
