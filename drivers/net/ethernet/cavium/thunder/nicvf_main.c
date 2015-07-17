@@ -53,9 +53,11 @@ MODULE_PARM_DESC(cpi_alg,
 
 static inline u8 nicvf_netdev_qidx(struct nicvf *nic, u8 qidx)
 {
+#ifdef VNIC_MULTI_QSET_SUPPORT
 	if (nic->sqs_mode)
 		return qidx + ((nic->sqs_id + 1) * MAX_CMP_QUEUES_PER_QS);
 	else
+#endif
 		return qidx;
 }
 

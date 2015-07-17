@@ -478,7 +478,9 @@ static void nicvf_reclaim_rbdr(struct nicvf *nic,
 void nicvf_config_vlan_stripping(struct nicvf *nic, netdev_features_t features)
 {
 	u64 rq_cfg;
-	int sqs;
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	int sqs = 0;
+#endif
 
 	rq_cfg = nicvf_queue_reg_read(nic, NIC_QSET_RQ_GEN_CFG, 0);
 
@@ -489,11 +491,13 @@ void nicvf_config_vlan_stripping(struct nicvf *nic, netdev_features_t features)
 		rq_cfg &= ~(1ULL << 25);
 	nicvf_queue_reg_write(nic, NIC_QSET_RQ_GEN_CFG, 0, rq_cfg);
 
+#ifdef VNIC_MULTI_QSET_SUPPORT
 	/* Configure Secondary Qsets, if any */
 	for (sqs = 0; sqs < nic->sqs_count; sqs++)
 		if (nic->snicvf[sqs])
 			nicvf_queue_reg_write(nic->snicvf[sqs],
 					      NIC_QSET_RQ_GEN_CFG, 0, rq_cfg);
+#endif
 }
 
 /* Configures receive queue */
