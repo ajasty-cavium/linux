@@ -195,8 +195,11 @@ static void nicvf_get_strings(struct net_device *netdev, u32 sset, u8 *data)
 	nicvf_get_qset_strings(nic, &data, 0);
 
 #ifdef VNIC_MULTI_QSET_SUPPORT
-	for (sqs = 0; sqs < nic->sqs_count; sqs++)
+	for (sqs = 0; sqs < nic->sqs_count; sqs++) {
+		if (!nic->snicvf[sqs])
+			continue;
 		nicvf_get_qset_strings(nic->snicvf[sqs], &data, sqs + 1);
+	}
 #endif
 
 	for (stats = 0; stats < BGX_RX_STATS_COUNT; stats++) {
@@ -287,8 +290,11 @@ static void nicvf_get_ethtool_stats(struct net_device *netdev,
 	nicvf_get_qset_stats(nic, stats, &data);
 
 #ifdef VNIC_MULTI_QSET_SUPPORT
-	for (sqs = 0; sqs < nic->sqs_count; sqs++)
+	for (sqs = 0; sqs < nic->sqs_count; sqs++) {
+		if (!nic->snicvf[sqs])
+			continue;
 		nicvf_get_qset_stats(nic->snicvf[sqs], stats, &data);
+	}
 #endif
 
 	for (stat = 0; stat < BGX_RX_STATS_COUNT; stat++)
