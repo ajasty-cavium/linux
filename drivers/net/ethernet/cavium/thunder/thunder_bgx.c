@@ -1032,7 +1032,7 @@ static int bgx_init_acpi_phy(struct bgx *bgx)
 
 #endif /* CONFIG_ACPI */
 
-#ifdef CONFIG_OF_MDIO
+#if IS_ENABLED(CONFIG_OF_MDIO)
 
 static int bgx_init_of_phy(struct bgx *bgx)
 {
