@@ -136,7 +136,7 @@ static bool handle_mmio_cq_write(struct kvm_vcpu *vcpu,
 
 	/* do the majic if thise write is to modify write_offset */
 	if (mmio->is_write && !(offset & ~3)) {
-		its->cq_write_offset = reg & 0x7fff;
+		its->cq_write_offset = reg & 0x7fffffff;
 		vgic_its_handle_guest_commands(vcpu, its->cq_base,
 				(its->cq_size+1)*SZ_4K, its->cq_write_offset,
 				its->cq_read_offset);
