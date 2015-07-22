@@ -24,6 +24,8 @@
 #include <linux/i2c.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/gpio.h>
+#include <linux/i2c-smbus.h>
 
 #ifdef CONFIG_ARCH_THUNDER
 #include <linux/pci.h>
@@ -126,6 +128,8 @@ struct octeon_i2c {
 #ifdef CONFIG_ARCH_THUNDER
 	struct	msix_entry i2c_msix;
 #endif
+	struct i2c_smbus_alert_setup alert_data;
+	struct i2c_client *ara;
 };
 
 /**
@@ -1119,6 +1123,10 @@ static int octeon_i2c_probe_pci(struct pci_dev *pdev, const struct pci_device_id
 	struct octeon_i2c *i2c;
 	u8 soc_node;
 	u8 i2c_bus_id;
+	struct device_node *np = NULL;
+	char i2c_name[10];
+	u32 test_val;
+	u32 alert_gpio[2];
 
 	i2c = devm_kzalloc(&pdev->dev, sizeof(*i2c), GFP_KERNEL);
 	if (!i2c) {
@@ -1149,7 +1157,11 @@ static int octeon_i2c_probe_pci(struct pci_dev *pdev, const struct pci_device_id
 
 	soc_node = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 44) & 0x3;
 	i2c_bus_id = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 24) & 0x7;
-	i2c->twsi_freq = TWSI_DFL_RATE;
+	snprintf(i2c_name, 10, "i2c%d", soc_node * 6 + i2c_bus_id);
+	np = of_find_node_by_name(NULL, i2c_name);
+
+	if (np == NULL || of_property_read_u32(np, "clock-frequency", &i2c->twsi_freq))
+		i2c->twsi_freq = TWSI_DFL_RATE;
 	i2c->sys_freq = get_io_clock_rate(dev);
 	if (!i2c->sys_freq) {
 		dev_err(dev, "Didn't get I/O clock rate\n");
@@ -1200,6 +1212,24 @@ static int octeon_i2c_probe_pci(struct pci_dev *pdev, const struct pci_device_id
 		dev_err(dev, "failed to add adapter\n");
 		goto out_irq;
 	}
+	if (!of_property_read_u32_array(np, "alert-gpio", alert_gpio, 2)) {
+		dev_info(dev, "DT alert-gpio is:%d,%d\n",
+			 alert_gpio[0], alert_gpio[1]);
+	} else {
+		goto noalert;
+	}
+	result = devm_gpio_request_one(dev, alert_gpio[0], GPIOF_DIR_IN, "smbalert");
+	if (result < 0) {
+		dev_err(dev, "failed to get gpio\n");
+		goto noalert;
+	}
+	i2c->alert_data.alert_edge_triggered = 0;
+	i2c->alert_data.irq = gpio_to_irq(alert_gpio[0]);
+	i2c->ara = i2c_setup_smbus_alert(&i2c->adap, &i2c->alert_data);
+	if (!i2c->ara) {
+		dev_err(dev, "failed to setup smbalert\n");
+	}
+noalert:
 	dev_info(dev, "version %s\n", DRV_VERSION);
 	return 0;
 
@@ -1228,6 +1258,8 @@ static void octeon_i2c_remove_pci(struct pci_dev *pdev)
 	if (!i2c)
 		return;
 	dev = i2c->dev;
+	if (i2c->ara)
+		i2c_unregister_device(i2c->ara);
 	i2c_del_adapter(&i2c->adap);
 	devm_free_irq(dev, i2c->i2c_msix.vector, i2c);
 	pci_disable_msix(pdev);
@@ -1404,7 +1436,6 @@ static int octeon_i2c_remove(struct platform_device *pdev)
 	i2c_del_adapter(&i2c->adap);
 	return 0;
 };
-#endif
 
 static struct of_device_id octeon_i2c_match[] = {
 	{
@@ -1416,6 +1447,7 @@ static struct of_device_id octeon_i2c_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, octeon_i2c_match);
+#endif
 
 #ifdef CONFIG_ARCH_THUNDER
 

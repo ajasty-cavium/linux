@@ -76,9 +76,10 @@ static const struct pci_device_id thunderx_gpio_id_table[] = {
 	{ 0, }  /* end of table */
 };
 
-MODULE_DEVICE_TABLE(pci,thunderx_gpio_id_table);
+MODULE_DEVICE_TABLE(pci, thunderx_gpio_id_table);
 
-struct thunderx_gpio_irq *gpio_to_gpio_irq(struct thunderx_gpio *gpio, int gpiox)
+struct thunderx_gpio_irq *gpio_to_gpio_irq(struct thunderx_gpio *gpio,
+					   int gpiox)
 {
 	int irqx;
 
@@ -89,7 +90,8 @@ struct thunderx_gpio_irq *gpio_to_gpio_irq(struct thunderx_gpio *gpio, int gpiox
 	return NULL;
 }
 
-static int thunderx_gpio_wr_xor(struct thunderx_gpio *gpio, unsigned offset, uint8_t val)
+static int thunderx_gpio_wr_xor(struct thunderx_gpio *gpio, unsigned offset,
+				uint8_t val)
 {
 	u64 cfg_val;
 
@@ -102,7 +104,8 @@ static int thunderx_gpio_wr_xor(struct thunderx_gpio *gpio, unsigned offset, uin
 	return 0;
 }
 
-static int thunderx_gpio_wr_int_type(struct thunderx_gpio *gpio, unsigned offset, uint8_t val)
+static int thunderx_gpio_wr_int_type(struct thunderx_gpio *gpio,
+				     unsigned offset, uint8_t val)
 {
 	u64 cfg_val;
 
@@ -133,7 +136,8 @@ static void thunderx_gpio_set(struct gpio_chip *chip, unsigned offset,
 	struct thunderx_gpio *gpio =
 		container_of(chip, struct thunderx_gpio, chip);
 	u64 mask = 1ull << offset;
-	volatile void *reg = gpio->gpio_base + (value ? TX_SET : TX_CLEAR);
+	void *reg = gpio->gpio_base + (value ? TX_SET : TX_CLEAR);
+
 	writeq(mask, reg);
 }
 
@@ -235,7 +239,7 @@ static int thunderx_gpio_enable_msix(struct thunderx_gpio *gpio)
 			break;
 		gpio->msix_entries[irqx].entry = GPIO_MSIX_VEC(gpiox);
 		snprintf(gpio_irq->irq_name, IRQ_NAME_LEN,
-		         "irq-gpio%d", gpio_irq->gpiox);
+			 "irq-gpio%d", gpio_irq->gpiox);
 		gpio_irq->irq_allocated = 0;
 	}
 	gpio->num_vec = irqx;
@@ -299,10 +303,10 @@ static void thunderx_irq_unmask(struct irq_data *data)
 static void thunderx_irq_ack(struct irq_data *data)
 {
 	/* underlying gpio source ints are acked in local handler */
-	return;
 }
 
-static int thunderx_gpio_irq_set_type(struct thunderx_gpio *gpio, int irqx, unsigned int flow_type)
+static int thunderx_gpio_irq_set_type(struct thunderx_gpio *gpio, int irqx,
+				      unsigned int flow_type)
 {
 	struct thunderx_gpio_irq *gpio_irq = &gpio->irq_entries[irqx];
 	int gpiox = gpio_irq->gpiox;
@@ -327,7 +331,8 @@ static int thunderx_gpio_irq_set_type(struct thunderx_gpio *gpio, int irqx, unsi
 		intr_xor = 1;
 		break;
 	default:
-		dev_err(&gpio->pdev->dev, "only support one edge or level interrupts\n");
+		dev_err(&gpio->pdev->dev,
+			"only support one edge or level interrupts\n");
 		return -EINVAL;
 	}
 	thunderx_gpio_wr_int_type(gpio, gpiox, intr_type);
@@ -365,7 +370,7 @@ static int thunderx_gpio_irq_map(struct irq_domain *d, unsigned int irq,
 	if (ret < 0)
 		return ret;
 	irq_set_chip_and_handler(irq, &thunderx_gpio_irq_chip,
-			         is_level_intr(gpio_irq->intr_type) ?
+				 is_level_intr(gpio_irq->intr_type) ?
 				 handle_level_irq : handle_edge_irq);
 	return 0;
 }
@@ -387,7 +392,8 @@ static int thunderx_gpio_irq_setup(struct thunderx_gpio *gpio)
 	int intx;
 
 	for (intx = 0; intx < gpio->num_vec; intx++) {
-		thunderx_gpio_irq_set_type(gpio, intx, gpio->irq_entries[intx].intr_type);
+		thunderx_gpio_irq_set_type(gpio, intx,
+					   gpio->irq_entries[intx].intr_type);
 		result = devm_request_irq(&gpio->pdev->dev,
 					  gpio->msix_entries[intx].vector,
 					  thunderx_gpio_intr_handler, 0,
@@ -457,7 +463,8 @@ static int thunderx_gpio_probe(struct pci_dev *pdev,
 		err = -ENOMEM;
 		goto out_release_regions;
 	}
-	gpio->soc_node = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 44) & 0x3;
+	gpio->soc_node = (pci_resource_start(pdev, PCI_CFG_REG_BAR_NUM) >> 44)
+			 & 0x3;
 	snprintf(gpio->gpio_name, sizeof(gpio->gpio_name), "%s-%d",
 		 DRV_NAME, gpio->soc_node);
 
@@ -486,7 +493,8 @@ static int thunderx_gpio_probe(struct pci_dev *pdev,
 	for (iprop = 0;; iprop += 2) {
 		if (of_property_read_u32_index(np, "gpio-intr", iprop, &gpiox))
 			break;
-		if (of_property_read_u32_index(np, "gpio-intr", iprop+1, &intr_type))
+		if (of_property_read_u32_index(np, "gpio-intr", iprop+1,
+					       &intr_type))
 			break;
 		if (intx < MAX_INT_GPIO) {
 			gpio->irq_entries[intx].gpio = gpio;
@@ -505,11 +513,13 @@ static int thunderx_gpio_probe(struct pci_dev *pdev,
 			err = num_int;
 			goto out_gpiochip;
 		} else if (num_int > 0) {
-
-			gpio->irq_dom = irq_domain_add_linear(dev->of_node, num_int,
-							      &thunderx_irq_ops, gpio);
+			gpio->irq_dom = irq_domain_add_linear(dev->of_node,
+							      num_int,
+							      &thunderx_irq_ops,
+							      gpio);
 			if (!gpio->irq_dom) {
-				dev_err(chip->dev, "not able to add gpio irq domain\n");
+				dev_err(chip->dev,
+					"not able to add gpio irq domain\n");
 				goto out_msix;
 			}
 
@@ -557,7 +567,7 @@ static void thunderx_gpio_remove(struct pci_dev *pdev)
 
 static struct pci_driver thunderx_gpio_driver = {
 	.name		= DRV_NAME,
-	.id_table 	= thunderx_gpio_id_table,
+	.id_table	= thunderx_gpio_id_table,
 	.probe		= thunderx_gpio_probe,
 	.remove		= thunderx_gpio_remove,
 };
