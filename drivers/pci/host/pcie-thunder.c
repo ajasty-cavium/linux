@@ -375,10 +375,16 @@ static struct pci_ops thunder_pcie_ops = {
 	.write	= thunder_pcie_write_config,
 };
 
+#ifdef CONFIG_KVM_ARM_VGIC
+struct msi_chip *vgic_its_get_msi_node(struct pci_bus *bus,
+                                               struct msi_chip *msi);
+#endif
+
 static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 					struct pci_bus *bus)
 {
 	struct device_node *msi_node;
+	struct msi_chip *vits_msi;
 
 	msi_node = of_parse_phandle(pcie->node, "msi-parent", 0);
 	if (!msi_node)
@@ -388,9 +394,15 @@ static int thunder_pcie_msi_enable(struct thunder_pcie *pcie,
 	if (!pcie->msi)
 		return -ENODEV;
 
-	pcie->msi->dev = pcie->dev;
-	bus->msi = pcie->msi;
+#ifdef CONFIG_KVM_ARM_VGIC
 
+       vits_msi = vgic_its_get_msi_node(bus, pcie->msi);
+
+	pcie->msi->dev = pcie->dev;
+	bus->msi = vits_msi;
+#else
+	bus->msi = pcie->msi;
+#endif
 	return 0;
 }
 
