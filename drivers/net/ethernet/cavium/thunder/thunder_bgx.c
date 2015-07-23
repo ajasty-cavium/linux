@@ -947,7 +947,6 @@ static int acpi_get_mac_address(struct acpi_device *adev, u8 *dst)
 		if (mac & (~0ULL << 48))
 			continue;	/* more than 6 bytes */
 
-		mac = cpu_to_be64(mac << 16);
 		if (!is_valid_ether_addr((u8 *)&mac))
 			continue;
 
