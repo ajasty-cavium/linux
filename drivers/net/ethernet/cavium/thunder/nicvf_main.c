@@ -1534,13 +1534,18 @@ static int nicvf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_release_regions;
 	}
 
-#ifdef VNIC_MULTI_QSET_SUPPORT
-	/* Max number of queues per VF */
-	qcount = roundup(num_online_cpus(), MAX_CMP_QUEUES_PER_QS);
-	qcount = min(qcount, (MAX_SQS_PER_VF + 1) * MAX_CMP_QUEUES_PER_QS);
-#else
 	qcount = MAX_CMP_QUEUES_PER_QS;
+
+#ifdef VNIC_MULTI_QSET_SUPPORT
+	/* Restrict multiqset support only for host bound VFs */
+	if (pdev->is_virtfn) {
+		/* Set max number of queues per VF */
+		qcount = roundup(num_online_cpus(), MAX_CMP_QUEUES_PER_QS);
+		qcount = min(qcount,
+			     (MAX_SQS_PER_VF + 1) * MAX_CMP_QUEUES_PER_QS);
+	}
 #endif
+
 	netdev = alloc_etherdev_mqs(sizeof(struct nicvf), qcount, qcount);
 	if (!netdev) {
 		err = -ENOMEM;
