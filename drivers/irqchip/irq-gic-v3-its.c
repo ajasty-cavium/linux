@@ -1269,7 +1269,7 @@ EXPORT_SYMBOL(set_its_pci_requester_id);
 
 int pci_requester_id(struct pci_dev *dev)
 {
-	its_pci_requester_id(dev, 0);
+	return its_pci_requester_id(dev, 0);
 }
 EXPORT_SYMBOL(pci_requester_id);
 

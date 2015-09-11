@@ -791,7 +791,7 @@ struct file {
 	struct path		f_path;
 #define f_dentry	f_path.dentry
 	struct inode		*f_inode;	/* cached value */
-	const struct file_operations	*f_op;
+	const struct file_operations	*f_op ____cacheline_aligned_in_smp;
 
 	/*
 	 * Protects f_ep_links, f_flags.
