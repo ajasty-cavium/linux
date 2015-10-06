@@ -66,9 +66,11 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 "6:	subs	%w2, %w2, 1\n"
 	/*  Don't wait if we the next ticket. */
 "	b.eq	7f\n"
-"	and	%w2, %w2, #32\n" /* For very large thread counts */
 	/* Multiply by 80, a good estimate of how long an lock/unlock will take. */
-"	lsl	%w2, %w2, #4\n"
+"       cmp     %w2, #32\n"
+"       b.le    8f\n"
+"       mov     %w2, #32\n"
+"8:	lsl	%w2, %w2, #4\n"
 "	add	%w2, %w2, %w2, lsl #2\n"
 	/* Spin until we get 0. */
 "4:	subs	%w2, %w2, #1\n"
