@@ -1622,6 +1622,8 @@ err_unregister_interrupts:
 	nicvf_unregister_interrupts(nic);
 err_free_netdev:
 	pci_set_drvdata(pdev, NULL);
+	if (nic->qs)
+		devm_kfree(&pdev->dev, nic->qs);
 	free_netdev(netdev);
 err_release_regions:
 	pci_release_regions(pdev);
@@ -1633,8 +1635,14 @@ err_disable_device:
 static void nicvf_remove(struct pci_dev *pdev)
 {
 	struct net_device *netdev = pci_get_drvdata(pdev);
-	struct nicvf *nic = netdev_priv(netdev);
-	struct net_device *pnetdev = nic->pnicvf->netdev;
+	struct nicvf *nic;
+	struct net_device *pnetdev;
+
+	if (!netdev)
+		return;
+
+	nic = netdev_priv(netdev);
+	pnetdev = nic->pnicvf->netdev;
 
 	/* Check if this Qset is assigned to different VF.
 	 * If yes, clean primary and all secondary Qsets.
@@ -1643,6 +1651,8 @@ static void nicvf_remove(struct pci_dev *pdev)
 		unregister_netdev(pnetdev);
 	nicvf_unregister_interrupts(nic);
 	pci_set_drvdata(pdev, NULL);
+	if (nic->qs)
+		devm_kfree(&pdev->dev, nic->qs);
 	free_netdev(netdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
