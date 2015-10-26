@@ -706,8 +706,12 @@ static int its_set_affinity(struct irq_data *d, const struct cpumask *mask_val,
 		id = its_msi_get_entry_nr(d->msi_desc);
 	else
 		id = d->hwirq;
-	its_send_movi(its_dev, target_col, id);
 	its_dev->collection = target_col;
+#ifndef CONFIG_THUNDERX_PASS1_ERRATA_21306
+	its_send_movi(its_dev, target_col, id);
+#else
+	its_send_mapvi(its_dev, d->hwirq, id);
+#endif
 
 	return IRQ_SET_MASK_OK;
 }

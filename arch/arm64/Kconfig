@@ -164,6 +164,13 @@ config ARCH_THUNDER
 
 menu   "Cavium ThunderX errata"
 
+config THUNDERX_PASS1_ERRATA_21306
+	bool "Cavium ThunderX erratum 21306"
+	depends on ARCH_THUNDER
+	def_bool ARCH_THUNDER
+	help
+	  Enable workaround for erratum 21306.
+
 config THUNDERX_PASS1_ERRATA_22558
 	bool "Cavium ThunderX erratum 22558"
 	depends on ARCH_THUNDER
