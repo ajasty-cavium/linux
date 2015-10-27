@@ -2278,7 +2278,7 @@ void *jbd2_alloc(size_t size, gfp_t flags)
 	BUG_ON(size & (size-1)); /* Must be a power of 2 */
 
 	flags |= __GFP_REPEAT;
-	if (size == PAGE_SIZE)
+	if ((size == PAGE_SIZE) || (size == 4096))
 		ptr = (void *)__get_free_pages(flags, 0);
 	else if (size > PAGE_SIZE) {
 		int order = get_order(size);
@@ -2299,7 +2299,7 @@ void *jbd2_alloc(size_t size, gfp_t flags)
 
 void jbd2_free(void *ptr, size_t size)
 {
-	if (size == PAGE_SIZE) {
+	if ((size == PAGE_SIZE) || (size == 4096)) {
 		free_pages((unsigned long)ptr, 0);
 		return;
 	}

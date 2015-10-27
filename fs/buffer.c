@@ -1904,6 +1904,7 @@ int __block_write_begin(struct page *page, loff_t pos, unsigned len,
 
 	for(bh = head, block_start = 0; bh != head || !block_start;
 	    block++, block_start=block_end, bh = bh->b_this_page) {
+		asm volatile ("prfm pldl1strm, [%0]\n" : : "r"(bh->b_this_page));
 		block_end = block_start + blocksize;
 		if (block_end <= from || block_start >= to) {
 			if (PageUptodate(page)) {
