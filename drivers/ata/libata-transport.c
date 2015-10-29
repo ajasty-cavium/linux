@@ -40,7 +40,6 @@
 #define ATA_PORT_ATTRS		3
 #define ATA_LINK_ATTRS		3
 #define ATA_DEV_ATTRS		9
-#define ATA_DEBUG_ATTRS		3
 
 struct scsi_transport_template;
 struct scsi_transport_template *ata_scsi_transport_template;
@@ -51,7 +50,6 @@ struct ata_internal {
 	struct device_attribute private_port_attrs[ATA_PORT_ATTRS];
 	struct device_attribute private_link_attrs[ATA_LINK_ATTRS];
 	struct device_attribute private_dev_attrs[ATA_DEV_ATTRS];
-	struct device_attribute private_debug_attrs[ATA_DEBUG_ATTRS];
 
 	struct transport_container link_attr_cont;
 	struct transport_container dev_attr_cont;
@@ -63,7 +61,6 @@ struct ata_internal {
 	struct device_attribute *link_attrs[ATA_LINK_ATTRS + 1];
 	struct device_attribute *port_attrs[ATA_PORT_ATTRS + 1];
 	struct device_attribute *dev_attrs[ATA_DEV_ATTRS + 1];
-	struct device_attribute *debug_attrs[ATA_DEBUG_ATTRS + 1];
 };
 #define to_ata_internal(tmpl)	container_of(tmpl, struct ata_internal, t)
 
@@ -165,7 +162,7 @@ static struct {
 	{ AC_ERR_INVALID,		"InvalidArg" },
 	{ AC_ERR_OTHER,			"Unknown" },
 	{ AC_ERR_NODEV_HINT,		"NoDeviceHint" },
-	{ AC_ERR_NCQ,			"NCQError" }
+	{ AC_ERR_NCQ,		 	"NCQError" }
 };
 ata_bitfield_name_match(err, ata_err_names)
 
@@ -223,163 +220,6 @@ ata_port_simple_attr(local_port_no, port_no, "%u\n", unsigned int);
 
 static DECLARE_TRANSPORT_CLASS(ata_port_class,
 			       "ata_port", NULL, NULL, NULL);
-
-#define ata_port_show_debug_simple(name)		\
-static ssize_t								\
-show_ata_port_debug_##name(struct device *dev,				\
-		     struct device_attribute *attr, char *buf)		\
-{									\
-	struct ata_port *ap = transport_class_to_port(dev);		\
-									\
-	return snprintf(buf, 400, " %s %ld\n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n"								\
-		, "tf_err = ", ap->port_tf_err	\
-		, "hbus_data_err =", ap->port_hbus_data_err		\
-		, "hbus_err =",	ap->port_hbus_err			\
-		, "if_err =", ap->port_if_err				\
-		, "nonfatal_if_err =", ap->port_if_err				\
-		, "connect =", ap->port_connect				\
-		, "phy_rdy =", ap->port_phyrdy				\
-		, "unknown_fis=", ap->port_unknown_fis			\
-		, "bad_pmp =", ap->port_bad_pmp);			\
-}
-#define ata_port_simple_debug_attr(name)		\
-	ata_port_show_debug_simple(name)	\
-static DEVICE_ATTR(name, S_IRUGO, show_ata_port_debug_##name, NULL)
-ata_port_simple_debug_attr(irq_stat);
-
-ata_port_simple_attr(irq_enable, irq_enable, "%d\n", int);
-#define ata_port_show_debug_simple_serr(name)		\
-static ssize_t								\
-show_ata_port_debug_serr_##name(struct device *dev,				\
-		     struct device_attribute *attr, char *buf)		\
-{									\
-	struct ata_port *ap = transport_class_to_port(dev);		\
-									\
-	return snprintf(buf, 1024, " %s %ld \n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n %s %ld \n %s %ld \n \
-%s %ld \n %s %ld \n"			\
-		, "data_recovered = ", ap->serr_data_recovered		\
-		, "comm_recovered =", ap->serr_comm_recovered		\
-		, "data =",	ap->serr_data				\
-		, "persistent =", ap->serr_persistent			\
-		, "protocol =", ap->serr_protocol			\
-		, "internal =", ap->serr_internal			\
-		, "phyrdy_chg =", ap->serr_phyrdy_chg			\
-		, "phy_int_err =", ap->serr_phy_int_err			\
-		, "comm_wake =", ap->serr_comm_wake			\
-		, "10b_8b_err =", ap->serr_10b_8b_err			\
-		, "disparity =", ap->serr_disparity			\
-		, "crc =", ap->serr_crc					\
-		, "handshake =", ap->serr_handshake			\
-		, "link_seq_err =", ap->serr_link_seq_err		\
-		, "trans_st_err =", ap->serr_trans_st_error		\
-		, "unrecog_fis =", ap->serr_unrecog_fis			\
-		, "dev_xchg =", ap->serr_dev_xchg			\
-		);							\
-}
-#define ata_port_simple_debug_serr(name)		\
-	ata_port_show_debug_simple_serr(name)	\
-static DEVICE_ATTR(name, S_IRUGO, show_ata_port_debug_serr_##name, NULL)
-ata_port_simple_debug_serr(serr);
-
-static DECLARE_TRANSPORT_CLASS(ata_debug_class,
-			       "ata_debug", NULL, NULL, NULL);
-static void ata_debug_release(struct device *dev)
-{
-	put_device(dev->parent);
-}
-
-/**
- * ata_is_debug --  check if a struct device represents a ATA port
- * @dev:	device to check
- *
- * Returns:
- *	%1 if the device represents a ATA Port, %0 else
- */
-static int ata_is_debug(const struct device *dev)
-{
-	return dev->release == ata_debug_release;
-}
-
-
-static int ata_debug_match(struct attribute_container *cont,
-			   struct device *dev)
-{
-	if (!ata_is_debug(dev))
-		return 0;
-	return &ata_scsi_transport_template->debug_attrs.ac == cont;
-}
-/**
- * ata_debug_free  --  free a ATA LINK
- * @dev:	ATA PHY to free
- *
- * Frees the specified ATA PHY.
- *
- * Note:
- *   This function must only be called on a PHY that has not
- *   successfully been added using ata_debug_add().
- */
-static void ata_debug_free(struct ata_device *dev)
-{
-	transport_destroy_device(&dev->tdev);
-	put_device(&dev->tdev);
-}
-#if 0
-/**
- * ata_debug_delete  --  remove ATA debug
- * @port:	ATA PORT to remove
- *
- * Removes the specified ATA device.
- */
-static void ata_debug_delete(struct ata_device *ata_dev)
-{
-	struct device *dev = &ata_dev->tdev;
-
-	transport_remove_device(dev);
-	device_del(dev);
-	ata_debug_free(ata_dev);
-}
-#endif
-
-/**
- * ata_debug_add  --  initialize a transport ATA debug structure.
- * @ata_dev:	ata_dev structure.
- *
- * Initialize an ATA debug structure for sysfs.  It will be added in the
- * device tree below the ATA LINK device it belongs to.
- *
- * Returns %0 on success
- */
-int ata_debug_add(struct ata_device *ata_dev)
-{
-	struct device *dev = &ata_dev->tdev;
-	struct ata_link *link = ata_dev->link;
-	struct ata_port *ap = link->ap;
-	int error;
-
-	dev->parent = get_device(&link->tdev);
-	dev->release = ata_debug_release;
-	if (ata_is_host_link(link))
-		dev_set_name(dev, "err_debug%d.%d", ap->print_id,ata_dev->devno);
-        else
-		dev_set_name(dev, "err_debug%d.%d.0", ap->print_id, link->pmp);
-
-	transport_setup_device(dev);
-	ata_acpi_bind_dev(ata_dev);
-	error = device_add(dev);
-	if (error) {
-		ata_debug_free(ata_dev);
-		return error;
-	}
-
-	transport_add_device(dev);
-	transport_configure_device(dev);
-	return 0;
-}
 
 static void ata_tport_release(struct device *dev)
 {
@@ -544,7 +384,6 @@ void ata_tlink_delete(struct ata_link *link)
 
 	ata_for_each_dev(ata_dev, link, ALL) {
 		ata_tdev_delete(ata_dev);
-		//ata_debug_delete(ata_dev);
 	}
 
 	transport_remove_device(dev);
@@ -592,7 +431,6 @@ int ata_tlink_add(struct ata_link *link)
 		if (error) {
 			goto tlink_dev_err;
 		}
-		error = ata_debug_add(ata_dev);
 	}
 	return 0;
   tlink_dev_err:
@@ -643,7 +481,7 @@ show_ata_dev_##field(struct device *dev,				\
 
 #define ata_dev_simple_attr(field, format_string, type)	\
 	ata_dev_show_simple(field, format_string, (type))	\
-static DEVICE_ATTR(field, S_IRUGO,			\
+static DEVICE_ATTR(field, S_IRUGO, 			\
 		   show_ata_dev_##field, NULL)
 
 ata_dev_simple_attr(spdn_cnt, "%d\n", int);
@@ -825,7 +663,7 @@ static int ata_tdev_add(struct ata_device *ata_dev)
  */
 
 #define SETUP_TEMPLATE(attrb, field, perm, test)			\
-	i->private_##attrb[count] = dev_attr_##field;			\
+	i->private_##attrb[count] = dev_attr_##field;		       	\
 	i->private_##attrb[count].attr.mode = perm;			\
 	i->attrb[count] = &i->private_##attrb[count];			\
 	if (test)							\
@@ -840,8 +678,6 @@ static int ata_tdev_add(struct ata_device *ata_dev)
 #define SETUP_DEV_ATTRIBUTE(field)					\
 	SETUP_TEMPLATE(dev_attrs, field, S_IRUGO, 1)
 
-#define SETUP_DEBUG_ATTRIBUTE(field)					\
-	SETUP_TEMPLATE(debug_attrs, field, S_IRUGO, 1)
 /**
  * ata_attach_transport  --  instantiate ATA transport template
  */
@@ -873,11 +709,6 @@ struct scsi_transport_template *ata_attach_transport(void)
 	i->dev_attr_cont.ac.match = ata_tdev_match;
 	transport_container_register(&i->dev_attr_cont);
 
-	i->t.debug_attrs.ac.attrs = &i->debug_attrs[0];
-	i->t.debug_attrs.ac.class = &ata_debug_class.class;
-	i->t.debug_attrs.ac.match = ata_debug_match;
-	transport_container_register(&i->t.debug_attrs);
-
 	count = 0;
 	SETUP_PORT_ATTRIBUTE(nr_pmp_links);
 	SETUP_PORT_ATTRIBUTE(idle_irq);
@@ -903,14 +734,6 @@ struct scsi_transport_template *ata_attach_transport(void)
 	SETUP_DEV_ATTRIBUTE(gscr);
 	BUG_ON(count > ATA_DEV_ATTRS);
 	i->dev_attrs[count] = NULL;
-
-	count = 0;
-	SETUP_DEBUG_ATTRIBUTE(irq_stat);
-	SETUP_DEBUG_ATTRIBUTE(irq_enable);
-	SETUP_DEBUG_ATTRIBUTE(serr);
-	BUG_ON(count > ATA_DEBUG_ATTRS);
-	i->debug_attrs[count] = NULL;
-
 
 	return &i->t;
 }
@@ -943,13 +766,8 @@ __init int libata_transport_init(void)
 	error = transport_class_register(&ata_dev_class);
 	if (error)
 		goto out_unregister_port;
-	error = transport_class_register(&ata_debug_class);
-	if (error)
-		goto out_unregister_debug;
 	return 0;
 
- out_unregister_debug:
-	transport_class_unregister(&ata_dev_class);
  out_unregister_port:
 	transport_class_unregister(&ata_port_class);
  out_unregister_link:
@@ -964,5 +782,4 @@ void __exit libata_transport_exit(void)
 	transport_class_unregister(&ata_link_class);
 	transport_class_unregister(&ata_port_class);
 	transport_class_unregister(&ata_dev_class);
-	transport_class_unregister(&ata_debug_class);
 }
