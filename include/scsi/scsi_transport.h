@@ -1,4 +1,4 @@
-/* 
+/*
  *  Transport specific attributes.
  *
  *  Copyright (c) 2003 Silicon Graphics, Inc.  All rights reserved.
@@ -31,6 +31,7 @@ struct scsi_transport_template {
 	struct transport_container host_attrs;
 	struct transport_container target_attrs;
 	struct transport_container device_attrs;
+	struct transport_container debug_attrs;
 
 	/*
 	 * If set, called from sysfs and legacy procfs rescanning code.
