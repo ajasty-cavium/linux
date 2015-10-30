@@ -2,7 +2,7 @@
  *  libahci.c - Common AHCI SATA low-level routines
  *
  *  Maintained by:  Tejun Heo <tj@kernel.org>
- *		    Please ALWAYS copy linux-ide@vger.kernel.org
+ *    		    Please ALWAYS copy linux-ide@vger.kernel.org
  *		    on emails.
  *
  *  Copyright 2004-2005 Red Hat, Inc.
@@ -1778,71 +1778,6 @@ static void ahci_handle_port_interrupt(struct ata_port *ap,
 	}
 }
 
-static void ahci_port_account_error_interrupts(struct ata_port *ap, u32 status)
-{
-	u32 serror;
-
-	if (status & PORT_IRQ_IF_NONFATAL)
-		ap->port_if_nonfatal_err++;
-
-	if(!(status & PORT_IRQ_ERROR)) {
-		return;
-	} else {
-		if(status & PORT_IRQ_TF_ERR)
-			ap->port_tf_err++;
-		else if(status & PORT_IRQ_HBUS_DATA_ERR)
-			ap->port_hbus_data_err++;
-		else if(status & PORT_IRQ_HBUS_ERR)
-			ap->port_hbus_err++;
-		else if(status & PORT_IRQ_IF_ERR)
-			ap->port_if_err++;
-		else if(status & PORT_IRQ_CONNECT)
-			ap->port_connect++;
-		else if(status & PORT_IRQ_PHYRDY)
-			ap->port_phyrdy++;
-		else if(status & PORT_IRQ_UNK_FIS)
-			ap->port_unknown_fis++;
-		else if(status & PORT_IRQ_BAD_PMP)
-			ap->port_bad_pmp++;
-	}
-
-	ahci_scr_read(&ap->link, SCR_ERROR, &serror);
-	if(serror & SERR_DATA_RECOVERED)
-		ap->serr_data_recovered++;
-	else if(serror & SERR_COMM_RECOVERED)
-		ap->serr_comm_recovered++;
-	else if(serror & SERR_DATA)
-		ap->serr_data++;
-	else if(serror &SERR_PERSISTENT)
-		ap->serr_persistent++;
-	else if(serror & SERR_PROTOCOL)
-		ap->serr_protocol++;
-	else if(serror & SERR_INTERNAL)
-		ap->serr_internal++;
-	else if(serror & SERR_PHYRDY_CHG)
-		ap->serr_phyrdy_chg++;
-	else if(serror & SERR_PHY_INT_ERR)
-		ap->serr_phy_int_err++;
-	else if(serror & SERR_COMM_WAKE)
-		ap->serr_comm_wake++;
-	else if(serror & SERR_10B_8B_ERR)
-		ap->serr_10b_8b_err++;
-	else if(serror & SERR_DISPARITY)
-		ap->serr_disparity++;
-	else if(serror & SERR_CRC)
-		ap->serr_crc++;
-	else if(serror & SERR_HANDSHAKE)
-		ap->serr_handshake++;
-	else if(serror & SERR_LINK_SEQ_ERR)
-		ap->serr_link_seq_err++;
-	else if(serror & SERR_TRANS_ST_ERROR)
-		ap->serr_trans_st_error++;
-	else if(serror & SERR_UNRECOG_FIS)
-		ap->serr_unrecog_fis++;
-	else if(serror &SERR_DEV_XCHG)
-		ap->serr_dev_xchg++;
-}
-
 static void ahci_port_intr(struct ata_port *ap)
 {
 	void __iomem *port_mmio = ahci_port_base(ap);
@@ -1850,7 +1785,7 @@ static void ahci_port_intr(struct ata_port *ap)
 
 	status = readl(port_mmio + PORT_IRQ_STAT);
 	writel(status, port_mmio + PORT_IRQ_STAT);
-	ahci_port_account_error_interrupts(ap, status);
+
 	ahci_handle_port_interrupt(ap, port_mmio, status);
 }
 

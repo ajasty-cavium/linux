@@ -590,7 +590,7 @@ struct ata_ioports {
 
 struct ata_host {
 	spinlock_t		lock;
-	struct device		*dev;
+	struct device 		*dev;
 	void __iomem * const	*iomap;
 	unsigned int		n_ports;
 	unsigned int		n_tags;			/* nr of NCQ tags */
@@ -834,7 +834,7 @@ struct ata_port {
 
 	struct ata_port_stats	stats;
 	struct ata_host		*host;
-	struct device		*dev;
+	struct device 		*dev;
 	struct device		tdev;
 
 	struct mutex		scsi_scan_mutex;
@@ -861,36 +861,6 @@ struct ata_port {
 #ifdef CONFIG_ATA_ACPI
 	struct ata_acpi_gtm	__acpi_init_gtm; /* use ata_acpi_init_gtm() */
 #endif
-	int irq_enable ;
-	int serr;
-
-	unsigned long		port_tf_err;
-	unsigned long		port_hbus_data_err;
-	unsigned long		port_hbus_err;
-	unsigned long		port_if_err;
-	unsigned long		port_if_nonfatal_err;
-	unsigned long		port_connect;
-	unsigned long		port_phyrdy;
-	unsigned long		port_unknown_fis;
-	unsigned long		port_bad_pmp;
-
-	unsigned long		serr_data_recovered;
-	unsigned long		serr_comm_recovered;
-	unsigned long		serr_data;
-	unsigned long		serr_persistent;
-	unsigned long		serr_protocol;
-	unsigned long		serr_internal;
-	unsigned long		serr_phyrdy_chg;
-	unsigned long		serr_phy_int_err;
-	unsigned long		serr_comm_wake;
-	unsigned long		serr_10b_8b_err;
-	unsigned long		serr_disparity;
-	unsigned long		serr_crc;
-	unsigned long		serr_handshake;
-	unsigned long		serr_link_seq_err;
-	unsigned long		serr_trans_st_error;
-	unsigned long		serr_unrecog_fis;
-	unsigned long		serr_dev_xchg;
 	/* owned by EH */
 	u8			sector_buf[ATA_SECT_SIZE] ____cacheline_aligned;
 };
@@ -1015,7 +985,7 @@ struct ata_port_info {
 	unsigned long		mwdma_mask;
 	unsigned long		udma_mask;
 	struct ata_port_operations *port_ops;
-	void			*private_data;
+	void 			*private_data;
 };
 
 struct ata_timing {
