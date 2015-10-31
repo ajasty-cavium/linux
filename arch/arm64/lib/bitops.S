@@ -57,11 +57,22 @@ ENTRY(	\name	)
 ENDPROC(\name	)
 	.endm
 
+ENTRY(clear_bit)
+	.cpu generic+lse
+	and	w3, w0, #63
+	eor	w0, w0, w3
+	mov	x2, #1
+	add	x1, x1, x0, lsr #3
+	lsl	x3, x2, x3
+	stclr	x3, [x1]
+	ret
+ENDPROC(clear_bit)
+
 /*
  * Atomic bit operations.
  */
 	bitop	change_bit, eor
-	bitop	clear_bit, bic
+	//bitop	clear_bit, bic
 	bitop	set_bit, orr
 
 	testop	test_and_change_bit, eor

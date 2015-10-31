@@ -1897,6 +1897,7 @@ int __block_write_begin(struct page *page, loff_t pos, unsigned len,
 	BUG_ON(from > to);
 
 	head = create_page_buffers(page, inode, 0);
+		asm volatile ("prfm pldl1strm, [%0]\n" : : "r"(head));
 	blocksize = head->b_size;
 	bbits = block_size_bits(blocksize);
 
