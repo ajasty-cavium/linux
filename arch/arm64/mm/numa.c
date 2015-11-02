@@ -288,6 +288,14 @@ static bool __init numa_meminfo_cover_memory(const struct numa_meminfo *mi)
 	return true;
 }
 
+static void dump_freq(int nid)
+{
+    void __iomem *rstv = early_ioremap(0x87E006001600 + (0x100000000000 * nid), 8);
+    u64 rstval = *(u64*)rstv;
+    pr_warn("ThunderX node %i running at %u Mhz.\n", nid, ((rstval >> 40) & 0xff) * 50);
+    early_iounmap(rstv, 8);
+}
+
 static int __init numa_register_memblks(struct numa_meminfo *mi)
 {
 	unsigned long uninitialized_var(pfn_align);
@@ -336,6 +344,7 @@ static int __init numa_register_memblks(struct numa_meminfo *mi)
 
 		if (start < end)
 			setup_node_data(nid, start, end);
+		dump_freq(nid);
 	}
 
 	/* Dump memblock with node info and return. */
