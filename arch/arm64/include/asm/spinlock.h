@@ -19,6 +19,10 @@
 #include <asm/spinlock_types.h>
 #include <asm/processor.h>
 
+#ifdef CONFIG_QUEUED_SPINLOCKS
+#include <asm/qspinlock.h>
+#else
+
 /*
  * Spinlock implementation.
  *
@@ -140,6 +144,12 @@ static inline int arch_spin_is_contended(arch_spinlock_t *lock)
 }
 #define arch_spin_is_contended	arch_spin_is_contended
 
+#endif /* CONFIG_QUEUED_SPINLOCKS */
+
+#ifdef CONFIG_QUEUED_RWLOCKS
+#include <asm/qrwlock.h>
+#else
+
 /*
  * Write lock implementation.
  *
@@ -254,6 +264,8 @@ static inline int arch_read_trylock(arch_rwlock_t *rw)
 
 /* read_can_lock - would read_trylock() succeed? */
 #define arch_read_can_lock(x)		((x)->lock < 0x80000000)
+
+#endif /* CONFIG_QUEUED_RWLOCKS */
 
 #define arch_read_lock_flags(lock, flags) arch_read_lock(lock)
 #define arch_write_lock_flags(lock, flags) arch_write_lock(lock)

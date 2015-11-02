@@ -801,7 +801,7 @@ update_stats_curr_start(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * numa_balancing_scan_size.
  */
 unsigned int sysctl_numa_balancing_scan_period_min = 1000;
-unsigned int sysctl_numa_balancing_scan_period_max = 60000;
+unsigned int sysctl_numa_balancing_scan_period_max = 30000;
 
 /* Portion of address space to scan in MB */
 unsigned int sysctl_numa_balancing_scan_size = 256;
@@ -1130,7 +1130,7 @@ static bool load_too_imbalanced(long src_load, long dst_load,
 		swap(dst_load, src_load);
 
 	/* Is the difference below the threshold? */
-	imb = dst_load * src_capacity * 100 -
+	imb = dst_load * src_capacity * 70 -
 	      src_load * dst_capacity * env->imbalance_pct;
 	if (imb <= 0)
 		return false;
@@ -1318,7 +1318,7 @@ static int task_numa_migrate(struct task_struct *p)
 		.src_cpu = task_cpu(p),
 		.src_nid = task_node(p),
 
-		.imbalance_pct = 112,
+		.imbalance_pct = 140,
 
 		.best_task = NULL,
 		.best_imp = 0,

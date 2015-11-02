@@ -21,6 +21,7 @@
 #include <linux/percpu.h>
 #include <linux/hardirq.h>
 #include <asm/qrwlock.h>
+#include <asm/qspinlock.h>
 
 /**
  * rspin_until_writer_unlock - inc reader count & spin until writer is gone
