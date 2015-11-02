@@ -31,6 +31,12 @@
 #define PTE_WRITE		(_AT(pteval_t, 1) << 57)
 #define PTE_PROT_NONE		(_AT(pteval_t, 1) << 58) /* only when !PTE_VALID */
 
+/* flags used in autonuma */
+#define _PAGE_NUMA		PTE_PROT_NONE
+#define _PAGE_PRESENT           PTE_VALID
+#define  _PAGE_ACCESSED		PTE_AF
+#define  _PAGE_PROTNONE		PTE_PROT_NONE
+
 /*
  * VMALLOC and SPARSEMEM_VMEMMAP ranges.
  *
@@ -81,7 +87,7 @@ extern void __pgd_error(const char *file, int line, unsigned long val);
 #define PAGE_S2			__pgprot(PROT_DEFAULT | PTE_S2_MEMATTR(MT_S2_NORMAL) | PTE_S2_RDONLY)
 #define PAGE_S2_DEVICE		__pgprot(PROT_DEFAULT | PTE_S2_MEMATTR(MT_S2_DEVICE_nGnRE) | PTE_S2_RDONLY | PTE_UXN)
 
-#define PAGE_NONE		__pgprot(((_PAGE_DEFAULT) & ~PTE_TYPE_MASK) | PTE_PROT_NONE | PTE_PXN | PTE_UXN)
+#define PAGE_NONE		__pgprot(((_PAGE_DEFAULT) & ~PTE_VALID) | PTE_PROT_NONE | PTE_PXN | PTE_UXN)
 #define PAGE_SHARED		__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN | PTE_UXN | PTE_WRITE)
 #define PAGE_SHARED_EXEC	__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN | PTE_WRITE)
 #define PAGE_COPY		__pgprot(_PAGE_DEFAULT | PTE_USER | PTE_NG | PTE_PXN | PTE_UXN)
@@ -460,6 +466,20 @@ static inline pmd_t pmd_modify(pmd_t pmd, pgprot_t newprot)
 {
 	return pte_pmd(pte_modify(pmd_pte(pmd), newprot));
 }
+
+#ifdef CONFIG_NUMA_BALANCING
+/* Set of bits that distinguishes present, prot_none and numa ptes */
+#define _PAGE_NUMA_MASK (_PAGE_NUMA | _PAGE_PRESENT)
+static inline pteval_t ptenuma_flags(pte_t pte)
+{
+	return pte_val(pte) & _PAGE_NUMA_MASK;
+}
+
+static inline pmdval_t pmdnuma_flags(pmd_t pmd)
+{
+	return pmd_val(pmd) & _PAGE_NUMA_MASK;
+}
+#endif /* CONFIG_NUMA_BALANCING */
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 extern pgd_t idmap_pg_dir[PTRS_PER_PGD];

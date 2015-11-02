@@ -739,7 +739,7 @@ static inline pte_t pte_mknuma(pte_t pte)
 {
 	pteval_t val = pte_val(pte);
 
-	VM_BUG_ON(!(val & _PAGE_PRESENT));
+	BUG_ON(!(val & _PAGE_PRESENT));
 
 	val &= ~_PAGE_PRESENT;
 	val |= _PAGE_NUMA;
